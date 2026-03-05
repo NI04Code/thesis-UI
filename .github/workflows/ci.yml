@@ -1,0 +1,31 @@
+name: Build Thesis
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: docker.io/texlive/texlive:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Versions
+        run: |
+          latex --version
+          latexmk --version
+
+      - name: Generate PDF
+        run: latexmk -bibtex -output-format=pdf -pdf -time thesis.tex
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thesis-pdf
+          path: thesis.pdf
