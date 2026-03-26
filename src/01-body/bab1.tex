@@ -6,90 +6,69 @@ Pada bab ini, akan dijelaskan tentang latar belakang dan permasalahan yang disel
 
 
 %-----------------------------------------------------------------------------%
-\section{Latar Belakang}
-\label{sec:latarBelakang}
+\section{Research Background}
+\label{sec:researchBackground}
 %-----------------------------------------------------------------------------%
-\todo{Tentukan latar belakang dari penelitian Anda di sini (\f{background}).}
-
-Tugas Akhir merupakan salah satu kegiatan yang menjadi "penentu nasib" atas lulusnya seorang mahasiswa dari suatu universitas.
-Umumnya, mahasiswa yang mengerjakan Tugas Akhir diwajibkan untuk menuliskan sebuah laporan dengan tata bahasa ilmiah dan dengan ketentuan \f{format} tertentu.
-Laporan tersebut, memiliki struktur yang kurang lebih mirip, dari manapun fakultas asal seorang mahasiswa.
-
-Umumnya, mahasiswa Universitas Indonesia menggunakan Microsoft Word, OpenOffice, atau \f{rich-text editor} lainnya untuk menyusun laporan Tugas Akhir mereka.
-Akan tetapi, terkadang \f{template} yang dibuat untuk Microsoft Word memiliki beberapa keterbatasan dan inkonsistensi dalam pengaturan tata letak.
-Selain itu, terdapat beberapa hal yang sulit untuk diotomatisasi, contohnya adalah penggunaan sitasi dan pengaturan nomor halaman.
-Oleh karena itu, diperlukan alternatif lain untuk menyusun Tugas Akhir yang lebih nyaman.
-
-Beberapa mahasiswa Fakultas Ilmu Komputer Universitas Indonesia (Fasilkom UI) di tahun 2010-an mulai menggunakan \gls{latex} untuk menyusun Tugas Akhir.
-Sifat \gls{latex} yang berupa \f{mark up language}, memiliki cara pemakaian yang jauh berbeda dibandingkan \f{rich-text editor} seperti Microsoft Word.
-Awalnya, menyusun tata letak yang sesuai dengan persyaratan Tugas Akhir di UI cukup sulit, karena artinya harus membaca dokumentasi.
-Akan tetapi, dengan kemahiran mereka dalam menyusun kode yang mudah dibaca dan terstruktur, struktur yang mereka buat dapat dijadikan sebuah \f{template} yang konsisten tata letaknya hingga bertahun-tahun berikutnya.
-Dengan menggunakan sebuah \f{template}, mahasiswa cukup mengetikkan isi dari Tugas Akhir mereka tanpa harus repot mengatur ulang tata letak secara manual.
-Mahasiswa bisa menggunakan \f{macro} atau perintab yang sudah disediakan untuk \f{template}.
-
-Adanya perubahan pada peraturan Tugas Akhir yang ditentukan oleh \cite{ui:pedoman_ta}, memunculkan kebutuhan untuk perubahan \f{template} \gls{latex} ini secara signifikan.
-Perubahan pada \f{template} ini dilakukan pertama kali pada semester gasal tahun ajaran 2019/2020.
-Perubahan dilakukan mengingat adanya kebutuhan dari mahasiswa Lab \f{Reliable Software Engineering} (RSE), Fasilkom UI untuk menyusun Tugas Akhir menggunakan \gls{latex}.
-\f{Template} ini kemudian di-\f{maintain} secara berkala, mengikuti umpan balik dan pendapat pengguna \f{template} ini, tidak hanya dari Fasilkom UI, namun juga dari berbagai fakultas lain di UI.
-Dengan mulai meluasnya penggunaan \f{template} Tugas Akhir UI ini, diperlukan sebuah contoh penggunaan untuk memudahkan mahasiswa yang baru mulai melaksanakan Tugas Akhir mereka.
-Dokumen dan repositori ini, diharapkan selain menjadi repositori kode \f{template}, juga menjadi repositori contoh penggunaan \f{template} dan panduan penggunaan \f{template}.
-
+The shift toward microservices has decoupled application components to improve scalability and fault tolerance. However, this decoupling introduces network overhead. 
+In high-performance computing (HPC) or low-latency systems, the physical placement of services that often communicate (e.g., a cache and its primary consumer) is critical to improve latency.
+While the Kubernetes Scheduler supports "Inter-Pod Affinity" at creation, the Kubernetes Descheduler currently operates on a per-pod basis. 
+This creates a "Fragmentation Gap": over time, node pressure or autoscaling events might evict one half of a low-latency pair, leaving the other behind. 
+Current descheduling strategies lack "atomicity," meaning they cannot guarantee that a group of dependent services will be moved together to maintain their latency contract.
 
 
 %-----------------------------------------------------------------------------%
-\section{Permasalahan}
-\label{sec:masalah}
+\section{Problem Statement}
+\label{sec:problemStatement}
 %-----------------------------------------------------------------------------%
-\todo{Sebutkan permasalahan penelitian Anda dari latar belakang tersebut.}
-
-Latar belakang yang telah dijelaskan pada \sect~\ref{sec:latarBelakang}, menjelaskan bahwa diperlukan sebuah \f{template}~\gls{latex} Tugas Akhir UI yang konsisten dan bisa disesuaikan dengan peraturan terbaru dari universitas.
-Selain itu, diperlukan juga sebuah \f{tutorial} (panduan penggunaan) yang memudahkan pengguna \f{template} di masa yang akan datang.
+Existing Kubernetes descheduling mechanisms are individualistic. When a pod is evicted for balancing, its dependent partner remains, 
+leading to temporary but significant latency spikes or "Split-Brain" performance degradation until the cluster reaches a new equilibrium.
 
 %-----------------------------------------------------------------------------%
-\subsection{Definisi Permasalahan}
-\label{sec:definisiMasalah}
+\subsection{Research Question}
+\label{sec:researchQuestion}
 %-----------------------------------------------------------------------------%
-Berikut ini adalah rumusan permasalahan dari penelitian yang dilakukan:
-\begin{enumerate}
-	\item Bagaimana cara menyusun \f{template}~\gls{latex} Tugas Akhir di Universitas Indonesia?
-	\item Bagaimana cara mengajarkan penggunaan \f{template} dan bahasa \gls{latex} secara umum ke mahasiswa yang akan menjalani Tugas Akhir?
-\end{enumerate}
-\todo{Tuliskan permasalahan yang ingin diselesaikan. Bisa juga berbentuk pertanyaan}
-
-%-----------------------------------------------------------------------------%
-\subsection{Batasan Permasalahan}
-\label{sec:batasanMasalah}
-%-----------------------------------------------------------------------------%
-Berikut ini adalah asumsi yang digunakan sebagai batasan penelitian ini:
-\begin{enumerate}
-	\item Salah satu batasannya adalah, ini hanya \f{template}.
-\end{enumerate}
-
-\todo{Umumnya ada asumsi atau batasan yang digunakan untuk menjawab pertanyaan-pertanyaan penelitian diatas.}
-
+\begin{itemize}
+    \item \textbf{Atomic Eviction Implementation:} How can we implement an All-or-Nothing (Atomic) eviction mechanism within the Kubernetes Descheduler framework to ensure transactional integrity?
+    
+    \item \textbf{Latency Impact:} To what extent does ``Group Descheduling'' reduce the duration of high-latency states compared to standard individual pod eviction?
+    
+    \item \textbf{Failure Handling:} How does the system handle eviction failures (e.g., PDB violations) to ensure no partial group moves occur, thereby maintaining application stability?
+\end{itemize}
 
 %-----------------------------------------------------------------------------%
-\section{Tujuan Penelitian}
-\label{sec:tujuan}
+\subsection{Research Limitation}
+\label{sec:researchLimitation}
 %-----------------------------------------------------------------------------%
-Berikut ini adalah tujuan penelitian yang dilakukan:
-\begin{enumerate}
-	\item Untuk memberikan \f{template} yang dapat mempermudah skripsi orang lain.
-\end{enumerate}
+\begin{itemize}
+    \item \textbf{Infrastructure:} Limited to a small-scale cluster (3–5 nodes) on AWS EC2 us-east-2.
 
-\todo{Tuliskan tujuan penelitian Anda di bagian ini.}
+    \item \textbf{Network:} While testing across Availability Zones (AZs), we assume standard AWS networking without specialized hardware like SR-IOV.
+
+    \item \textbf{Provisioning:} Using kubeadm to simulate production, but without enterprise-grade storage or complex service meshes (e.g., Istio) unless specifically required for latency measurement.
+\end{itemize}
+
+%-----------------------------------------------------------------------------%
+\section{Research Objectives}
+\label{sec:researchObjectives}
+%-----------------------------------------------------------------------------%
+\begin{itemize}
+    \item Design a "Group Eviction" yaml metadata schema (labels/annotations) to define pod dependencies.
+
+    \item Develop a custom Descheduler strategy that validates the "evictability" of an entire pods in a group and do “ All or Nothing” eviction.
+
+    \item Evaluate the performance impact using a benchmark tool to compare group vs. individual eviction.
+\end{itemize}
 
 
 %-----------------------------------------------------------------------------%
-\section{Manfaat Penelitian}
-\label{sec:manfaat}
+\section{Research Contributions}
+\label{sec:researchContributions}
 %-----------------------------------------------------------------------------%
-Berikut ini adalah manfaat penelitian yang dilakukan:
-\begin{enumerate}
-	\item Penelitian ini memberikan \f{template} yang harapannya dapat mempermudah skripsi orang lain.
-\end{enumerate}
+\begin{itemize}
+    \item \textbf{Algorithm Design:} A transactional "All-or-Nothing" logic for pod evictions.
 
-\todo{Tuliskan tujuan penelitian Anda di bagian ini.}
+    \item \textbf{Open Source Descheduler Enhancement} Provide a new policy to evict group of pods instead of individual pods, enhancing kubernetes-sigs/descheduler configuration
+\end{itemize}
 
 
 %-----------------------------------------------------------------------------%
