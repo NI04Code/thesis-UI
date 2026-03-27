@@ -9,9 +9,9 @@ This chapter explains the background and the problems addressed in this research
 \section{Research Background}
 \label{sec:researchBackground}
 %-----------------------------------------------------------------------------%
-Kubernetes has become the standard for orchestrating containerized workloads, yet it faces a persistent challenge known as the "Tetris problem" or Relative Resource Fragmentation (RRF). In dynamic clusters, pods arrive and terminate stochastically, leaving behind awkward, non-contiguous gaps in node capacity that are too small to host new, larger requests~\cite{arxiv_1506_07020}.
+Kubernetes has become the standard for orchestrating containerized workloads, yet it faces a persistent challenge known as the "Tetris problem" or Relative Resource Fragmentation (RRF). In dynamic clusters, pods arrive and terminate stochastically, leaving behind awkward, non-contiguous gaps in node capacity that are too small to host new, larger requests~\citep{arxiv_1506_07020}.
 
-While the default scheduler handles the initial placement, it is inherently reactive and often unable to fix the long-term entropy of the cluster. This "resource scatter" prevents the Cluster Autoscaler from reclaiming nodes, leading to "capacity islands" where resources are technically available but functionally unusable. Solving this requires an active, cluster-wide consolidation strategy that identifies underutilized nodes and systematically migrates workloads to enable hardware reclamation and improve FinOps efficiency~\cite{wiz_k8s_cost}.
+While the default scheduler handles the initial placement, it is inherently reactive and often unable to fix the long-term entropy of the cluster. This "resource scatter" prevents the Cluster Autoscaler from reclaiming nodes, leading to "capacity islands" where resources are technically available but functionally unusable. Solving this requires an active, cluster-wide consolidation strategy that identifies underutilized nodes and systematically migrates workloads to enable hardware reclamation, thereby maximizing cluster density and reducing unnecessary infrastructure costs~\citep{wiz_k8s_cost}.
 
 Additionally, the shift toward microservices has decoupled application components to improve scalability, introducing network overhead. In high-performance computing (HPC) or low-latency systems, the physical placement of services that often communicate is critical. Current descheduling strategies operate on a per-pod basis and lack "atomicity," meaning they cannot guarantee that a group of dependent services will be moved together to maintain their latency contract. This creates a "Fragmentation Gap," leaving behind orphaned pods.
 
@@ -24,7 +24,7 @@ The core issue in modern Kubernetes resource management is the lack of a proacti
 \begin{enumerate}
     \item Static Resource Scatter: The kube-scheduler lacks the "forward-looking" capability to identify that resources are too scattered to be useful.
     \item Ineffective Balancing Heuristics: Standard balancing tools often treat all resources equally, failing to identify specific "offender" pods that cause resource stranding (where one resource is exhausted while another remains idle).
-    \item Reactive Scale-Out: Because fragmentation prevents pods from fitting on existing nodes, the system is forced into expensive and carbon-intensive "scale-out" events even when the aggregate cluster capacity is sufficient~\cite{arxiv_2506_04902}.
+    \item Reactive Scale-Out (Autoscaling Inefficiency): Because fragmentation scatters available resources into unusable chunks, new pods often cannot fit on existing nodes. This forces the Cluster Autoscaler to provision redundant new Virtual Machines (VMs) as new nodes in the cluster (a "scale-out" event). These redundant scale-out events not only incur unnecessary infrastructure costs~\citep{wiz_k8s_cost} but also increase the overall carbon footprint and energy consumption of the environment, even when the aggregate cluster capacity is mathematically sufficient~\citep{arxiv_2506_04902}.
     \item Latency Spikes during Eviction: When a pod is evicted for balancing, its dependent partner remains, leading to temporary but significant latency spikes or "Split-Brain" performance degradation.
 \end{enumerate}
 
@@ -67,7 +67,7 @@ In alignment with the formulated research questions, the objectives of this stud
     \item Evaluate the performance impact using a benchmark tool to compare group vs. individual eviction.
     \item Develop the BinPackingFragmentation Consolidation Strategy: Implement a pipeline that computes cluster-wide scatter, filters underutilized "source" nodes, and cordons them to force the scheduler to pack evicted pods onto denser "target" nodes.
     \item Create an "Imbalance Correction" Plugin: Develop the ResourceFragmentation plugin to detect nodes with stranded resources and identify pods that disrupt the proportional consumption of CPU and Memory.
-    \item Implement a Strategic Eviction Engine: Use the TOPSIS algorithm not as a mere scoring tool, but as a strategic engine to rank pods by their "benefit" to the node---evicting those that, once moved, provide the fastest path to emptying a node or restoring balance.
+    \item Implement a Strategic Eviction Engine: Use the TOPSIS algorithm~\citep{arxiv_2506_04902} not as a mere scoring tool, but as a strategic engine to rank pods by their "benefit" to the node---evicting those that, once moved, provide the fastest path to emptying a node or restoring balance.
 \end{itemize}
 
 
@@ -81,7 +81,7 @@ In alignment with the formulated research questions, the objectives of this stud
     \item Proactive Consolidation Pipeline: Introduction of a Cordon-and-Evict logic within the descheduler that prevents "ping-pong" scheduling and ensures workloads are forced into a bin-packed configuration.
     \item Enhanced Node Utility for Autoscaling: A method to systematically empty underutilized nodes, providing the specific conditions required for the Cluster Autoscaler to terminate instances and reduce cloud spend.
     \item Smarter Offender Identification: Moving beyond random eviction by using TOPSIS-based ranking to identify pods that are the "best" candidates for removal based on their resource footprint relative to node capacity.
-    \item Operational FinOps Toolkit: A practical software implementation that directly targets the reduction of "stranded capacity," translating to immediate energy savings and infrastructure cost reductions in large-scale Kubernetes environments.
+    \item Resource Optimization Framework: A practical software implementation that directly targets the reduction of "stranded capacity." By maximizing resource utilization, this approach translates to immediate infrastructure cost reductions~\citep{wiz_k8s_cost} and operational energy savings~\citep{arxiv_2506_04902} in large-scale Kubernetes environments.
 \end{itemize}
 
 
