@@ -9,12 +9,15 @@ This chapter explains the background and the problems addressed in this research
 \section{Research Background}
 \label{sec:researchBackground}
 %-----------------------------------------------------------------------------%
-Kubernetes has become the standard for orchestrating containerized workloads, yet it faces a persistent challenge known as the "Tetris problem" or Relative Resource Fragmentation (RRF). In dynamic clusters, pods arrive and terminate stochastically, leaving behind awkward, non-contiguous gaps in node capacity that are too small to host new, larger requests~\citep{arxiv_1506_07020}.
+The rapid transition to containerized microservices has established Kubernetes as the leading orchestration platform; however, it faces the challenge of Relative Resource Fragmentation (RRF), widely known as the "Tetris problem"~\citep{mishra2016deep}. In dynamic cluster environments, the stochastic arrival and termination of pods leave behind unusable, non-contiguous gaps in node capacity that are frequently too small to host new workloads~\citep{mishra2016deep}. This "resource scatter" prevents the Cluster Autoscaler from efficiently reclaiming idle nodes, resulting in "capacity islands" where resources are technically available but functionally trapped in fragments. 
 
-While the default scheduler handles the initial placement, it is inherently reactive and often unable to fix the long-term entropy of the cluster. This "resource scatter" prevents the Cluster Autoscaler from reclaiming nodes, leading to "capacity islands" where resources are technically available but functionally unusable. Solving this requires an active, cluster-wide consolidation strategy that identifies underutilized nodes and systematically migrates workloads to enable hardware reclamation, thereby maximizing cluster density and reducing unnecessary infrastructure costs~\citep{wiz_k8s_cost}.
+The severity of fragmentation is often increased by multi-dimensional resource skewness, a condition in which nodes experience asymmetric utilization across different metrics such as CPU and memory~\citep{xiao2013dynamic}. For example, a node may reach 90\% CPU usage while memory remains underutilized at 20\%, effectively "stranding" the remaining memory as it cannot be allocated without complementary CPU capacity. Although the default scheduler handles the initial pod placement, its reactive nature and lack of multi-resource balancing functions often fail to address the cluster's long-term entropy as workloads evolve stochastically ~\citep{guo2025joint}. 
 
-Additionally, the shift toward microservices has decoupled application components to improve scalability, introducing network overhead. In high-performance computing (HPC) or low-latency systems, the physical placement of services that often communicate is critical. Current descheduling strategies operate on a per-pod basis and lack "atomicity," meaning they cannot guarantee that a group of dependent services will be moved together to maintain their latency contract. This creates a "Fragmentation Gap," leaving behind orphaned pods.
+Furthermore, the decoupling of application components into microservices has introduced substantial network overhead, making the physical proximity of communicating services critical for low-latency performance~\citep{marchese2022network}. In high-performance computing or real-time systems, communication delays between pods can violate strict Service Level Objectives (SLOs) if the related services are scattered across high-latency links. Therefore, effective orchestration must integrate real-time network telemetry, such as inter-node latency and traffic volume, to minimize response times and maintain communication efficiency~\citep{chen2024trade}.
 
+To mitigate these challenges, various descheduling strategies have been proposed; however, many existing models focus more on the scheduler and rely on "atomic" group migrations or gang scheduling to ensure that dependent services move together. However, requiring the atomic binding of large pod groups significantly increases the risk of resource deadlocks and worsens fragmentation, as finding contiguous space for an entire group is exponentially more difficult than for individual pods~\citep{christensen2025priority}. This creates a "Fragmentation Gap" where orphaned pods are left on suboptimal nodes when group-level moves fail or are blocked by insufficient resources.
+
+Our research, implemented as a custom configuration within the official Kubernetes Descheduler repository~\citep{k8sdescheduler}, diverges from these threshold-based and atomic models by introducing an integrated imbalance index plug-in and a non-atomic, score-based network plug-in. Unlike standard strategies, we utilize a mathematical function to derive a Resource Imbalance Index ($RII_i$) based on normalized resource metrics to surgically target "worst-offender" pods contributing to local skewness~\citep{guo2025joint}. Additionally, our network-aware configuration explicitly rejects atomic grouping in favor of a scoring mechanism that evaluates individual pod movements by comparing candidate nodes against the current node latency, ensuring stable network performance and reducing the fragmentation penalties associated with group-level eviction.
 
 %-----------------------------------------------------------------------------%
 \section{Problem Statement}
@@ -25,8 +28,9 @@ The core issue in modern Kubernetes resource management is the lack of a proacti
     \item Static Resource Scatter: The kube-scheduler lacks the "forward-looking" capability to identify that resources are too scattered to be useful.
     \item Ineffective Balancing Heuristics: Standard balancing tools often treat all resources equally, failing to identify specific "offender" pods that cause resource stranding (where one resource is exhausted while another remains idle).
     \item Reactive Scale-Out (Autoscaling Inefficiency): Because fragmentation scatters available resources into unusable chunks, new pods often cannot fit on existing nodes. This forces the Cluster Autoscaler to provision redundant new Virtual Machines (VMs) as new nodes in the cluster (a "scale-out" event). These redundant scale-out events not only incur unnecessary infrastructure costs~\citep{wiz_k8s_cost} but also increase the overall carbon footprint and energy consumption of the environment, even when the aggregate cluster capacity is mathematically sufficient~\citep{arxiv_2506_04902}.
-    \item Latency Spikes during Eviction: When a pod is evicted for balancing, its dependent partner remains, leading to temporary but significant latency spikes or "Split-Brain" performance degradation.
+    \item Latency Tradeoff as: When a pod is evicted for balancing, the cluster become more defragmented, but at the sametime it introduce an increase in latency as pod that oftenly commmunicate now are more scattered across node
 \end{enumerate}
+
 
 %-----------------------------------------------------------------------------%
 \subsection{Research Question}
@@ -34,12 +38,11 @@ The core issue in modern Kubernetes resource management is the lack of a proacti
 %-----------------------------------------------------------------------------%
 Based on the problem statement described previously, the research questions addressed in this study are as follows:
 \begin{itemize}
-    \item Atomic Eviction Implementation: How can we implement an All-or-Nothing (Atomic) eviction mechanism within the Kubernetes Descheduler framework to ensure transactional integrity?
-    \item Latency Impact: To what extent does ``Group Descheduling'' reduce the duration of high-latency states compared to standard individual pod eviction?
-    \item Failure Handling: How does the system handle eviction failures (e.g., PDB violations) to ensure no partial group moves occur, thereby maintaining application stability?
     \item How can a multi-stage descheduling pipeline be designed to transition a cluster from a scattered state to a consolidated, "bin-packed" state?
-    \item What strategy can effectively identify source nodes for eviction and target nodes for consolidation to ensure the Cluster Autoscaler can successfully reclaim hardware?
     \item How can Multi-Criteria Decision Analysis (MCDA) be utilized to rank pod eviction candidates, ensuring that the pods most responsible for node-level inefficiency are prioritized for migration?
+    \item How can a network-aware scoring eviction mechanism be incorporated into the Kubernetes Descheduler framework to guarantee consistent or lower latency?
+    \item How can a network-aware plugins descheduler be made to ensure that the pod is rescheduled to a candidate node with less or equal latency?
+    \item How does the trade-off between cluster fragmentation and latency compare with and without network-aware plugins?
 \end{itemize}
 
 %-----------------------------------------------------------------------------%
