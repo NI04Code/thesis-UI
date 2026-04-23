@@ -2,531 +2,74 @@
 \chapter{\babDua}
 \label{bab:2}
 %-----------------------------------------------------------------------------%
-\todo{
-	Bab ini, biasanya namanya adalah "Studi Literatur" atau "Tinjauan Pustaka".
-	Akan tetapi, beberapa fakultas atau dosen pembimbing meminta Bab 2 untuk dinamakan lain, seperti "Kerangka Berpikir".
-}
-
-Untuk memulai penelitian, dibutuhkan kerangka berpikir yang sesuai untuk permasalahan yang ingin dipecahkan.
-Untuk membentuk kerangka berpikir yang sesuai, perlu dikaitkan dengan hasil studi literatur yang telah dilakukan.
-Oleh karena itu, pada bab ini, akan dijelaskan hasil studi literatur yang telah dilakukan yang telah dikaitan dengan kerangka kerja untuk penelitian ini.
+This chapter reviews the theoretical foundation and existing literature relevant to this research. It begins by exploring the underlying architecture of Kubernetes resource management and identifying the core operational challenge: the multi-dimensional resource fragmentation problem. To address this, the concepts of bin-packing and Multi-Criteria Decision Analysis (MCDA), specifically the Technique for Order Preference by Similarity to Ideal Solution (TOPSIS), are introduced. The discussion then focuses on the Kubernetes Descheduler framework, analyzing its current capabilities and inherent limitations. Finally, the chapter examines the need for complementary group eviction policies to support microservice architectures, ultimately setting the stage for the proposed policy-based descheduler framework.
 
 
 %-----------------------------------------------------------------------------%
-\section{Apa itu \latex?}
-\label{sec:latex}
+\section{Kubernetes Architecture and Resource Management}
+\label{sec:k8s_architecture}
 %-----------------------------------------------------------------------------%
+Kubernetes has emerged as the de-facto standard for container orchestration in cloud-native environments, providing robust abstractions for deploying, scaling, and managing containerized applications. 
 
-%-----------------------------------------------------------------------------%
-\subsection{\latex~Secara Singkat}
-\label{sec:latexBrief}
-%-----------------------------------------------------------------------------%
-Berdasarkan \cite{latex:intro}: \\
-\begin{tabular}{| p{14cm} |}
-	\hline
-	\gls{latex} is a family of programs designed to produce publication-quality typeset documents.
-	It is particularly strong when working with mathematical symbols. \\
-	The history of \gls{latex} begins with a program called TEX.
-	In 1978, a computer scientist by the name of Donald Knuth grew frustrated with the mistakes that his publishers made in typesetting his work.
-	He decided to create a typesetting program that everyone could easily use to typeset documents, particularly those that include formulae, and made it freely available.
-	The result is TEX. \\
-	Knuth's product is an immensely powerful program, but one that does focus very much on small details.
-	A mathematician and computer scientist by the name of Leslie Lamport wrote a variant of TEX called \gls{latex} that focuses on document structure rather than such details. \\
-	\hline
-\end{tabular}
+At its core, Kubernetes operates using a master-worker architecture. Applications are deployed as Pods, which are the smallest deployable computing units consisting of one or more containers sharing network and storage namespaces. These Pods are scheduled to run on worker machines called Nodes. The Kubelet, an agent running on each Node, ensures that the containers described in the Pod specifications are running and healthy.
 
-\vspace*{0.2cm}
+The initial placement of a Pod onto a Node is handled by the `kube-scheduler` component. The default scheduling process follows a two-step approach: filtering and scoring. During the filtering phase, the scheduler eliminates Nodes that cannot satisfy the Pod's constraints, such as inadequate CPU or memory availability, or unsatisfied hardware affinities. In the scoring phase, the scheduler ranks the remaining feasible Nodes using various scoring plugins to determine the optimal placement. 
 
-Dokumen \gls{latex}~sangat mudah, seperti halnya membuat dokumen teks biasa.
-Ada beberapa perintah yang diawali dengan tanda '\bslash'.
-Seperti perintah \code{\bslash\bslash}~yang digunakan untuk memberi baris baru.
-Perintah tersebut juga sama dengan perintah \code{\bslash{}newline}.
-Pada bagian ini akan sedikit dijelaskan cara manipulasi teks dan perintah-perintah \gls{latex}~yang mungkin akan sering digunakan.
-Jika ingin belajar hal-hal dasar mengenai \gls{latex}, silakan kunjungi:
+For instance, the default `LeastAllocated` scoring strategy prioritizes Nodes with the fewest assigned resources to spread the workload evenly across the cluster. Conversely, the `MostAllocated` strategy favors Nodes that are already highly utilized, which effectively condenses workloads onto a smaller set of Nodes, fulfilling a basic bin-packing objective.
 
-\begin{itemize}
-	\item \url{http://frodo.elon.edu/tutorial/tutorial/}, atau
-	\item \url{http://www.maths.tcd.ie/~dwilkins/LaTeXPrimer/}
-\end{itemize}
-
-%-----------------------------------------------------------------------------%
-\subsection{\latex~Kompiler dan IDE}
-\label{sec:latexCompiler}
-%-----------------------------------------------------------------------------%
-Untuk menggunakan \gls{latex}~(pada konteks hanya sebagai pengguna), tidak perlu banyak tahu mengenai hal-hal didalamnya.
-Dengan menggunakan \f{Integrated Development Environment} (IDE), penggunaan \gls{latex}~akan serupa dengan pembuatan dokumen secara visual, layaknya OpenOffice Writer atau Microsoft Word.
-Orang-orang yang menggunakan \gls{latex}~relatif lebih teliti dan terstruktur mengenai cara penulisan yang dia gunakan, karena \gls{latex}~memaksa untuk seperti itu.
-
-Untuk mencoba \gls{latex}, diperlukan kompiler dan IDE.
-Bagi pengguna Microsoft Windows dan Mac OS, instalasi kompiler \gls{latex}~dapat menggunakan MikTeX (\url{https://miktex.org/download}).
-Bagi pengguna Linux, instalasi kompiler \gls{latex}~dapat menggunakan Texlive ( \url{http://www.tug.org/texlive/}).
-Distro-distro \f{mainstream} di Linux seperti Ubuntu biasanya telah menyediakan \f{package} \code{texlive} melalui \f{package manager}.
-Apabila ingin melakukan instalasi Texlive melalui \f{package manager}, lakukan instalasi package \code{texlive-full} atau setidaknya \code{texlive-science} agar prasyarat \f{template} ini tersedia secara lengkap.
-
-Beberapa text editor atau IDE yang dapat digunakan adalah sebagai berikut:
-\begin{itemize}
-	\item \underline{\href{https://www.texstudio.org/}{TeXstudio}} (direkomendasikan),
-	\item TeXWorks (biasanya bawaan dari \underline{\href{https://miktex.org/download}{MikTeX}}),
-	\item \underline{\href{http://www.xm1math.net/texmaker/}{Texmaker}}, atau
-	\item Microsoft Visual Studio Code, dengan \f{plugin} \underline{\href{https://marketplace.visualstudio.com/items?itemName=James-Yu.latex-workshop}{\gls{latex} Workshop}}.
-	Untuk menggunakan \f{plugin} tersebut, diperlukan instalasi MikTeX dan Perl.
-	Alternatif lain untuk persyaratan tersebut adalah menggunakan \f{plugin} Remote - WSL jika memiliki distro Windows Subsystem for Linux (WSL) 2 yang sudah terpasang \code{texlive}.
-\end{itemize}
+Furthermore, Kubernetes supports dynamic workload management through autoscaling mechanisms. The Horizontal Pod Autoscaler (HPA) and Vertical Pod Autoscaler (VPA) adjust the number of Pod replicas and resource requests based on utilization metrics. At the infrastructure level, the Cluster Autoscaler observes unschedulable Pods and automatically provisions new Nodes to accommodate them, or removes underutilized Nodes to reduce costs. However, because Pod assignments in Kubernetes are static (meaning a Pod is bound to a Node for its entire lifecycle until termination), the continuous scaling of workloads inevitably leads to degraded cluster states over time.
 
 
 %-----------------------------------------------------------------------------%
-\section{\f{Formatting} Teks Dasar}
-\label{sec:latexBasicFormatting}
+\section{Resource Fragmentation Problem}
+\label{sec:resource_fragmentation}
 %-----------------------------------------------------------------------------%
-Hal pertama yang mungkin ditanyakan adalah bagaimana membuat huruf tercetak tebal, miring, atau memiliki garis bawah.
-Pada Texmaker, Anda bisa melakukan hal ini seperti halnya saat mengubah dokumen dengan OO Writer.
-Namun jika tetap masih tertarik dengan cara lain, ini dia:
+The static binding of Pods to Nodes in Kubernetes creates a persistent operational challenge known as Relative Resource Fragmentation (RRF)~\citep{arxiv_1506_07020}. This issue, often called the "Tetris problem" in cluster management, happens when pods of varying sizes are continuously created and destroyed. This constant activity leaves behind scattered, unusable gaps of resource capacity across different Nodes.
 
-\begin{itemize}
-	\item \bo{Bold} \\
-	Gunakan perintah \code{\bslash{}textbf$\lbrace\rbrace$} atau
-	\code{\bslash{}bo$\lbrace\rbrace$}.\\
-	Contoh: \textbf{Contoh hasil tulisan} atau \bo{Contoh hasil tulisan}.
-	\item \f{Italic} \\
-	Gunakan perintah \code{\bslash{}textit$\lbrace\rbrace$} atau
-	\code{\bslash{}f$\lbrace\rbrace$}.\\
-	Contoh: \textit{Contoh hasil tulisan} atau \f{Contoh hasil tulisan}.
-	\item \underline{Underline} \\
-	Gunakan perintah \code{\bslash{}underline$\lbrace\rbrace$}.\\
-	Contoh: \underline{Contoh hasil tulisan}.
-	\item $\overline{Overline}$ \\
-	Gunakan perintah \code{\$\bslash{}overline\$}.\\
-	Contoh: $\overline{Contoh~hasil~tulisan}$.
-	\item $^{superscript}$ \\
-	Gunakan perintah \code{\$\bslash{}$\lbrace\rbrace$\$}.\\
-	Contoh: $^{Contoh~hasil~tulisan}$.
-	\item $_{subscript}$ \\
-	Gunakan perintah \code{\$\bslash{}\_$\lbrace\rbrace$\$}.\\
-	Contoh: $_{Contoh~hasil~tulisan}$.
-\end{itemize}
+This phenomenon results in the formation of "capacity islands," a state where the total available resources across a cluster are adequate, but their physical dispersion makes them impossible to allocate to incoming workloads. Without active defragmentation, these unusable resource pockets significantly diminish cluster efficiency and drive up operational cloud costs~\citep{wiz_k8s_cost}.
 
-% v2.2.1: tutorial dipindah dari Bab 3 ke Bab 2
-Ada beberapa hal lain yang bisa digunakan.
-\begin{itemize}
-	\item Kombinasi \bo{Bold} dan \f{Italic}: \\
-	Gunakan perintah \code{\bslash{}bi$\lbrace\rbrace$}. \\
-	Contoh: \bi{Contoh hasil tulisan}.
-	\item Menebalkan teks formula matematis: \\
-	Gunakan perintah \code{\bslash{}m$\lbrace\rbrace$}. \\
-	Contoh: \m{\alpha~\beta}
-	\item Menebalkan teks formula matematis, sekaligus meletakkannya di tengah: \\
-	Gunakan perintah \code{\bslash{}mc$\lbrace\rbrace$}. \\
-	Contoh: \mc{\alpha~\beta}
-	\item Menggunakan \f{monospaced font} untuk kode:
-	Gunakan perintah \code{\bslash{}texttt$\lbrace\rbrace$} atau \code{\bslash{}code$\lbrace\rbrace$}. \\
-	Contoh: \texttt{Contoh hasil tulisan} atau \code{Contoh hasil tulisan}.
-\end{itemize}
-
-Perintah \code{\bslash{}f}, \code{\bslash{}bo}, \code{\bslash{}bi}, \code{\bslash{}m}, \code{\bslash{}mc},
-dan \code{\bslash{}code} hanya dapat digunakan jika package \code{\_internals/uithesis} digunakan.
-
-%-----------------------------------------------------------------------------%
-\section{Memasukan Gambar}
-\label{sec:latexImage}
-%-----------------------------------------------------------------------------%
-Setiap gambar dapat diberikan caption dan diberikan label. Label dapat digunakan untuk menunjuk gambar tertentu.
-Jika posisi gambar berubah, maka nomor gambar juga akan diubah secara otomatis.
-Begitu juga dengan seluruh referensi yang menunjuk pada gambar tersebut.
-Contoh sederhana adalah \pic~\ref{fig:testGambar}, yang bisa dibuat dengan menggunakan \lst~\ref{code:latexImage}.
-Harap diingat pada aturan Tugas Akhir UI, caption harus selalu \b{diletakkan di bawah gambar}.
-
-\lstinputlisting[language={[latex]tex}, caption=Contoh penggunaan gambar, label=code:latexImage]{assets/codes/tutorial/2-basicFigure.tex}
-
-Berikut adalah penjelasan dari \lst~\ref{code:latexImage}:
-\begin{itemize}
-	\item Baris ke-2: \code{\bslash{}centering} digunakan untuk membuat gambar berada di tengah.
-	\item Baris ke-3 dan 4: \code{\bslash{}includegraphics} digunakan untuk memasukkan gambar. \\
-	\code{width=0.25\bslash{}textwidth} digunakan untuk mengatur lebar gambar sebesar 25\% dari lebar teks (dari ujung marjin kiri ke ujung marjin kanan).
-	\item Baris ke-5: \code{\bslash{}caption} digunakan untuk memberikan \f{caption} pada gambar.
-	\f{Caption} tersebut diletakkan setelah \code{includegraphics} agar \f{caption} berada di bawah gambar.
-	\item Baris ke-6: \code{\bslash{}label} digunakan untuk memberikan label pada gambar.
-	Label ini bisa digunakan di suatu paragraf untuk merujuk pada gambar tersebut,
-	dengan cara menuliskan \code{\bslash{}ref\{label\}} pada paragraf.
-\end{itemize}
-
-\input{assets/codes/tutorial/2-basicFigure}
-
-Anda juga bisa memasukkan sitasi atau URL sumber gambar, jika gambar tersebut bukan Anda sendiri yang membuatnya.
-Contoh sederhana adalah \pic~\ref{fig:testGambarBersumber}, yang bisa dibuat dengan menggunakan \lst~\ref{code:latexImageSource}.
-
-\lstinputlisting[language={[latex]tex}, caption=Contoh penggunaan gambar bersumber, label=code:latexImageSource]{assets/codes/tutorial/2-sourcedFigure.tex}
-
-Pada baris ke-5, \code{\bslash{}captionsource} digunakan untuk memberikan caption dan sumber gambar.
-Dalam kasus ini, sumber gambar merupakan sebuah URL, sehingga ditandai dengan perintah \code{\bslash{}url\{\}}.
-Jika sumber gambar merupakan sebuah buku, jurnal, atau dokumen, maka bisa dilakukan sitasi menggunakan perintah \code{\bslash{}cite\{\}}.
-Contoh: \code{\bslash{}captionsource\{Sesuatu\}\{\bslash{}cite\{latex:intro\}\}}.
-
-\input{assets/codes/tutorial/2-sourcedFigure}
+Resource fragmentation in modern clusters is rarely one-dimensional; it requires multi-dimensional analysis, usually evaluating CPU and Memory concurrently. When workloads have asymmetric resource requirements, such as CPU-intensive web servers or memory-bound data caches, the cluster often suffers from stranded resources. Stranded capacity occurs when one resource dimension (e.g., CPU) on a Node is completely exhausted while the other (e.g., Memory) remains largely idle. A multi-dimensional fragmentation framework is therefore essential to detect and reconcile these imbalances, ensuring that both CPU and Memory are consumed at proportional rates.
 
 
 %-----------------------------------------------------------------------------%
-\section{Membuat Tabel}
-\label{sec:latexTable}
+\section{The Bin-packing Problem and Multi-Criteria Decision Analysis}
+\label{sec:binpacking_mcda}
 %-----------------------------------------------------------------------------%
-Tabel pada \gls{latex} dapat dibuat secara visual dengan bantuan \f{website} seperti \url{https://www.tablesgenerator.com/}.
-Dengan menggunakan \textit{website} ini, maka pembuatan tabel akan menjadi lebih mudah.
-\textit{User interface} dari \f{website} dapat dilihat pada Gambar \ref{fig:tablesgenerator}.
+Addressing resource fragmentation is fundamentally a variation of the classic bin-packing problem. In computer science, the bin-packing problem involves allocating a set of independent items with different weights into a finite number of bins such that the number of used bins is minimized. In the context of Kubernetes, the "items" are the Pods, and the "bins" are the cluster Nodes. 
 
-\begin{figure}
-	\centering
-	\includegraphics[width=0.5\textwidth]{assets/pics/tablesgenerator-dot-com.png}
-	\caption{\textit{User interface} dari \textit{website} https://www.tablesgenerator.com/}
-	\label{fig:tablesgenerator}
-\end{figure}
+Traditional scheduling algorithms often attempt to solve the bin-packing problem using single-weight heuristics, meaning they evaluate the placement based on a primary metric, such as total CPU availability. While simple to compute, this single-dimensional approach is inadequate for modern workloads that exhibit complex dependency on multiple resource dimensions, often exacerbating stranded capacity issues.
 
-Di sisi lain, tabel juga dapat diberi label dan caption seperti pada gambar.
-Caption pada tabel terletak pada bagian atas tabel.
-Contoh kode yang menyusun suatu tabel sederhana dapat dilihat pada \lst~\ref{code:latexTable}.
+To overcome the limitations of single-weight bin-packing, Multi-Criteria Decision Analysis (MCDA) techniques can be applied to evaluate scheduling and eviction decisions across multiple dimensions simultaneously. One prominent MCDA method is the Technique for Order Preference by Similarity to Ideal Solution (TOPSIS). TOPSIS evaluates candidate alternatives against multiple criteria by determining the shortest geometric distance to a "positive ideal solution" (the best possible outcome across all metrics) and the longest distance from a "negative ideal solution" (the worst possible outcome)~\citep{arxiv_2506_04902}.
 
-\lstinputlisting[language={[latex]tex}, caption=Contoh penggunaan tabel, label=code:latexTable]{assets/codes/tutorial/2-basicTable.tex}
-
-Berikut adalah penjelasan dari \lst~\ref{code:latexTable}:
-\begin{itemize}
-	\item Baris ke-2: \code{\bslash{}centering} digunakan untuk membuat tabel berada di tengah.
-	\item Baris ke-3: \code{\bslash{}caption} digunakan untuk memberikan \f{caption} pada tabel.
-	\f{Caption} tersebut diletakkan setelah \code{begin\{tabular\}} agar \f{caption} berada di atas tabel.
-	\item Pada baris ke-3, terdapat argumen \code{| l | c r |} yang artinya adalah sebagai berikut:
-	\begin{itemize}
-		\item \code{|} digunakan untuk membuat garis vertikal pada tabel.
-		\item \code{l} digunakan untuk membuat suatu kolom menjadi rata kiri.
-		\item \code{c} digunakan untuk membuat suatu kolom menjadi rata tengah.
-		\item \code{r} digunakan untuk membuat suatu kolom menjadi rata kanan.
-	\end{itemize}
-	\item Baris ke-4: \code{\bslash{}label} digunakan untuk memberikan label pada tabel.
-	Label ini bisa digunakan di suatu paragraf untuk merujuk pada tabel tersebut,
-	dengan cara menuliskan \code{\bslash{}ref\{label\}} pada paragraf.
-	\item Baris ke-5: \code{\bslash{}begin\{tabular\}} digunakan untuk memulai pembuatan tabel.
-	\item \code{\bslash{}hline} digunakan untuk membuat garis horizontal pada tabel.
-	\item \code{\&} digunakan untuk memisahkan antar kolom.
-	\item \code{\bslash{}\bslash{}} digunakan untuk memisahkan antar baris.
-	\item Baris ke-17 dan 18: Kode untuk mengakhiri pembuatan tabel.
-\end{itemize}
-
-Hasil dari \lst~\ref{code:latexTable} akan menjadi \tab~\ref{tab:basic}.
-
-\input{assets/codes/tutorial/2-basicTable}
+By applying TOPSIS to Kubernetes resource scheduling, operators can rank Pods or Nodes by simultaneously weighing their efficiency in utilizing CPU, Memory, and even specific hardware accelerators like GPUs. When used strategically in a consolidation pipeline, TOPSIS allows the system to identify not just any pod for eviction, but the specific pod that optimally restores proportional multi-dimensional balance to a fragmented Node.
 
 
 %-----------------------------------------------------------------------------%
-\subsection{Tabel Panjang (Lintas Baris)}
-\label{sec:latexLongTable}
+\section{Kubernetes Descheduler and its Limitations}
+\label{sec:k8s_descheduler}
 %-----------------------------------------------------------------------------%
-Adapun untuk membuat tabel panjang yang bisa melebihi dari satu halaman,
-gunakan perintah \code{\bslash{}begin\{longtable\}} sebagai pengganti \code{\bslash{}begin\{table\}}.
-Di dalam \code{longtable} tidak perlu lagi ada \code{\bslash{}begin\{tabular\}}.
-Kemudian, tambahkan tanda \code{\bslash{}\bslash{}} setelah baris \code{\bslash{}label\{....\}},
-agar tidak menimbulkan error saat menampilkan \f{caption} di bagian atas tabel.
-Kemudian, untuk membatasi header yang ingin diulang pada halaman-halaman berikutnya,
-gunakan perintah \code{\bslash{}endhead}.
-Contoh kode pembuatan tabel pankang dapat dilihat pada \lst~\ref{code:latexLongTable}.
+Because the `kube-scheduler` is inherently reactive (meaning it only makes decisions at the moment a Pod is created), it cannot correct the long-term entropy and resource fragmentation that develops within a running cluster. To provide corrective, proactive management, the Kubernetes ecosystem utilizes the Descheduler framework.
 
-\lstinputlisting[language={[latex]tex}, caption=Contoh penggunaan tabel panjang, label=code:latexLongTable]{assets/codes/tutorial/2-longTable.tex}
+The Kubernetes Descheduler operates by periodically scanning the cluster state, identifying Pods that violate specific policies, and gracefully evicting them. Once evicted, these Pods are recreated by their respective controllers (e.g., ReplicaSets or Deployments) and placed into the scheduling queue, allowing the `kube-scheduler` to make newly informed placement decisions based on the current cluster topology. The Descheduler employs standard strategies to manage cluster health. For example, the `LowNodeUtilization` strategy aims to identify extremely underutilized Nodes and evict Pods from heavier Nodes, spreading the workload. Conversely, the `HighNodeUtilization` strategy attempts to free up underutilized Nodes by moving their few remaining Pods to more occupied Nodes, acting as an enabler for the Cluster Autoscaler to safely terminate empty instances.
 
-Terdapat lima bagian pada sebuah tabel panjang:
-\begin{enumerate}
-	\item Awalan (\f{header}) di halaman pertama, umumnya disebut sebgai \code{firsthead}.\\
-	Pada \lst~\ref{code:latexLongTable}, bagian ini didefinisikan di baris 2 sampai 7.
-	Bagian ini diakhiri definisinya dengan perintah \code{\bslash{}endfirsthead}.
-	Pada bagian ini, \f{caption} yang digunakan merupakan \f{caption} asli.
-	\code{caption} dan \code{label} hanya perlu didefinisikan di bagian awal tabel, di halaman pertama saja.
-	Anda juga tetap bisa menggunakan \code{captionsource} apabila dibutuhkan.
-	\item Awalan (\f{header}) di halaman berikutnya, umumnya disebut sebagai \code{head}.\\
-	Pada \lst~\ref{code:latexLongTable}, bagian ini didefinisikan di baris 8 sampai 12.
-	Bagian ini diakhiri definisinya dengan perintah \code{\bslash{}endhead}.
-	Terkait penggunaan \f{caption} sambungan:
-	\begin{itemize}
-		\item Jika Anda menggunakan \code{\bslash{}caption\{\}}, maka untuk menuliskan caption sambungan, gunakan perintah \code{\bslash{}caption[]\{\}}.
-		Pada kasus \lst~\ref{code:latexLongTable}, \f{caption} sambungan didefinisikan di baris 8 menggunakan perintah \code{\bslash{}caption[]\{\}}.
-		\item Jika Anda menggunakan \code{\bslash{}captionsource\{\}\{\}}, maka untuk menuliskan caption sambungan, gunakan perintah \code{\bslash{}captionsourcecont\{\}\{\}}.
-	\end{itemize}
-	\item Akhiran (\f{footer}) yang muncul di halaman pertama hingga sebelum terakhir, umumnya disebut sebagai \code{foot}.\\
-	Bagian ini diakhiri definisinya dengan perintah \code{\bslash{}endfoot}.
-	Pada \lst~\ref{code:latexLongTable}, bagian ini didefinisikan di baris 13 sampai 14.
-	Dalam kasus ini, akhiran tabel hanya berupa garis horizontal.
-	\item Akhiran (\f{footer}) di halaman terakhir, umumnya disebut sebagai \code{lastfoot}.\\
-	Bagian ini diakhiri definisinya dengan perintah \code{\bslash{}endlastfoot}.
-	Pada \lst~\ref{code:latexLongTable}, bagian ini didefinisikan di baris 15 sampai 16.
-	Dalam kasus ini, akhiran tabel hanya berupa garis horizontal.
-	\item Isi dari tabel.
-	Pada \lst~\ref{code:latexLongTable}, bagian ini didefinisikan di baris 17 sampai 32.
-	Isi dari tabel akan diletakkan di antara awalan tabel (\f{header}) dan akhiran tabel (\f{footer}).
-\end{enumerate}
-
-Hasil dari \lst~\ref{code:latexLongTable} akan menjadi \tab~\ref{tab:long}.
-
-\input{assets/codes/tutorial/2-longTable}
-
-%-----------------------------------------------------------------------------%
-\subsection{Menggabungkan (\f{Merge}) Baris atau Kolom}
-\label{sec:latexMergeCellsTable}
-%-----------------------------------------------------------------------------%
-Ada jenis tabel lain yang dapat dibuat dengan \gls{latex}~berikut beberapa diantaranya.
-Contoh-contoh ini bersumber dari \url{https://en.wikibooks.org/wiki/LaTeX/Tables}.
-
-\bo{Contoh 1: Menggabungkan Kolom} \\
-Contoh penggunaan tabel dengan sel yang melebar ke lebih dari satu kolom dapat dilihat pada \lst~\ref{code:mergeColumnTable}.
-Pada contoh ini, sel pada baris 1, kolom 3 dan 4 digabungkan menjadi satu dengan menggunakan perintah \code{\bslash{}multicolumn\{3\}\{c\}\{Week 1\}}.
-
-\lstinputlisting[language={[latex]tex}, caption=Contoh penggunaan tabel dengan sel yang melebar ke lebih dari satu kolom, label=code:mergeColumnTable]{assets/codes/tutorial/2-mergeColumnTable.tex}
-
-Hasil dari \lst~\ref{code:mergeColumnTable} akan menjadi \tab~\ref{tab:rowSpanning}.
-
-\input{assets/codes/tutorial/2-mergeColumnTable}
-
-\bo{Contoh 2: Menggabungkan Baris} \\
-Contoh penggunaan tabel dengan sel yang melebar ke lebih dari satu baris dapat dilihat pada \lst~\ref{code:mergeRowTable}.
-Pada contoh ini, sel pada kolom 1, baris 2 dan 3 digabungkan menjadi satu dengan menggunakan perintah \code{\bslash{}multirow\{2\}\{*\}\{Kedua\}}.
-
-\lstinputlisting[language={[latex]tex}, caption=Contoh penggunaan tabel dengan sel yang melebar ke lebih dari satu baris, label=code:mergeRowTable]{assets/codes/tutorial/2-mergeRowTable.tex}
-
-Hasil dari \lst~\ref{code:mergeRowTable} akan menjadi \tab~\ref{tab:columnSpanning}.
-
-\input{assets/codes/tutorial/2-mergeRowTable}
-
-\bo{Contoh 3: Menggabungkan Baris dan Kolom} \\
-Contoh penggunaan tabel dengan sel yang melebar ke lebih dari satu kolom dan baris dapat dilihat pada \lst~\ref{code:mergeBothTable}.
-
-\lstinputlisting[language={[latex]tex}, caption=Contoh penggunaan tabel dengan sel yang melebar ke lebih dari satu kolom dan baris, label=code:mergeBothTable]{assets/codes/tutorial/2-mergeBothTable.tex}
-
-Hasil dari \lst~\ref{code:mergeBothTable} akan menjadi \tab~\ref{tab:mixSpanning}.
-
-\input{assets/codes/tutorial/2-mergeBothTable}
-
+Despite its utility, the standard Descheduler framework presents significant limitations when combating complex resource fragmentation. The built-in strategies predominantly rely on simple, single-dimensional thresholds (e.g., evicting if CPU usage is below 20\%). These strategies lack the sophistication required to perform multi-dimensional TOPSIS-based bin-packing evaluations. Consequently, while the standard Descheduler can enforce basic topology rules, it struggles to execute the highly targeted, multi-criteria consolidation required to eliminate advanced forms of multi-dimensional stranded capacity.
 
 
 %-----------------------------------------------------------------------------%
-\section{Membuat Persamaan Matematis}
-\label{sec:mathEqu}
+\section{Group Eviction for Microservices}
+\label{sec:group_eviction}
 %-----------------------------------------------------------------------------%
-% v2.2.1: tutorial dipindah dari Bab 3 ke Bab 2
-Di \gls{latex}, kita dapat membuat persamaan matematis baik yang terdiri dari satu persamaan maupun lebih dari satu persamaan.
-Anda bisa mencoba mengikuti dan memahami contoh kode yang ada di \f{template} ini untuk kebutuhan tugas akhir Anda.
-Menggunakan \gls{latex}~juga perlu latihan dan lihai memahami dokumentasi.
+Beyond resource utilization metrics, proactive descheduling must also account for the architectural realities of distributed applications. The shift towards microservices has decoupled monolithic software into networks of highly interdependent components. In high-performance computing or low-latency environments, the physical proximity of these dependent services is critical for minimizing network overhead and maintaining latency contracts.
 
-%-----------------------------------------------------------------------------%
-\subsection{Satu Persamaan}
-\label{sec:oneEqu}
-%-----------------------------------------------------------------------------%
-\input{assets/codes/tutorial/2-singleEquationGaris.tex}
+Current descheduling algorithms evaluate and evict workloads on a strictly per-pod basis. This individualistic approach poses a severe risk to service level agreements (SLAs). When one Pod belonging to an interdependent group is evicted for cluster balancing, its dependent partners remain on the original Node. This creates a "Split-Brain" state, temporarily forcing communication across network boundaries or even Availability Zones until the evicted Pod is successfully restarted and reconciled. 
 
-\equ~\ref{equ:garis} di atas adalah persamaan garis.
-Persamaan tersebut dapat disusun dengan menggunakan perintah \code{\bslash{}align}, seperti yang ditunjukkan pada \lst~\ref{code:singleEquationGaris}.
-Penggunaan perintah \code{\bslash{}noindent} sebelum memanggil \f{environment} \code{align} diperlukan agar persamaan yang dicetak tidak tergeser mengikuti indentasi yang umumnya muncul di awal paragraf.
-Terdapat beberapa perintah yang digunakan untuk menyusun \equ~\ref{equ:garis}, yaitu:
-\begin{itemize}
-	\item Perintah \code{\bslash{}cfrac\{\}\{\}} untuk menulis pecahan dalam bentuk vertikal.
-	Argumen pertama adalah pembilang (di atas), sedangkan argumen kedua adalah penyebut (di bawah).
-	\item Perintah \code{\bslash{}\_\{\}} untuk menulis \f{subscript}.
-\end{itemize}
-
-Di luar \f{environment} \code{align}, kita juga bisa menambahkan persamaan tersebut ke daftar persamaan dengan menggunakan perintah \code{\bslash{}addequtotoc\{label\}\{caption\}}.
-Perintah \code{\bslash{}label} pada persamaan matematis hanya akan memberikan label,
-namun tidak menambahkan ke daftar persamaan.
-Perintah \code{\bslash{}addequtotoc} harus ditambahkan di luar \f{environment} \code{align},
-karena perintah tersebut harus dijalankan di mode \f{typesetting} teks biasa agar tidak terjadi \f{error}.
-
-\lstinputlisting[language={[latex]tex}, caption=Kode pembuatan \equ~\ref{equ:garis}, label=code:singleEquationGaris]{assets/codes/tutorial/2-singleEquationGaris.tex}
-
-Persamaan bola berikut, yang ditunjukkan oleh \ref{equ:bola}, merupakan contoh lain menyusun sebuah persamaan di \gls{latex}.
-
-\input{assets/codes/tutorial/2-singleEquationBola.tex}
-
-Terdapat beberapa perintah yang digunakan untuk menyusun \equ~\ref{equ:bola}, yaitu:
-\begin{itemize}
-	\item Perintah \code{\bslash{}sqrt\{\}} untuk menulis akar.
-	\item Perintah \code{\bslash{}underbrace\{\}} untuk menulis \f{brace} di bawah suatu ekspresi.
-		Biasanya digunakan untuk memberikan anotasi terhadap suatu ekspresi.
-	\item Perintah \code{\bslash{}overline\{\}} untuk menulis garis di atas suatu ekspresi.
-	\item Perintah \code{\bslash{}text\{\}} untuk menulis teks biasa di dalam persamaan.
-	\item Di dalam teks biasa, kita bisa menuliskan kembali sebuah persamaan matematis dengan menambahkan tanda \code{\$} di awal dan di akhir persamaan tersebut.
-		Di \gls{latex}, terdapat dua mode \f{typesetting}, yaitu mode teks dan mode matematika.
-		Fungsi \code{\$} adalah untuk mengubah mode teks menjadi mode matematika.
-	\item Perintah \code{\bslash{}vert} untuk menulis tanda garis vertikal.
-\end{itemize}
-
-\lstinputlisting[language={[latex]tex}, caption=Kode pembuatan \equ~\ref{equ:bola}, label=code:singleEquationBola]{assets/codes/tutorial/2-singleEquationBola.tex}
-
-Suatu persamaan yang dibuat menggunakan \f{environment} \code{align} akan secara otomatis memiliki indeks (nomor) dari persamaan.
-Perintah \code{align} ini juga dapat digunakan untuk menulis lebih dari satu persamaan.
+To preserve the integrity of microservice latency contracts during proactive cluster consolidation, eviction logic must support application dependencies. This requires an "All-or-Nothing" (Atomic) group eviction mechanism. In an atomic eviction model, the system validates the evictability of an entire logical group of Pods, respecting multi-pod disruption constraints like Pod Disruption Budgets (PDB). This ensures that if one underlying component must be migrated for resource optimization, its dependent partners are migrated alongside it in a transactional manner. 
 
 
 %-----------------------------------------------------------------------------%
-\subsection{Lebih dari Satu Persamaan}
-\label{sec:multiEqu}
+\section{Current Approaches and the Research Gap}
+\label{sec:research_gap}
 %-----------------------------------------------------------------------------%
-\equ~\ref{equ:matriks} adalah contoh persamaan matriks yang dibuat menggunakan \gls{latex}.
+The literature reveals a prominent gap in current Kubernetes resource optimization capabilities. While the platform offers the Descheduler framework as a mechanism for post-placement workload migration, its default policies rely on rudimentary heuristics that process only 1 or 2 resource dimensions. This approach is insufficient for resolving the complex multi-dimensional resource fragmentation—the Tetris problem—that prevents optimal hardware consolidation. 
 
-\input{assets/codes/tutorial/2-multiEquationAsOne.tex}
-
-Pada \equ~\ref{equ:matriks} dapat dilihat beberapa baris persamaan menjadi satu bagian dari persamaan tersebut.
-Kode untuk menyusun kumpulan persamaan di \equ~\ref{equ:matriks} dapat dilihat pada \lst~\ref{code:multiEquationAsOne}.
-Eksekusi perintah \code{\bslash{}addequtotoc\{label\}\{caption\}} juga cukup dilakukan sekali saja.
-
-\lstinputlisting[language={[latex]tex}, caption=Kode pembuatan \equ~\ref{equ:matriks}, label=code:multiEquationAsOne]{assets/codes/tutorial/2-multiEquationAsOne.tex}
-
-Terdapat beberapa perintah yang digunakan untuk menyusun \equ~\ref{equ:matriks}, yaitu:
-\begin{itemize}
-	\item Perintah \code{\bslash{}begin\{array\}} dan \code{\bslash{}end\{array\}} untuk membuat matriks.
-	Cara kerja \f{environment} \code{array} sama dengan \f{environment} \code{tabular} yang digunakan untuk membuat tabel.
-	\item Perintah \code{\bslash{}sin} untuk menulis fungsi sinus.
-	\item Perintah \code{\bslash{}theta} untuk menulis simbol theta ($\theta$).
-	\item Perintah \code{\bslash{}hat\{\}} untuk menulis tanda aksen \f{hat} (\^{}) di atas suatu huruf.
-\end{itemize}
-
-Sedangkan dibawah ini dapat dilihat bahwa dengan cara yang sama, \equ~
-\ref{equ:integral}, \ref{equ:limit}, dan \ref{equ:eksponen} memiliki nomor
-persamaannya masing-masing.
-
-\input{assets/codes/tutorial/2-multiEquationAsSeparate.tex}
-
-Kode yang menyusun \equ~\ref{equ:integral}, \ref{equ:limit}, dan \ref{equ:eksponen} dapat dilihat pada \lst~\ref{code:multiEquationAsSeparate}.
-Perbedaan penyusunan tiga argumen tersebut dibandingkan dengan \equ~\ref{equ:matriks} adalah penggunaan \f{label} pada setiap persamaan.
-Pada \equ~\ref{equ:matriks}, \f{label} diletakkan pada bagian awal persamaan pertama, sehingga hanya satu \f{label} yang digunakan.
-Pada \equ~\ref{equ:integral}, \ref{equ:limit}, dan \ref{equ:eksponen}, \f{label} diletakkan pada awal setiap persamaan, sehingga setiap persamaan memiliki \f{label} masing-masing.
-Selain itu, jika ingin memasukkan setiap persamaan secara terpisah ke Daftar Persamaan,
-eksekusi perintah \code{\bslash{}addequtotoc\{label\}\{caption\}} juga harus dilakukan terpisah untuk setiap persamaan.
-
-\lstinputlisting[language={[latex]tex}, caption={Kode pembuatan \equ~\ref{equ:integral}, \ref{equ:limit}, dan \ref{equ:eksponen}}, label=code:multiEquationAsSeparate]{assets/codes/tutorial/2-multiEquationAsSeparate.tex}
-
-Terdapat beberapa perintah yang digunakan untuk menyusun \equ~\ref{equ:integral}, \ref{equ:limit}, dan \ref{equ:eksponen}, yaitu:
-\begin{itemize}
-	\item Perintah \code{\bslash{}int} untuk menulis simbol integral.
-	Untuk batas bawah dan batas atas integral, bisa dituliskan dengan menggunakan perintah \f{subscript} dan \f{superscript}.
-	\item Perintah \code{\bslash{}lim} untuk menulis simbol limit.
-	\item Perintah \code{\bslash{}to} untuk menulis panah ke kanan.
-	\item Perintah \code{\bslash{}infty} untuk menulis simbol tak hingga.
-	\item Perintah \code{\bslash{}log} untuk menulis fungsi logaritma.
-	Pangkat basis logaritma dituliskan dengan menggunakan perintah \f{superscript} sebelum perintah \code{\bslash{}log}.
-\end{itemize}
-
-
-%-----------------------------------------------------------------------------%
-\section{Menambahkan Kode Program}
-\label{sec:codeListing}
-% Hal baru di template 2017
-%-----------------------------------------------------------------------------%
-% v2.2.1: tutorial dipindah dari Bab 3 ke Bab 2
-Pada \gls{latex}, kode program seringkali disebut \f{listing}.
-\f{Syntax highlighting} kini sudah bisa dilakukan secara otomatis oleh \f{library} yang ada di \gls{latex}.
-Sudah tidak perlu lagi membuat skrip manual untuk menambahkan \f{syntax highlighting} sendiri.
-\lst~\ref{code:java} adalah contoh kode program (\f{listing}) Java yang dicetak oleh \gls{latex}.
-
-\lstinputlisting[language=Java, caption=Kode sampel Java yang cukup panjang, label=code:java]{assets/codes/2-sample.java}
-
-Sintaks untuk memasukkan kode program ke dalam dokumen \gls{latex}~adalah sebagai berikut:
-
-\begin{lstlisting}[language={[latex]tex}, caption=Meng]
-\lstinputlisting[language=Java, caption=Kode sampel Java yang cukup panjang, label=code:java]{assets/codes/2-sample.java}
-\end{lstlisting}
-
-Terdapat tiga argumen yang digunakan pada perintah \code{\bslash{}lstinputlisting}:
-\begin{itemize}
-	\item \code{language} digunakan untuk menentukan bahasa pemrograman yang digunakan.
-	Untuk menggunakan suatu dialek bahasa pemrograman yang berbeda dari \f{default},
-	misalkan versi Python3 dari Python,
-	gunakan perintah \code{language=\{[3]Python\}}.
-	\item \code{caption} digunakan untuk memberikan \f{caption} pada kode program.
-	Argumen ini sifatnya opsional, jika ada, maka \f{caption} akan ditampilkan di bawah kode program.
-	Jika argumen ini tidak ada, maka \f{caption} tidak akan ditampilkan dan kode tidak bisa masuk ke daftar kode program.
-	\item \code{label} digunakan untuk memberikan label pada kode program untuk rujukan di dalam dokumen (\f{cross-reference}).
-	Argumen ini tidak boleh didefinisikan jika argumen \code{caption} tidak didefinisikan.
-\end{itemize}
-
-Terdapat empat kelompok bahasa pemrograman (dan dialek) yang didukung oleh implementasi \code{listings} pada \f{template} ini, yaitu:
-
-\begin{itemize}
-	\item \bo{Bahasa pemrograman yang didukung secara \f{default} oleh \code{listings}} (menurut \cite{latex:source_code_listings}): \\
-		\code{ABAP}, \code{ACSL}, \code{Ada}, \code{Algol}, \code{Ant}, \code{Awk}, \code{bash}, \code{Basic}, \code{C++}, \code{C}, \code{Caml},
-		\code{Clean}, \code{Cobol}, \code{Comal}, \code{command.com} (Windows Batch), \code{csh}, \code{Delphi}, \code{Eiffel}, \code{Elan},
-		\code{erlang}, \code{Euphoria}, \code{Fortran}, \code{GCL}, \code{Go} (golang), \code{Gnuplot}, \code{Haskell}, \code{HTML}, \code{IDL},
-		\code{inform}, \code{Java}, \code{JVMIS}, \code{ksh}, \code{Lisp}, \code{Logo}, \code{Lua}, \code{make}, \code{Mathematica}, \code{Matlab},
-		\code{Mercury}, \code{MetaPost}, \code{Miranda}, \code{Mizar}, \code{ML}, \code{Modelica}, \code{Modula-2}, \code{MuPAD}, \code{NASTRAN},
-		\code{Oberon-2}, \code{OCL}, \code{Octave}, \code{Oz}, \code{Pascal}, \code{Perl}, \code{PHP}, \code{PL/I}, \code{Plasm}, \code{POV},
-		\code{Prolog}, \code{Promela}, \code{PSTricks}, \code{Python}, \code{R}, \code{Reduce}, \code{Rexx}, \code{RSL}, \code{Ruby}, \code{S},
-		\code{SAS}, \code{Scilab}, \code{sh}, \code{SHELXL}, \code{Simula}, \code{SQL}, \code{tcl}, \code{TeX}, \code{VBScript}, \code{Verilog},
-		\code{VHDL}, \code{VRML}, \code{XML}, dan \code{XSLT}.
-	\item \bo{Dialek yang didukung secara \f{default} oleh \code{listings}} (menurut \cite{latex:source_code_listings}, diambil beberapa contoh):
-		\begin{itemize}
-			\item Dialek Assembly: \code{[Motorola68k]\{Assembler\}}, \code{[x86masm]\{Assembler\}},
-			\item Dialek Awk: \code{[gnu]\{Awk\}} (GNU Awk), \code{[POSIX]\{Awk\}},
-			\item Dialek C: \code{[ANSI]\{C\}} (default), \code{[Handel]\{C\}}, \code{[Objective]\{C\}} (Objective-C), \code{[Sharp]\{C\}} (C\#),
-			\item Dialek Caml: \code{[Objective]\{Caml\}} (OCaml), \code{[light]\{Caml\}} (default),
-			\item Dialek C++: \code{[11]\{C++\}}, \code{[ANSI]\{C++\}}, \code{[GNU]\{C++\}}, \code{[Visual]\{C++\}} (Visual C++),
-				\code{[ISO]\{C++\}} (default),
-			\item Dialek Java: \code{[]\{Java\}} (default), \code{[AspectJ]\{Java\}},
-			\item Dialek Pascal: \code{[Borland6]\{Pascal\}}, \code{[XSC]\{Pascal\}}, \code{[Standard]\{Pascal\}} (default),
-			\item Dialek Python: \code{[2]\{Python\}} (default, Python 2), \code{[3]\{Python\}} (Python 3),
-			\item Dialek TeX: \code{[LaTeX]\{TeX\}} (LaTeX), \code{[AlLaTeX]\{TeX\}}, \code{[plain]\{TeX\}} (plain TeX, default),
-			\item Dialek tcl: \code{[]\{Tcl\}} (default Tcl), \code{[tk]\{Tcl\}} (Tcl/Tk).
-		\end{itemize}
-	\item \bo{Bahasa pemrograman yang ditambahkan pada \f{template} ini}: \\
-		\code{ABS}, \code{Acceleo}, \code{Batch}, \code{Clojure}, \code{CSS}, \code{D}, \code{Dart}, \code{Docker}, \code{F\#} (FSharp),
-		\code{GDScript} (Godot), \code{GLSL}, \code{Groovy}, \code{HLSL}, \code{JavaScript}, \code{Julia}, \code{Kotlin}, \code{Markdown},
-		\code{PowerShell}, \code{Rust}, \code{Scala}, \code{Scheme}, \code{Solidity}, \code{Swift}, \code{TOML}, \code{TypeScript}, dan \code{YAML}.
-	\item \bo{Dialek yang ditambahkan pada \f{template} ini}:
-		\begin{itemize}
-			\item Dialek HTML: \code{[v5]\{HTML\}} (HTML5),
-			\item Dialek Java: \code{[v9]\{Java\}} (Java 9 Modules), \code{[ContextJ]\{Java\}}, \code{[DeltaJ]\{Java\}}, dan \code{[FOP]\{Java\}}.
-		\end{itemize}
-\end{itemize}
-
-Berikut adalah contoh penggunaan dialek bahasa pemrograman dalam menuliskan kode program.
-Dalam kasus ini, \lst~\ref{code:python2} merupakan kode Python versi 2.
-Sedangkan, \lst~\ref{code:python3} merupakan kode Python versi 3.
-Perbedaan antara kedua versi tersebut cukup signifikan, salah satunya adalah pada perintah \code{print}.
-Pada Python 2, perintah \code{print} tidak memerlukan tanda kurung karena merupakan sebuah \f{keyword},
-sedangkan pada Python 3, perintah \code{print} memerlukan tanda kurung karena merupakan sebuah \f{function}.
-
-\lstinputlisting[language=Python, caption=Kode Python 2, label=code:python2]{assets/codes/2-sample-python2.py}
-
-\lstinputlisting[language={[3]Python}, caption=Kode Python 3, label=code:python3]{assets/codes/2-sample-python3.py}
-
-Kode yang mencetak \lst~\ref{code:python2} dan \lst~\ref{code:python3} adalah sebagai berikut:
-
-\begin{lstlisting}[language={[latex]tex}]
-\lstinputlisting[language=Python, caption=Kode Python 2, label=code:python2]{assets/codes/2-sample-python2.py}
-\lstinputlisting[language={[3]Python}, caption=Kode Python 3, label=code:python3]{assets/codes/2-sample-python3.py}
-\end{lstlisting}
-
-Secara \f{default}, dialek yang digunakan untuk Python pada \f{library} \code{listings} adalah Python 2.
-Sehingga untuk mencetak kode Python 3, perlu digunakan dialek Python 3 (\code{\{[3]Python\}}).
-
-Kode program yang dicetak oleh \gls{latex} bersifat \f{auto-wrapped}.
-Jika suatu baris kode program melebihi batas lebar halaman,
-maka kode program tersebut akan dipindahkan ke baris berikutnya.
-\f{Auto-wrapped} ini berguna agar Anda tidak perlu memberikan \f{line break} manual pada kode Anda,
-Anda bisa menyampaikan kode program Anda apa adanya.
-
-\bo{Catatan}: Jangan lupa untuk menjelaskan kode melalui paragraf,
-terutama pada bagian-bagian yang perlu penjelasan lebih.
-Setiap kode perlu dijelaskan, kalau bisa rujuk ke setiap baris, karena belum tentu pembaca mau membaca kode Anda.
-Tetapi, pembaca tetap perlu mengetahui ide di balik kode yang Anda buat, dan mengapa kode tersebut dibuat.
-
-
-
-%-----------------------------------------------------------------------------%
-\section{Keterkaitan Teori Dengan Penelitian}
-\label{sec:keterkaitan}
-%-----------------------------------------------------------------------------%
-\todo{
-	Ada baiknya setelah menjelaskan teori-teori, Anda menjelaskan apa kaitan teori tersebut dengan penelitian Anda.
-	Hal ini tentunya membantu pembaca dalam memahami bahwa teori yang Anda paparkan memang penting untuk memahami penelitian Anda nantinya.
-}
-
-\begin{figure}
-	\centering
-	\includegraphics[width=\textwidth]{assets/pics/research_concept_map.png}
-	\caption{Keterkaitan konsep hasil studi literatur terhadap penelitian}
-	\label{fig:research_concept_map}
-\end{figure}
-
-\todo{
-	Jelaskan \pic~\ref{fig:research_concept_map} di sini.
-	Setiap gambar pada tugas akhir butuh penjelasan.
-	Gambar hadir untuk mempermudah membaca memahami konteks, tetapi tidak bisa berdiri sendiri tanpa penjelasan.
-}
+Furthermore, existing scheduling enhancements that introduce intelligent multi-dimensional evaluation (such as TOPSIS for bin-packing) are often disjointed from the descheduler lifecycle, missing the opportunity to use MCDA for targeted, proactive defragmentation. Finally, current automated eviction processes operate strictly at the individual pod level, posing severe "Split-Brain" latency risks for dependent microservices that lack atomic group migration capabilities. Addressing these limitations simultaneously is essential to form a cohesive, policy-based descheduler capable of advancing cluster FinOps efficiency without compromising application stability.

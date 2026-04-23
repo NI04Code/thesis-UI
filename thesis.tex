@@ -51,7 +51,7 @@
 %
 \strcompare{Kampus Merdeka}{\type}{} {
 	\addtocontents{toc}{\protect\addvspace{-1em}}
-	\addChapter{Halaman Judul}
+	\addChapter{Title Page}
 	\include{_internals/judul_dalam}
 	\ifodd\thechapterpagecount\forceclearchapter\thispagestyle{onlypage}\fi
 }
@@ -63,7 +63,7 @@
 \strcompare{Laporan Kerja Praktik}{\type}{} {
 \strcompare{Kampus Merdeka}{\type}{} {
 	\addtocontents{toc}{\protect\addvspace{-1em}}
-    \addChapter{Halaman Orisinalitas}
+    \addChapter{Declaration of Originality}
 	\include{src/00-frontMatter/pernyataanOrisinalitas}
 	\ifodd\thechapterpagecount\forceclearchapter\thispagestyle{onlypage}\fi
 }}
@@ -86,18 +86,18 @@
 \strcompare{Laporan Kerja Praktik}{\type}
 {
 	% Lembar Pengesahan Kerja Praktik dari LaTeX
-	\addChapter{Lembar Persetujuan Dosen Kerja Praktik}
+	\addChapter{Internship Advisor Approval Page}
 	\include{src/00-frontMatter/pengesahanKP}
 	\ifodd\thechapterpagecount\forceclearchapter\thispagestyle{onlypage}\fi
 }{
 \strcompare{Kampus Merdeka}{\type}
 {
-	\addChapter{Lembar Pengesahan}
+	\addChapter{Approval Page}
 	\include{src/00-frontMatter/pengesahanMBKM}
 	\ifodd\thechapterpagecount\forceclearchapter\thispagestyle{onlypage}\fi
 }
 {
-	\addChapter{Lembar Pengesahan}
+	\addChapter{Approval Page}
 	% Gunakan salah satu (comment atau hapus kode yang tidak perlu):
 	% Lembar Pengesahan Tugas Akhir dari LaTeX
 	\strcompare{Doktor}{\jenjang}
@@ -121,7 +121,7 @@
 	%
 	% Lembar Persetujuan Publikasi Ilmiah
 	%
-	\addChapter{Lembar Persetujuan Karya Ilmiah}
+	\addChapter{Publication Approval Page}
 	\include{src/00-frontMatter/persetujuanPublikasi}
 	\ifodd\thechapterpagecount\forceclearchapter\thispagestyle{onlypage}\fi
 }}
@@ -136,7 +136,7 @@
 %
 % Abstrak
 %
-\addChapter{Abstrak}
+\addChapter{Abstract}
 \include{src/00-frontMatter/abstrak}
 
 \include{src/00-frontMatter/abstract}
