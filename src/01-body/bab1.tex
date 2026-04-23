@@ -9,65 +9,59 @@ This chapter explains the background and the problems addressed in this research
 \section{Research Background}
 \label{sec:researchBackground}
 %-----------------------------------------------------------------------------%
-Kubernetes has become the standard for orchestrating containerized workloads, yet it faces a persistent challenge known as the "Tetris problem" or Relative Resource Fragmentation (RRF). In dynamic clusters, pods arrive and terminate stochastically, leaving behind awkward, non-contiguous gaps in node capacity that are too small to host new, larger requests~\citep{arxiv_1506_07020}.
+Kubernetes has become the standard platform for orchestrating containerized workloads, yet dynamic clusters still face a persistent packing problem known as resource fragmentation. As pods are created, rescheduled, and terminated over time, node capacity becomes scattered into small, non-contiguous gaps that are insufficient for incoming workloads with larger requests~\citep{arxiv_1506_07020}.
 
-While the default scheduler handles the initial placement, it is inherently reactive and often unable to fix the long-term entropy of the cluster. This "resource scatter" prevents the Cluster Autoscaler from reclaiming nodes, leading to "capacity islands" where resources are technically available but functionally unusable. Solving this requires an active, cluster-wide consolidation strategy that identifies underutilized nodes and systematically migrates workloads to enable hardware reclamation, thereby maximizing cluster density and reducing unnecessary infrastructure costs~\citep{wiz_k8s_cost}.
+Although the default scheduler is effective for initial placement, it is primarily reactive and does not explicitly repair long-term cluster-wide fragmentation. This resource scatter creates stranded capacity: resources remain available in aggregate, but are distributed poorly enough that they cannot be used efficiently. As a result, the Cluster Autoscaler may fail to reclaim underutilized nodes, and the system may scale out even when the existing cluster still has enough total capacity~\citep{wiz_k8s_cost,arxiv_2506_04902}.
 
-Additionally, the shift toward microservices has decoupled application components to improve scalability, introducing network overhead. In high-performance computing (HPC) or low-latency systems, the physical placement of services that often communicate is critical. Current descheduling strategies operate on a per-pod basis and lack "atomicity," meaning they cannot guarantee that a group of dependent services will be moved together to maintain their latency contract. This creates a "Fragmentation Gap," leaving behind orphaned pods.
+At the same time, modern cloud-native applications are increasingly composed of communicating microservices. This means that consolidation decisions should not only improve packing, but also avoid worsening communication cost between dependent workloads. In practice, pod eviction decisions that ignore dependency locality can increase cross-node or cross-zone traffic and introduce avoidable latency overhead. Therefore, fragmentation-aware consolidation should be complemented by network-cost-aware eviction considerations so that cluster packing improves without unnecessarily harming communication locality.
 
 
 %-----------------------------------------------------------------------------%
 \section{Problem Statement}
 \label{sec:problemStatement}
 %-----------------------------------------------------------------------------%
-The core issue in modern Kubernetes resource management is the lack of a proactive consolidation pipeline within the default orchestration layer, compounded by individualistic descheduling mechanisms. Specifically:
+The core issue in modern Kubernetes resource management is the absence of a proactive consolidation pipeline that can reduce fragmentation after the initial scheduling phase, while still respecting workload communication patterns. Specifically:
 \begin{enumerate}
-    \item Static Resource Scatter: The kube-scheduler lacks the "forward-looking" capability to identify that resources are too scattered to be useful.
-    \item Ineffective Balancing Heuristics: Standard balancing tools often treat all resources equally, failing to identify specific "offender" pods that cause resource stranding (where one resource is exhausted while another remains idle).
-    \item Reactive Scale-Out (Autoscaling Inefficiency): Because fragmentation scatters available resources into unusable chunks, new pods often cannot fit on existing nodes. This forces the Cluster Autoscaler to provision redundant new Virtual Machines (VMs) as new nodes in the cluster (a "scale-out" event). These redundant scale-out events not only incur unnecessary infrastructure costs~\citep{wiz_k8s_cost} but also increase the overall carbon footprint and energy consumption of the environment, even when the aggregate cluster capacity is mathematically sufficient~\citep{arxiv_2506_04902}.
-    \item Latency Spikes during Eviction: When a pod is evicted for balancing, its dependent partner remains, leading to temporary but significant latency spikes or "Split-Brain" performance degradation.
+    \item \textbf{Static Resource Scatter:} The kube-scheduler does not explicitly detect when available CPU and memory have become too scattered across nodes to be practically useful.
+    \item \textbf{Ineffective Balancing Heuristics:} Existing balancing approaches may treat resources too generically, making it difficult to identify pods that contribute most to stranded capacity or node-level imbalance.
+    \item \textbf{Reactive Scale-Out:} Because fragmented resources cannot accommodate new pods efficiently, the cluster may trigger costly scale-out even when aggregate capacity is still sufficient~\citep{arxiv_2506_04902}.
+    \item \textbf{Communication-Locality Risk:} Eviction decisions that focus only on packing can separate dependent services and increase communication overhead, especially in multi-node or multi-zone deployments.
 \end{enumerate}
 
 %-----------------------------------------------------------------------------%
 \subsection{Research Question}
 \label{sec:researchQuestion}
 %-----------------------------------------------------------------------------%
-Based on the problem statement described previously, the research questions addressed in this study are as follows:
 \begin{itemize}
-    \item Atomic Eviction Implementation: How can we implement an All-or-Nothing (Atomic) eviction mechanism within the Kubernetes Descheduler framework to ensure transactional integrity?
-    \item Latency Impact: To what extent does ``Group Descheduling'' reduce the duration of high-latency states compared to standard individual pod eviction?
-    \item Failure Handling: How does the system handle eviction failures (e.g., PDB violations) to ensure no partial group moves occur, thereby maintaining application stability?
-    \item How can a multi-stage descheduling pipeline be designed to transition a cluster from a scattered state to a consolidated, "bin-packed" state?
-    \item What strategy can effectively identify source nodes for eviction and target nodes for consolidation to ensure the Cluster Autoscaler can successfully reclaim hardware?
-    \item How can Multi-Criteria Decision Analysis (MCDA) be utilized to rank pod eviction candidates, ensuring that the pods most responsible for node-level inefficiency are prioritized for migration?
+    \item How can a multi-stage descheduling pipeline be designed to transition a Kubernetes cluster from a fragmented state to a more consolidated and better packed state?
+    \item What strategy can effectively identify source nodes for eviction and target nodes for consolidation so that underutilized nodes can be emptied and reclaimed by the Cluster Autoscaler?
+    \item How can Multi-Criteria Decision Analysis (MCDA), such as TOPSIS-based ranking, be used to prioritize eviction candidates that contribute most to node-level inefficiency or resource imbalance?
+    \item How can network-cost-aware or dependency-aware eviction considerations be incorporated so that fragmentation reduction does not unnecessarily worsen communication locality between related services?
 \end{itemize}
 
 %-----------------------------------------------------------------------------%
 \subsection{Research Limitation}
 \label{sec:researchLimitation}
 %-----------------------------------------------------------------------------%
-To maintain focus and define the scope of the study, the research limitations are established as follows:
 \begin{itemize}
-    \item Infrastructure: Limited to a small-scale cluster (3--5 nodes) on AWS EC2 us-east-2.
-    \item Network: While testing across Availability Zones (AZs), we assume standard AWS networking without specialized hardware like SR-IOV.
-    \item Provisioning: Using kubeadm to simulate production, but without enterprise-grade storage or complex service meshes (e.g., Istio) unless specifically required for latency measurement.
-    \item Framework Dependencies: The solution is built as a plugin for the Kubernetes Descheduler Framework; it identifies what to move, but relies on the kube-scheduler to decide the new optimal location.
-    \item Destructive Migration: Unlike live-migration prototypes (e.g., KubeDSM), this implementation uses standard Kubernetes evictions, which involve pod termination and restart.
-    \item Scheduling Latency: Rapid, aggressive defragmentation may introduce temporary scheduling overhead or minor application downtime during the restart phase.
+    \item \textbf{Infrastructure:} Evaluation is limited to a small-scale Kubernetes cluster (3--5 nodes) on AWS EC2 in the us-east-2 region.
+    \item \textbf{Network:} Experiments assume standard AWS networking without specialized hardware acceleration such as SR-IOV.
+    \item \textbf{Provisioning:} The cluster is provisioned using kubeadm to approximate production behavior, but excludes enterprise-grade storage features and complex service meshes unless specifically needed for the evaluation scenario.
+    \item \textbf{Framework Dependencies:} The solution is implemented within the Kubernetes Descheduler framework; it determines which pods should be evicted, while final placement remains the responsibility of the kube-scheduler.
+    \item \textbf{Destructive Migration:} The study uses standard Kubernetes eviction and restart behavior rather than live migration.
+    \item \textbf{Scope of Network Awareness:} Dependency or communication locality is treated as a complementary consideration for eviction filtering, not as a complete traffic-engineering solution.
 \end{itemize}
 
 %-----------------------------------------------------------------------------%
 \section{Research Objectives}
 \label{sec:researchObjectives}
 %-----------------------------------------------------------------------------%
-In alignment with the formulated research questions, the objectives of this study are as follows:
 \begin{itemize}
-    \item Design a "Group Eviction" yaml metadata schema (labels/annotations) to define pod dependencies.
-    \item Develop a custom Descheduler strategy that validates the "evictability" of an entire pods in a group and do ``All or Nothing'' eviction.
-    \item Evaluate the performance impact using a benchmark tool to compare group vs. individual eviction.
-    \item Develop the BinPackingFragmentation Consolidation Strategy: Implement a pipeline that computes cluster-wide scatter, filters underutilized "source" nodes, and cordons them to force the scheduler to pack evicted pods onto denser "target" nodes.
-    \item Create an "Imbalance Correction" Plugin: Develop the ResourceFragmentation plugin to detect nodes with stranded resources and identify pods that disrupt the proportional consumption of CPU and Memory.
-    \item Implement a Strategic Eviction Engine: Use the TOPSIS algorithm~\citep{arxiv_2506_04902} not as a mere scoring tool, but as a strategic engine to rank pods by their "benefit" to the node---evicting those that, once moved, provide the fastest path to emptying a node or restoring balance.
+    \item \textbf{Develop a fragmentation-aware consolidation strategy:} Design a multi-stage descheduling pipeline that identifies cluster-wide resource scatter, selects underutilized source nodes, and supports workload consolidation onto denser target nodes.
+    \item \textbf{Create an imbalance-detection mechanism:} Develop a plugin or policy component that detects stranded resources and identifies pods that contribute to node-level CPU-memory imbalance.
+    \item \textbf{Implement a strategic eviction engine:} Use MCDA, particularly TOPSIS-based ranking, to prioritize eviction candidates that provide the greatest benefit for restoring balance or emptying nodes.
+    \item \textbf{Incorporate communication-locality awareness:} Add dependency-aware or network-cost-aware considerations so consolidation actions can avoid unnecessary degradation in inter-service communication patterns.
+    \item \textbf{Evaluate consolidation outcomes:} Measure the effect of the proposed approach on packing efficiency, node reclaimability, and selected communication-related indicators under the experiment setup.
 \end{itemize}
 
 
@@ -76,12 +70,11 @@ In alignment with the formulated research questions, the objectives of this stud
 \label{sec:researchContributions}
 %-----------------------------------------------------------------------------%
 \begin{itemize}
-    \item Algorithm Design: A transactional "All-or-Nothing" logic for pod evictions.
-    \item Open Source Descheduler Enhancement: Provide a new policy to evict group of pods instead of individual pods, enhancing kubernetes-sigs/descheduler configuration.
-    \item Proactive Consolidation Pipeline: Introduction of a Cordon-and-Evict logic within the descheduler that prevents "ping-pong" scheduling and ensures workloads are forced into a bin-packed configuration.
-    \item Enhanced Node Utility for Autoscaling: A method to systematically empty underutilized nodes, providing the specific conditions required for the Cluster Autoscaler to terminate instances and reduce cloud spend.
-    \item Smarter Offender Identification: Moving beyond random eviction by using TOPSIS-based ranking to identify pods that are the "best" candidates for removal based on their resource footprint relative to node capacity.
-    \item Resource Optimization Framework: A practical software implementation that directly targets the reduction of "stranded capacity." By maximizing resource utilization, this approach translates to immediate infrastructure cost reductions~\citep{wiz_k8s_cost} and operational energy savings~\citep{arxiv_2506_04902} in large-scale Kubernetes environments.
+    \item \textbf{Proactive Consolidation Pipeline:} A descheduler-based pipeline for reducing fragmentation and improving workload packing after the initial scheduling phase.
+    \item \textbf{Enhanced Node Utility for Autoscaling:} A method to systematically empty underutilized nodes so that Cluster Autoscaler node reclamation becomes more feasible.
+    \item \textbf{Smarter Offender Identification:} A TOPSIS-based ranking approach to identify eviction candidates that contribute most to stranded capacity or node imbalance.
+    \item \textbf{Communication-Aware Eviction Consideration:} An extension that incorporates dependency locality or network-cost-aware filtering to reduce the risk of worsening inter-service communication.
+    \item \textbf{Operational FinOps Relevance:} A practical implementation that targets stranded capacity reduction and more efficient infrastructure utilization in Kubernetes clusters.
 \end{itemize}
 
 
