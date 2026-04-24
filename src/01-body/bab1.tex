@@ -23,14 +23,7 @@ Our research, implemented as a custom configuration within the official Kubernet
 \section{Problem Statement}
 \label{sec:problemStatement}
 %-----------------------------------------------------------------------------%
-The core issue in modern Kubernetes resource management is the lack of a proactive consolidation pipeline within the default orchestration layer, compounded by individualistic descheduling mechanisms. Specifically:
-\begin{enumerate}
-    \item Static Resource Scatter: The kube-scheduler lacks the "forward-looking" capability to identify that resources are too scattered to be useful.
-    \item Ineffective Balancing Heuristics: Standard balancing tools often treat all resources equally, failing to identify specific "offender" pods that cause resource stranding (where one resource is exhausted while another remains idle).
-    \item Reactive Scale-Out (Autoscaling Inefficiency): Because fragmentation scatters available resources into unusable chunks, new pods often cannot fit on existing nodes. This forces the Cluster Autoscaler to provision redundant new Virtual Machines (VMs) as new nodes in the cluster (a "scale-out" event). These redundant scale-out events not only incur unnecessary infrastructure costs~\citep{wiz_k8s_cost} but also increase the overall carbon footprint and energy consumption of the environment, even when the aggregate cluster capacity is mathematically sufficient~\citep{arxiv_2506_04902}.
-    \item Latency Tradeoff: When a pod is evicted for balancing, the cluster become more defragmented, but at the sametime it introduce an increase in latency as pod that oftenly commmunicate now are more scattered across node
-\end{enumerate}
-
+The primary issue in modern Kubernetes clusters is the lack of a consolidation system that can balance both hardware usage and network performance. Current descheduling tools are unable to calculate resource skewness the imbalance between CPU and memory which leads to "resource stranding" where capacity is wasted because it cannot be bundled together. This inefficiency often triggers the cluster to add expensive, redundant nodes even when total capacity is mathematically sufficient. Furthermore, because these tools are network-blind, they often move pods to optimize space while accidentally breaking apart services that need to talk to each other. This creates a difficult trade-off where defragmentation in cluster can reduce network performance.
 
 %-----------------------------------------------------------------------------%
 \subsection{Research Question}
@@ -127,17 +120,17 @@ The research is conducted following these key steps:
 %-----------------------------------------------------------------------------%
 The thesis is organized as follows:
 \begin{itemize}
-	\item Chapter 1 \babSatu \\
-        Provides the background on Kubernetes resource management challenges, the motivation for addressing cluster fragmentation, and the problem statement regarding the conflict between defragmentation and network locality. This chapter also defines the research objectives, scope, and the contributions of the proposed Imbalance Index and Network-Aware plugins.
-	\item Chapter 2 \babDua \\
-        Explores foundational concepts including multi-dimensional bin packing, resource fragmentation, and the Kubernetes scheduling lifecycle. It provides a systematic survey of existing descheduling strategies, such as NodeUtilization, and examines prior research in network-aware orchestration to identify the gaps in current defragmentation methodologies.
-	\item Chapter 3 \babTiga \\
-	    Details the conceptual framework and high-level architecture of the proposed solution. This includes the mathematical formulation of the Imbalance Index Balance Policy and the logic behind the Network-Aware Evictor Evictor Policy. The chapter explains the methodology for integrating these components as non-intrusive extensions to the Kubernetes Descheduler.
-	\item Chapter 4 \babEmpat \\
-		Describes the technical realization of the proposed design using the Go (Golang) programming language. It details the integration with the official Kubernetes Descheduler framework, the use of client-go for cluster interaction, and the implementation details of the custom plugin interfaces, ensuring the system remains coherent with upstream Kubernetes standards.
-	\item Chapter 5 \babLima \\
-	    Presents the experimental setup, using synthetic workloads to induce fragmentation across experimental clusters. This chapter conducts a comparative performance analysis of various node utilization strategies (including LowNodeUtilization, HighNodeUtilization, and the Imbalance Index) with and without network-aware enhancements. It evaluates the results based on packing efficiency, node reclaim opportunities, and the resulting trade-offs in network latency.
-	\item Chapter 6 \kesimpulan \\
-	    Summarizes the key findings regarding the effectiveness of the Imbalance Index in driving cluster defragmentation while preserving network performance. It discusses the limitations of the current prototype and outlines potential directions for future research, such as dynamic weight adjustment and testing on a production-scale cluster.
+	\item \textbf{Chapter 1 Introduction} \\
+        Chapter one provides the background on Kubernetes resource management challenges, the motivation for addressing cluster fragmentation, and the problem statement regarding the conflict between defragmentation and network locality. This chapter also defines the research objectives, scope, and the contributions of the proposed Imbalance Index and Network-Aware plugins.
+	\item \textbf{Chapter 2 Literation Review} \\
+        Chapter two explores foundational concepts including multi-dimensional bin packing, resource fragmentation, and the Kubernetes scheduling lifecycle. It provides a systematic survey of existing descheduling strategies, such as NodeUtilization, and examines prior research in network-aware orchestration to identify the gaps in current defragmentation methodologies.
+	\item \textbf{Chapter 3 Plugins Design and Methodology} \\
+	    Chapter three explain the conceptual framework and high-level architecture of the proposed solution. This includes the mathematical formulation of the Imbalance Index Balance Policy and the logic behind the Network-Aware Evictor Evictor Policy. The chapter explains the methodology for integrating these components as non-intrusive extensions to the Kubernetes Descheduler.
+	\item \textbf{Chapter 4 Plugins Implementation} \\
+		Chapter four describes the technical realization of the proposed design using the Go (Golang) programming language. It details the integration with the official Kubernetes Descheduler framework, the use of client-go for cluster interaction, and the implementation details of the custom plugin interfaces, ensuring the system remains coherent with upstream Kubernetes standards.
+	\item \textbf{Chapter 5 Experiment and Evaluation} \\
+	    Chapter five presents the experimental setup, using synthetic workloads to induce fragmentation across experimental clusters. This chapter conducts a comparative performance analysis of various node utilization strategies (including LowNodeUtilization, HighNodeUtilization, and the Imbalance Index) with and without network-aware enhancements. It evaluates the results based on packing efficiency, node reclaim opportunities, and the resulting trade-offs in network latency.
+	\item \textbf{Chapter 6 Conclusion and Future Work} \\
+	    Chapter six summarizes the key findings regarding the effectiveness of the Imbalance Index in driving cluster defragmentation while preserving network performance. It discusses the limitations of the current prototype and outlines potential directions for future research, such as dynamic weight adjustment and testing on a production-scale cluster.
 \end{itemize}
 
