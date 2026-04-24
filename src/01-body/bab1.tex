@@ -111,17 +111,13 @@ This research try to addresses these gaps by:
 \section{Research Steps}
 \label{sec:researchSteps}
 %-----------------------------------------------------------------------------%
-\todo{
-	Subbab ini umumnya menjelaskan metode penelitian, jika metode yang digunakan cukup sederhana.
-	Jika metode yang digunakan cukup kompleks atau ada kewajiban dari fakultas Anda untuk menjelaskan metode secara rinci, gunakan Bab 3 untuk menjelaskan Metodologi Penelitian.
-}
-Berikut ini adalah langkah penelitian yang telah dilakukan:
+The research is conducted following these key steps:
 \begin{enumerate}
-	\item Tinjauan literatur \\
-	Pada tahap ini, dipelajari teori-teori yang terkait dengan penelitian ini untuk mendapatkan konsep dasar yang dibutuhkan dalam mencapai tujuan penelitian.
-	\item Analisis implementasi dan kesimpulan \\
-	Pada tahap ini, digunakan studi kasus untuk analisis terkait kegunaan \f{template}.
-	Setelah melakukan analisis tersebut, ditarik kesimpulan keseluruhan dari penelitian ini.
+	\item \textbf{Literature Review and Problem Formulation:} The initial phase of this study involved a comprehensive systematic review of the existing literature on resource fragmentation, multidimensional bin-packing algorithms, and the architectural of Kubernetes descheduler. Special emphasis is placed on exploring the current state of network-aware scheduling to identify critical gaps in the manner in which cloud-native orchestrators balance resource density with network-aware overhead. By synthesizing these diverse domains, the research problem is formally defined, and a theoretical framework is established that justifies the development of a more holistic, network-aware descheduling mechanism. This stage ensures that the proposed solution addresses the documented limitations of existing heuristic-based deschedulers.
+	\item \textbf{Design of the Descheduling Policy:} Building upon the theoretical foundations established in the preliminary review, a high-level architectural design for a consolidation pipeline is formulated. This design introduces a novel Imbalance Index, a metric-driven approach intended to quantify the degree of resource distribution variance across the cluster. The policy architecture integrates specialized Balance Plugins and Network-Aware Evictor Plugins into the descheduling logic. A key design constraint is the preservation of the core kube-scheduler integrity; therefore, the strategy is engineered to operate as a modular extension. This ensures that the descheduling logic can autonomously rectify cluster state imbalances without necessitating intrusive modifications to the primary scheduling loop.
+	\item \textbf{Protoype Implementation:} The conceptual design is realized through a prototype implementation built atop the official Kubernetes Descheduler framework. To ensure seamless integration with the upstream ecosystem and to leverage native concurrency primitives, the implementation is developed using the Go (Golang) programming language. This methodological choice ensures that the prototype is fully compatible with the official Kubernetes API and client libraries. By adhering to the framework’s plugin-based architecture, the custom logic for the Imbalance Index and network-aware filtering is implemented in a manner that is both performant and representative of production-grade cloud-native software.
+	\item \textbf{Experimental and Evaluation:} The prototype is subjected to empirical testing using synthetic workloads designed to induce resource fragmentation and sub-optimal pod placement. This phase involves a comparative analysis of various utilization-based strategies, encompassing the standard Nodeutilization methods, alongside the newly developed Imbalance Index. Each of these strategies is evaluated both with and without the integration of network-aware plugins. The evaluation focuses on packing efficiency and node reclaim opportunities as primary measures of defragmentation effectiveness. By cross-referencing these metrics with network latency data, the research assesses the critical trade-offs between maximizing resource density and preserving communication performance.
+	\item \textbf{Results Analysis:} The final stage involves a meticulous analysis of the experimental data to ascertain the effectiveness of the proposed descheduling policies in improving cluster-wide defragmentation. The analysis seeks to validate the correlation between the Imbalance Index and the optimization of resource utilization. Furthermore, the study evaluates the critical trade-offs between resource density and communication locality, assessing how the migration of pods impacts interservice latency. 
 \end{enumerate}
 
 
@@ -129,20 +125,19 @@ Berikut ini adalah langkah penelitian yang telah dilakukan:
 \section{Thesis Outline}
 \label{sec:thesisOutline}
 %-----------------------------------------------------------------------------%
-Sistematika penulisan laporan adalah sebagai berikut:
+The thesis is organized as follows:
 \begin{itemize}
-	\item Bab 1 \babSatu \\
-	    Bab ini mencakup latar belakang, cakupan penelitian, dan pendefinisian masalah.
-	\item Bab 2 \babDua \\
-	    Bab ini mencakup pemaparan terminologi dan teori yang terkait dengan penelitian berdasarkan hasil tinjauan pustaka yang telah digunakan, sekaligus memperlihatkan kaitan teori dengan penelitian.
-	\item Bab 3 \babTiga \\
-	    Apa itu Bab 3?
-	\item Bab 4 \babEmpat \\
-		Apa itu Bab 4?
-	\item Bab 5 \babLima \\
-	    Apa itu Bab 5?
-	\item Bab 6 \kesimpulan \\
-	    Bab ini mencakup kesimpulan akhir penelitian dan saran untuk pengembangan berikutnya.
+	\item Chapter 1 \babSatu \\
+        Provides the background on Kubernetes resource management challenges, the motivation for addressing cluster fragmentation, and the problem statement regarding the conflict between defragmentation and network locality. This chapter also defines the research objectives, scope, and the contributions of the proposed Imbalance Index and Network-Aware plugins.
+	\item Chapter 2 \babDua \\
+        Explores foundational concepts including multi-dimensional bin packing, resource fragmentation, and the Kubernetes scheduling lifecycle. It provides a systematic survey of existing descheduling strategies, such as NodeUtilization, and examines prior research in network-aware orchestration to identify the gaps in current defragmentation methodologies.
+	\item Chapter 3 \babTiga \\
+	    Details the conceptual framework and high-level architecture of the proposed solution. This includes the mathematical formulation of the Imbalance Index Balance Policy and the logic behind the Network-Aware Evictor Evictor Policy. The chapter explains the methodology for integrating these components as non-intrusive extensions to the Kubernetes Descheduler.
+	\item Chapter 4 \babEmpat \\
+		Describes the technical realization of the proposed design using the Go (Golang) programming language. It details the integration with the official Kubernetes Descheduler framework, the use of client-go for cluster interaction, and the implementation details of the custom plugin interfaces, ensuring the system remains coherent with upstream Kubernetes standards.
+	\item Chapter 5 \babLima \\
+	    Presents the experimental setup, using synthetic workloads to induce fragmentation across experimental clusters. This chapter conducts a comparative performance analysis of various node utilization strategies (including LowNodeUtilization, HighNodeUtilization, and the Imbalance Index) with and without network-aware enhancements. It evaluates the results based on packing efficiency, node reclaim opportunities, and the resulting trade-offs in network latency.
+	\item Chapter 6 \kesimpulan \\
+	    Summarizes the key findings regarding the effectiveness of the Imbalance Index in driving cluster defragmentation while preserving network performance. It discusses the limitations of the current prototype and outlines potential directions for future research, such as dynamic weight adjustment and testing on a production-scale cluster.
 \end{itemize}
 
-\todo{Anda bisa mengubah atau menambahkan penjelasan singkat mengenai isi masing-masing bab. Setiap tugas akhir pasti ada yang berbeda pada bagian ini.}
