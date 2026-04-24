@@ -17,7 +17,7 @@ Furthermore, the decoupling of application components into microservices has int
 
 To mitigate these challenges, various descheduling strategies have been proposed; however, many existing models focus more on the scheduler and rely on "atomic" group migrations or gang scheduling to ensure that dependent services move together. However, requiring the atomic binding of large pod groups significantly increases the risk of resource deadlocks and worsens fragmentation, as finding contiguous space for an entire group is exponentially more difficult than for individual pods~\citep{christensen2025priority}. This creates a "Fragmentation Gap" where orphaned pods are left on suboptimal nodes when group-level moves fail or are blocked by insufficient resources.
 
-Our research, implemented as a custom configuration within the official Kubernetes Descheduler repository~\citep{k8sdescheduler}, diverges from these threshold-based and atomic models by introducing an integrated imbalance index plug-in and a non-atomic, score-based network plug-in. Unlike standard strategies, we utilize a mathematical function to derive a Resource Imbalance Index ($RII_i$) based on normalized resource metrics to surgically target "worst-offender" pods contributing to local skewness~\citep{guo2025joint}. Additionally, our network-aware configuration explicitly rejects atomic grouping in favor of a scoring mechanism that evaluates individual pod movements by comparing candidate nodes against the current node latency, ensuring stable network performance and reducing the fragmentation penalties associated with group-level eviction.
+Our research, implemented as a custom configuration within the official Kubernetes Descheduler repository, diverges from these threshold-based and atomic models by introducing an integrated imbalance index plug-in and a non-atomic, score-based network plug-in. Unlike standard strategies, we utilize a mathematical function to derive a Resource Imbalance Index ($RII_i$) based on normalized resource metrics to surgically target "worst-offender" pods contributing to local skewness~\citep{guo2025joint}. Additionally, our network-aware configuration explicitly rejects atomic grouping in favor of a scoring mechanism that evaluates individual pod movements by comparing candidate nodes against the current node latency, ensuring stable network performance and reducing the fragmentation penalties associated with group-level eviction.
 
 %-----------------------------------------------------------------------------%
 \section{Problem Statement}
@@ -28,7 +28,7 @@ The core issue in modern Kubernetes resource management is the lack of a proacti
     \item Static Resource Scatter: The kube-scheduler lacks the "forward-looking" capability to identify that resources are too scattered to be useful.
     \item Ineffective Balancing Heuristics: Standard balancing tools often treat all resources equally, failing to identify specific "offender" pods that cause resource stranding (where one resource is exhausted while another remains idle).
     \item Reactive Scale-Out (Autoscaling Inefficiency): Because fragmentation scatters available resources into unusable chunks, new pods often cannot fit on existing nodes. This forces the Cluster Autoscaler to provision redundant new Virtual Machines (VMs) as new nodes in the cluster (a "scale-out" event). These redundant scale-out events not only incur unnecessary infrastructure costs~\citep{wiz_k8s_cost} but also increase the overall carbon footprint and energy consumption of the environment, even when the aggregate cluster capacity is mathematically sufficient~\citep{arxiv_2506_04902}.
-    \item Latency Tradeoff as: When a pod is evicted for balancing, the cluster become more defragmented, but at the sametime it introduce an increase in latency as pod that oftenly commmunicate now are more scattered across node
+    \item Latency Tradeoff: When a pod is evicted for balancing, the cluster become more defragmented, but at the sametime it introduce an increase in latency as pod that oftenly commmunicate now are more scattered across node
 \end{enumerate}
 
 
@@ -65,12 +65,12 @@ To maintain focus and define the scope of the study, the research limitations ar
 %-----------------------------------------------------------------------------%
 In alignment with the formulated research questions, the objectives of this study are as follows:
 \begin{itemize}
-    \item Design a "Group Eviction" yaml metadata schema (labels/annotations) to define pod dependencies.
-    \item Develop a custom Descheduler strategy that validates the "evictability" of an entire pods in a group and do ``All or Nothing'' eviction.
     \item Evaluate the performance impact using a benchmark tool to compare group vs. individual eviction.
-    \item Develop the BinPackingFragmentation Consolidation Strategy: Implement a pipeline that computes cluster-wide scatter, filters underutilized "source" nodes, and cordons them to force the scheduler to pack evicted pods onto denser "target" nodes.
+    \item Develop the BinPackingFragmentation Consolidation Balance Plugins: Implement a pipeline that computes cluster-wide scatter, filters underutilized "source" nodes, and cordons them to force the scheduler to pack evicted pods onto denser "target" nodes.
     \item Create an "Imbalance Correction" Plugin: Develop the ResourceFragmentation plugin to detect nodes with stranded resources and identify pods that disrupt the proportional consumption of CPU and Memory.
     \item Implement a Strategic Eviction Engine: Use the TOPSIS algorithm~\citep{arxiv_2506_04902} not as a mere scoring tool, but as a strategic engine to rank pods by their "benefit" to the node---evicting those that, once moved, provide the fastest path to emptying a node or restoring balance.
+    \item Develop a Custom Network-Aware Descheduler Evictor Plugins: When eviction occurs, implement a network scoring strategy for each pod.
+    \item Evaluate the Defragmentation and Latency Tradeoff between the descheduler balancing strategy with and without network-aware plugins.
 \end{itemize}
 
 
@@ -78,41 +78,38 @@ In alignment with the formulated research questions, the objectives of this stud
 \section{Research Contributions}
 \label{sec:researchContributions}
 %-----------------------------------------------------------------------------%
+We summarize our contributions as follows:
 \begin{itemize}
-    \item Algorithm Design: A transactional "All-or-Nothing" logic for pod evictions.
     \item Open Source Descheduler Enhancement: Provide a new policy to evict group of pods instead of individual pods, enhancing kubernetes-sigs/descheduler configuration.
     \item Proactive Consolidation Pipeline: Introduction of a Cordon-and-Evict logic within the descheduler that prevents "ping-pong" scheduling and ensures workloads are forced into a bin-packed configuration.
     \item Enhanced Node Utility for Autoscaling: A method to systematically empty underutilized nodes, providing the specific conditions required for the Cluster Autoscaler to terminate instances and reduce cloud spend.
     \item Smarter Offender Identification: Moving beyond random eviction by using TOPSIS-based ranking to identify pods that are the "best" candidates for removal based on their resource footprint relative to node capacity.
     \item Resource Optimization Framework: A practical software implementation that directly targets the reduction of "stranded capacity." By maximizing resource utilization, this approach translates to immediate infrastructure cost reductions~\citep{wiz_k8s_cost} and operational energy savings~\citep{arxiv_2506_04902} in large-scale Kubernetes environments.
+    \item Algorithm Design: A Network-Aware scoring strategy for pod evictions.
+    \item Open Source Descheduler Enhancement: Provide a new balance and evictor plugins, enhancing kubernetes-sigs/descheduler configuration.
 \end{itemize}
 
 
 %-----------------------------------------------------------------------------%
-\section{Posisi Penelitian}
-\label{sec:posisiPenelitian}
+\section{Research Position}
+\label{sec:researchPosition}
 %-----------------------------------------------------------------------------%
-\todo{
-	Sebutkan posisi penelitian Anda. Ada baiknya jika Anda menggunakan gambar atau diagram.
-	Template ini telah menyediakan contoh cara memasukkan gambar.
-}
+While early studies, such as~\citet{xiao2013dynamic}, have explored the impact of multidimensional resource skewness on server utilization, their heuristics were primarily designed for virtual machine environments and often relied on static thresholds. Recent studies, such as~\citet{guo2025joint} and~\citet{bagaa2024multiobjective}, have examined reinforcement learning and multi-objective optimization for Kubernetes pod placement; however, these studies often struggle with the computational overhead of every nodes. Notably, most of these studies concentrate on initial scheduling decisions and do not fully address the long-term cluster entropy known as the "Tetris problem" or Relative Resource Fragmentation~\citep{mishra2016deep}.
 
-\begin{figure}
-	\centering
-	\includegraphics[width=0.4\textwidth]{assets/pics/makara.png}
-	\caption{Penjelasan singkat terkait gambar.}
-	\label{fig:research_position}
-\end{figure}
+In addition to resource balancing, the ability to maintain network performance in distributed microservice architectures is equally important. Prior studies have examined network-aware placement using graph-based traffic analysis~\citep{marchese2022network, chen2024trade}, but their findings regarding descheduling remain inconsistent, particularly regarding the trade-off between communication affinity and resource availability (RA). Furthermore, recent advancements in constraint-based packing have introduced "atomic" binding or gang-migration strategies to ensure that dependent services are moved together. However, as noted in the broader scheduling literature, such group-based strategies frequently increase the risk of resource deadlocks and exacerbate cluster fragmentation by requiring large, contiguous blocks for the entire set, creating a "Fragmentation Gap"~\citep{mishra2016deep}.
 
-\todo{
-	Jelaskan \pic~\ref{fig:research_position} di sini.
-	Setiap gambar yang dimasukkan ke tugas akhir \bo{WAJIB} untuk dijelaskan oleh minimal satu paragraf.
-}
+In contrast, our study develops a unified descheduling framework that addresses both multi-dimensional resource skewness and network latency through a non-atomic, individual scoring paradigm. Unlike the atomic approach of~\citet{christensen2025priority} which focuses on group-level constraints, our method is designed to maintain cluster density and communication proximity without high-risk gang migrations. Furthermore, unlike the standard threshold-based strategies found in the official Kubernetes Descheduler, our implementation utilizes a mathematical imbalance index ($RII_i$) to surgically target specific "worst-offender" pods for eviction.
 
+This research try to addresses these gaps by:
+\begin{itemize}
+\item Broadening the scope of multi-resource balancing beyond simple utilization thresholds to encompass a refined mathematical Imbalance Index ($RII$).
+\item Moving beyond "atomic" group migration to implement an individual, score-based network plugin that evaluates latency gains per pod to prevent cluster-wide deadlocks.
+\item Introducing a surgical defragmentation strategy that utilizes correlation metrics ($corr_{i,j}$) to correct local skewness with minimal system disruption.
+\end{itemize}
 
 %-----------------------------------------------------------------------------%
-\section{Langkah Penelitian}
-\label{sec:langkahPenelitian}
+\section{Research Steps}
+\label{sec:researchSteps}
 %-----------------------------------------------------------------------------%
 \todo{
 	Subbab ini umumnya menjelaskan metode penelitian, jika metode yang digunakan cukup sederhana.
@@ -129,8 +126,8 @@ Berikut ini adalah langkah penelitian yang telah dilakukan:
 
 
 %-----------------------------------------------------------------------------%
-\section{Sistematika Penulisan}
-\label{sec:sistematikaPenulisan}
+\section{Thesis Outline}
+\label{sec:thesisOutline}
 %-----------------------------------------------------------------------------%
 Sistematika penulisan laporan adalah sebagai berikut:
 \begin{itemize}
