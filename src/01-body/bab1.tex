@@ -9,24 +9,21 @@ This chapter explains the background and the problems addressed in this research
 \section{Research Background}
 \label{sec:researchBackground}
 %-----------------------------------------------------------------------------%
-Kubernetes has become the standard for orchestrating containerized workloads, yet it faces a persistent challenge known as the "Tetris problem" or Relative Resource Fragmentation (RRF). In dynamic clusters, pods arrive and terminate stochastically, leaving behind awkward, non-contiguous gaps in node capacity that are too small to host new, larger requests~\citep{arxiv_1506_07020}.
+The rapid transition to containerized microservices has established Kubernetes as the leading orchestration platform; however, it faces the challenge of Relative Resource Fragmentation (RRF), widely known as the "Tetris problem"~\citep{mishra2016deep}. In dynamic cluster environments, the stochastic arrival and termination of pods leave behind unusable, non-contiguous gaps in node capacity that are frequently too small to host new workloads~\citep{mishra2016deep}. This "resource scatter" prevents the Cluster Autoscaler from efficiently reclaiming idle nodes, resulting in "capacity islands" where resources are technically available but functionally trapped in fragments. 
 
-While the default scheduler handles the initial placement, it is inherently reactive and often unable to fix the long-term entropy of the cluster. This "resource scatter" prevents the Cluster Autoscaler from reclaiming nodes, leading to "capacity islands" where resources are technically available but functionally unusable. Solving this requires an active, cluster-wide consolidation strategy that identifies underutilized nodes and systematically migrates workloads to enable hardware reclamation, thereby maximizing cluster density and reducing unnecessary infrastructure costs~\citep{wiz_k8s_cost}.
+The severity of fragmentation is often increased by multi-dimensional resource skewness, a condition in which nodes experience asymmetric utilization across different metrics such as CPU and memory~\citep{xiao2013dynamic}. For example, a node may reach 90\% CPU usage while memory remains underutilized at 20\%, effectively "stranding" the remaining memory as it cannot be allocated without complementary CPU capacity. Although the default scheduler handles the initial pod placement, its reactive nature and lack of multi-resource balancing functions often fail to address the cluster's long-term entropy as workloads evolve stochastically ~\citep{guo2025joint}. 
 
-Additionally, the shift toward microservices has decoupled application components to improve scalability, introducing network overhead. In high-performance computing (HPC) or low-latency systems, the physical placement of services that often communicate is critical. Current descheduling strategies operate on a per-pod basis and lack "atomicity," meaning they cannot guarantee that a group of dependent services will be moved together to maintain their latency contract. This creates a "Fragmentation Gap," leaving behind orphaned pods.
+Furthermore, the decoupling of application components into microservices has introduced substantial network overhead, making the physical proximity of communicating services critical for low-latency performance~\citep{marchese2022network}. In high-performance computing or real-time systems, communication delays between pods can violate strict Service Level Objectives (SLOs) if the related services are scattered across high-latency links. Therefore, effective orchestration must integrate real-time network telemetry, such as inter-node latency and traffic volume, to minimize response times and maintain communication efficiency~\citep{chen2024trade}.
 
+To mitigate these challenges, various descheduling strategies have been proposed; however, many existing models focus more on the scheduler and rely on "atomic" group migrations or gang scheduling to ensure that dependent services move together. However, requiring the atomic binding of large pod groups significantly increases the risk of resource deadlocks and worsens fragmentation, as finding contiguous space for an entire group is exponentially more difficult than for individual pods~\citep{christensen2025priority}. This creates a "Fragmentation Gap" where orphaned pods are left on suboptimal nodes when group-level moves fail or are blocked by insufficient resources.
+
+Our research, implemented as a custom configuration within the official Kubernetes Descheduler repository, diverges from these threshold-based and atomic models by introducing an integrated imbalance index plug-in and a non-atomic, score-based network plug-in. Unlike standard strategies, we utilize a mathematical function to derive a Resource Imbalance Index ($RII_i$) based on normalized resource metrics to surgically target "worst-offender" pods contributing to local skewness~\citep{guo2025joint}. Additionally, our network-aware configuration explicitly rejects atomic grouping in favor of a scoring mechanism that evaluates individual pod movements by comparing candidate nodes against the current node latency, ensuring stable network performance and reducing the fragmentation penalties associated with group-level eviction.
 
 %-----------------------------------------------------------------------------%
 \section{Problem Statement}
 \label{sec:problemStatement}
 %-----------------------------------------------------------------------------%
-The core issue in modern Kubernetes resource management is the lack of a proactive consolidation pipeline within the default orchestration layer, compounded by individualistic descheduling mechanisms. Specifically:
-\begin{enumerate}
-    \item Static Resource Scatter: The kube-scheduler lacks the "forward-looking" capability to identify that resources are too scattered to be useful.
-    \item Ineffective Balancing Heuristics: Standard balancing tools often treat all resources equally, failing to identify specific "offender" pods that cause resource stranding (where one resource is exhausted while another remains idle).
-    \item Reactive Scale-Out (Autoscaling Inefficiency): Because fragmentation scatters available resources into unusable chunks, new pods often cannot fit on existing nodes. This forces the Cluster Autoscaler to provision redundant new Virtual Machines (VMs) as new nodes in the cluster (a "scale-out" event). These redundant scale-out events not only incur unnecessary infrastructure costs~\citep{wiz_k8s_cost} but also increase the overall carbon footprint and energy consumption of the environment, even when the aggregate cluster capacity is mathematically sufficient~\citep{arxiv_2506_04902}.
-    \item Latency Spikes during Eviction: When a pod is evicted for balancing, its dependent partner remains, leading to temporary but significant latency spikes or "Split-Brain" performance degradation.
-\end{enumerate}
+The primary issue in modern Kubernetes clusters is the lack of a consolidation system that can balance both hardware usage and network performance. Current descheduling tools are unable to calculate resource skewness the imbalance between CPU and memory which leads to "resource stranding" where capacity is wasted because it cannot be bundled together. This inefficiency often triggers the cluster to add expensive, redundant nodes even when total capacity is mathematically sufficient. Furthermore, because these tools are network-blind, they often move pods to optimize space while accidentally breaking apart services that need to talk to each other. This creates a difficult trade-off where defragmentation in cluster can reduce network performance.
 
 %-----------------------------------------------------------------------------%
 \subsection{Research Question}
@@ -34,12 +31,11 @@ The core issue in modern Kubernetes resource management is the lack of a proacti
 %-----------------------------------------------------------------------------%
 Based on the problem statement described previously, the research questions addressed in this study are as follows:
 \begin{itemize}
-    \item Atomic Eviction Implementation: How can we implement an All-or-Nothing (Atomic) eviction mechanism within the Kubernetes Descheduler framework to ensure transactional integrity?
-    \item Latency Impact: To what extent does ``Group Descheduling'' reduce the duration of high-latency states compared to standard individual pod eviction?
-    \item Failure Handling: How does the system handle eviction failures (e.g., PDB violations) to ensure no partial group moves occur, thereby maintaining application stability?
     \item How can a multi-stage descheduling pipeline be designed to transition a cluster from a scattered state to a consolidated, "bin-packed" state?
-    \item What strategy can effectively identify source nodes for eviction and target nodes for consolidation to ensure the Cluster Autoscaler can successfully reclaim hardware?
     \item How can Multi-Criteria Decision Analysis (MCDA) be utilized to rank pod eviction candidates, ensuring that the pods most responsible for node-level inefficiency are prioritized for migration?
+    \item How can a network-aware scoring eviction mechanism be incorporated into the Kubernetes Descheduler framework to guarantee consistent or lower latency?
+    \item How can a network-aware plugins descheduler be made to ensure that the pod is rescheduled to a candidate node with less or equal latency?
+    \item How does the trade-off between cluster fragmentation and latency compare with and without network-aware plugins?
 \end{itemize}
 
 %-----------------------------------------------------------------------------%
@@ -62,12 +58,12 @@ To maintain focus and define the scope of the study, the research limitations ar
 %-----------------------------------------------------------------------------%
 In alignment with the formulated research questions, the objectives of this study are as follows:
 \begin{itemize}
-    \item Design a "Group Eviction" yaml metadata schema (labels/annotations) to define pod dependencies.
-    \item Develop a custom Descheduler strategy that validates the "evictability" of an entire pods in a group and do ``All or Nothing'' eviction.
     \item Evaluate the performance impact using a benchmark tool to compare group vs. individual eviction.
-    \item Develop the BinPackingFragmentation Consolidation Strategy: Implement a pipeline that computes cluster-wide scatter, filters underutilized "source" nodes, and cordons them to force the scheduler to pack evicted pods onto denser "target" nodes.
+    \item Develop the BinPackingFragmentation Consolidation Balance Plugins: Implement a pipeline that computes cluster-wide scatter, filters underutilized "source" nodes, and cordons them to force the scheduler to pack evicted pods onto denser "target" nodes.
     \item Create an "Imbalance Correction" Plugin: Develop the ResourceFragmentation plugin to detect nodes with stranded resources and identify pods that disrupt the proportional consumption of CPU and Memory.
     \item Implement a Strategic Eviction Engine: Use the TOPSIS algorithm~\citep{arxiv_2506_04902} not as a mere scoring tool, but as a strategic engine to rank pods by their "benefit" to the node---evicting those that, once moved, provide the fastest path to emptying a node or restoring balance.
+    \item Develop a Custom Network-Aware Descheduler Evictor Plugins: When eviction occurs, implement a network scoring strategy for each pod.
+    \item Evaluate the Defragmentation and Latency Tradeoff between the descheduler balancing strategy with and without network-aware plugins.
 \end{itemize}
 
 
@@ -75,74 +71,66 @@ In alignment with the formulated research questions, the objectives of this stud
 \section{Research Contributions}
 \label{sec:researchContributions}
 %-----------------------------------------------------------------------------%
+We summarize our contributions as follows:
 \begin{itemize}
-    \item Algorithm Design: A transactional "All-or-Nothing" logic for pod evictions.
     \item Open Source Descheduler Enhancement: Provide a new policy to evict group of pods instead of individual pods, enhancing kubernetes-sigs/descheduler configuration.
     \item Proactive Consolidation Pipeline: Introduction of a Cordon-and-Evict logic within the descheduler that prevents "ping-pong" scheduling and ensures workloads are forced into a bin-packed configuration.
     \item Enhanced Node Utility for Autoscaling: A method to systematically empty underutilized nodes, providing the specific conditions required for the Cluster Autoscaler to terminate instances and reduce cloud spend.
     \item Smarter Offender Identification: Moving beyond random eviction by using TOPSIS-based ranking to identify pods that are the "best" candidates for removal based on their resource footprint relative to node capacity.
     \item Resource Optimization Framework: A practical software implementation that directly targets the reduction of "stranded capacity." By maximizing resource utilization, this approach translates to immediate infrastructure cost reductions~\citep{wiz_k8s_cost} and operational energy savings~\citep{arxiv_2506_04902} in large-scale Kubernetes environments.
+    \item Algorithm Design: A Network-Aware scoring strategy for pod evictions.
+    \item Open Source Descheduler Enhancement: Provide a new balance and evictor plugins, enhancing kubernetes-sigs/descheduler configuration.
 \end{itemize}
 
 
 %-----------------------------------------------------------------------------%
-\section{Posisi Penelitian}
-\label{sec:posisiPenelitian}
+\section{Research Position}
+\label{sec:researchPosition}
 %-----------------------------------------------------------------------------%
-\todo{
-	Sebutkan posisi penelitian Anda. Ada baiknya jika Anda menggunakan gambar atau diagram.
-	Template ini telah menyediakan contoh cara memasukkan gambar.
-}
+While early studies, such as~\citet{xiao2013dynamic}, have explored the impact of multidimensional resource skewness on server utilization, their heuristics were primarily designed for virtual machine environments and often relied on static thresholds. Recent studies, such as~\citet{guo2025joint} and~\citet{bagaa2024multiobjective}, have examined reinforcement learning and multi-objective optimization for Kubernetes pod placement; however, these studies often struggle with the computational overhead of every nodes. Notably, most of these studies concentrate on initial scheduling decisions and do not fully address the long-term cluster entropy known as the "Tetris problem" or Relative Resource Fragmentation~\citep{mishra2016deep}.
 
-\begin{figure}
-	\centering
-	\includegraphics[width=0.4\textwidth]{assets/pics/makara.png}
-	\caption{Penjelasan singkat terkait gambar.}
-	\label{fig:research_position}
-\end{figure}
+In addition to resource balancing, the ability to maintain network performance in distributed microservice architectures is equally important. Prior studies have examined network-aware placement using graph-based traffic analysis~\citep{marchese2022network, chen2024trade}, but their findings regarding descheduling remain inconsistent, particularly regarding the trade-off between communication affinity and resource availability (RA). Furthermore, recent advancements in constraint-based packing have introduced "atomic" binding or gang-migration strategies to ensure that dependent services are moved together. However, as noted in the broader scheduling literature, such group-based strategies frequently increase the risk of resource deadlocks and exacerbate cluster fragmentation by requiring large, contiguous blocks for the entire set, creating a "Fragmentation Gap"~\citep{mishra2016deep}.
 
-\todo{
-	Jelaskan \pic~\ref{fig:research_position} di sini.
-	Setiap gambar yang dimasukkan ke tugas akhir \bo{WAJIB} untuk dijelaskan oleh minimal satu paragraf.
-}
+In contrast, our study develops a unified descheduling framework that addresses both multi-dimensional resource skewness and network latency through a non-atomic, individual scoring paradigm. Unlike the atomic approach of~\citet{christensen2025priority} which focuses on group-level constraints, our method is designed to maintain cluster density and communication proximity without high-risk gang migrations. Furthermore, unlike the standard threshold-based strategies found in the official Kubernetes Descheduler, our implementation utilizes a mathematical imbalance index ($RII_i$) to surgically target specific "worst-offender" pods for eviction.
 
+This research try to addresses these gaps by:
+\begin{itemize}
+\item Broadening the scope of multi-resource balancing beyond simple utilization thresholds to encompass a refined mathematical Imbalance Index ($RII$).
+\item Moving beyond "atomic" group migration to implement an individual, score-based network plugin that evaluates latency gains per pod to prevent cluster-wide deadlocks.
+\item Introducing a surgical defragmentation strategy that utilizes correlation metrics ($corr_{i,j}$) to correct local skewness with minimal system disruption.
+\end{itemize}
 
 %-----------------------------------------------------------------------------%
-\section{Langkah Penelitian}
-\label{sec:langkahPenelitian}
+\section{Research Steps}
+\label{sec:researchSteps}
 %-----------------------------------------------------------------------------%
-\todo{
-	Subbab ini umumnya menjelaskan metode penelitian, jika metode yang digunakan cukup sederhana.
-	Jika metode yang digunakan cukup kompleks atau ada kewajiban dari fakultas Anda untuk menjelaskan metode secara rinci, gunakan Bab 3 untuk menjelaskan Metodologi Penelitian.
-}
-Berikut ini adalah langkah penelitian yang telah dilakukan:
+The research is conducted following these key steps:
 \begin{enumerate}
-	\item Tinjauan literatur \\
-	Pada tahap ini, dipelajari teori-teori yang terkait dengan penelitian ini untuk mendapatkan konsep dasar yang dibutuhkan dalam mencapai tujuan penelitian.
-	\item Analisis implementasi dan kesimpulan \\
-	Pada tahap ini, digunakan studi kasus untuk analisis terkait kegunaan \f{template}.
-	Setelah melakukan analisis tersebut, ditarik kesimpulan keseluruhan dari penelitian ini.
+	\item \textbf{Literature Review and Problem Formulation:} The initial phase of this study involved a comprehensive systematic review of the existing literature on resource fragmentation, multidimensional bin-packing algorithms, and the architectural of Kubernetes descheduler. Special emphasis is placed on exploring the current state of network-aware scheduling to identify critical gaps in the manner in which cloud-native orchestrators balance resource density with network-aware overhead. By synthesizing these diverse domains, the research problem is formally defined, and a theoretical framework is established that justifies the development of a more holistic, network-aware descheduling mechanism. This stage ensures that the proposed solution addresses the documented limitations of existing heuristic-based deschedulers.
+	\item \textbf{Design of the Descheduling Policy:} Building upon the theoretical foundations established in the preliminary review, a high-level architectural design for a consolidation pipeline is formulated. This design introduces a novel Imbalance Index, a metric-driven approach intended to quantify the degree of resource distribution variance across the cluster. The policy architecture integrates specialized Balance Plugins and Network-Aware Evictor Plugins into the descheduling logic. A key design constraint is the preservation of the core kube-scheduler integrity; therefore, the strategy is engineered to operate as a modular extension. This ensures that the descheduling logic can autonomously rectify cluster state imbalances without necessitating intrusive modifications to the primary scheduling loop.
+	\item \textbf{Protoype Implementation:} The conceptual design is realized through a prototype implementation built atop the official Kubernetes Descheduler framework. To ensure seamless integration with the upstream ecosystem and to leverage native concurrency primitives, the implementation is developed using the Go (Golang) programming language. This methodological choice ensures that the prototype is fully compatible with the official Kubernetes API and client libraries. By adhering to the framework’s plugin-based architecture, the custom logic for the Imbalance Index and network-aware filtering is implemented in a manner that is both performant and representative of production-grade cloud-native software.
+	\item \textbf{Experimental and Evaluation:} The prototype is subjected to empirical testing using synthetic workloads designed to induce resource fragmentation and sub-optimal pod placement. This phase involves a comparative analysis of various utilization-based strategies, encompassing the standard Nodeutilization methods, alongside the newly developed Imbalance Index. Each of these strategies is evaluated both with and without the integration of network-aware plugins. The evaluation focuses on packing efficiency and node reclaim opportunities as primary measures of defragmentation effectiveness. By cross-referencing these metrics with network latency data, the research assesses the critical trade-offs between maximizing resource density and preserving communication performance.
+	\item \textbf{Results Analysis:} The final stage involves a meticulous analysis of the experimental data to ascertain the effectiveness of the proposed descheduling policies in improving cluster-wide defragmentation. The analysis seeks to validate the correlation between the Imbalance Index and the optimization of resource utilization. Furthermore, the study evaluates the critical trade-offs between resource density and communication locality, assessing how the migration of pods impacts interservice latency. 
 \end{enumerate}
 
 
 %-----------------------------------------------------------------------------%
-\section{Sistematika Penulisan}
-\label{sec:sistematikaPenulisan}
+\section{Thesis Outline}
+\label{sec:thesisOutline}
 %-----------------------------------------------------------------------------%
-Sistematika penulisan laporan adalah sebagai berikut:
+The thesis is organized as follows:
 \begin{itemize}
-	\item Bab 1 \babSatu \\
-	    Bab ini mencakup latar belakang, cakupan penelitian, dan pendefinisian masalah.
-	\item Bab 2 \babDua \\
-	    Bab ini mencakup pemaparan terminologi dan teori yang terkait dengan penelitian berdasarkan hasil tinjauan pustaka yang telah digunakan, sekaligus memperlihatkan kaitan teori dengan penelitian.
-	\item Bab 3 \babTiga \\
-	    Apa itu Bab 3?
-	\item Bab 4 \babEmpat \\
-		Apa itu Bab 4?
-	\item Bab 5 \babLima \\
-	    Apa itu Bab 5?
-	\item Bab 6 \kesimpulan \\
-	    Bab ini mencakup kesimpulan akhir penelitian dan saran untuk pengembangan berikutnya.
+	\item \textbf{Chapter 1 Introduction} \\
+        Chapter one provides the background on Kubernetes resource management challenges, the motivation for addressing cluster fragmentation, and the problem statement regarding the conflict between defragmentation and network locality. This chapter also defines the research objectives, scope, and the contributions of the proposed Imbalance Index and Network-Aware plugins.
+	\item \textbf{Chapter 2 Literation Review} \\
+        Chapter two explores foundational concepts including multi-dimensional bin packing, resource fragmentation, and the Kubernetes scheduling lifecycle. It provides a systematic survey of existing descheduling strategies, such as NodeUtilization, and examines prior research in network-aware orchestration to identify the gaps in current defragmentation methodologies.
+	\item \textbf{Chapter 3 Plugins Design and Methodology} \\
+	    Chapter three explain the conceptual framework and high-level architecture of the proposed solution. This includes the mathematical formulation of the Imbalance Index Balance Policy and the logic behind the Network-Aware Evictor Evictor Policy. The chapter explains the methodology for integrating these components as non-intrusive extensions to the Kubernetes Descheduler.
+	\item \textbf{Chapter 4 Plugins Implementation} \\
+		Chapter four describes the technical realization of the proposed design using the Go (Golang) programming language. It details the integration with the official Kubernetes Descheduler framework, the use of client-go for cluster interaction, and the implementation details of the custom plugin interfaces, ensuring the system remains coherent with upstream Kubernetes standards.
+	\item \textbf{Chapter 5 Experiment and Evaluation} \\
+	    Chapter five presents the experimental setup, using synthetic workloads to induce fragmentation across experimental clusters. This chapter conducts a comparative performance analysis of various node utilization strategies (including LowNodeUtilization, HighNodeUtilization, and the Imbalance Index) with and without network-aware enhancements. It evaluates the results based on packing efficiency, node reclaim opportunities, and the resulting trade-offs in network latency.
+	\item \textbf{Chapter 6 Conclusion and Future Work} \\
+	    Chapter six summarizes the key findings regarding the effectiveness of the Imbalance Index in driving cluster defragmentation while preserving network performance. It discusses the limitations of the current prototype and outlines potential directions for future research, such as dynamic weight adjustment and testing on a production-scale cluster.
 \end{itemize}
 
-\todo{Anda bisa mengubah atau menambahkan penjelasan singkat mengenai isi masing-masing bab. Setiap tugas akhir pasti ada yang berbeda pada bagian ini.}
