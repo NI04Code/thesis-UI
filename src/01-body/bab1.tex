@@ -90,17 +90,23 @@ This study is expected to provide the following contributions:
 
 %----------------------------------------------------------------------------- %%
 \section{Research Position}
-\label{sec:posisiPenelitian}
+\label{sec:researchPosition}
 %----------------------------------------------------------------------------- %%
 
-\begin{figure}
-	\centering
-	\includegraphics[width=0.82\textwidth]{assets/pics/research_concept_map.png}
-	\caption{Research position of the proposed work among baseline Kubernetes scheduling, fragmentation-aware consolidation, and communication-aware placement.}
-	\label{fig:research_position}
-\end{figure}
+Prior studies have addressed several parts of the problem targeted by this research. Early work on dynamic resource allocation, such as \citet{xiao2013dynamic}, shows that multi-dimensional resource skewness can reduce effective server utilization. However, these approaches were primarily designed for virtual-machine environments and often rely on static threshold-based heuristics. More recent work has studied container resource defragmentation and task scheduling using optimization or learning-based methods~\citep{guo2025joint,bagaa2024multiobjective}, but these studies are commonly oriented toward placement or scheduling decisions rather than long-term post-placement correction in Kubernetes clusters.
 
-Figure~\ref{fig:research_position} positions this research between two adjacent streams of work. The first stream focuses on improving cluster packing and reducing stranded capacity through bin-packing or defragmentation techniques. The second stream focuses on communication-aware placement for distributed services. This study connects both streams by investigating a Descheduler-based eviction policy that prioritizes Pods based on fragmentation impact while considering communication locality as a safeguard.
+Kubernetes-specific research has also shown that resource fragmentation can emerge over time and that directed Pod eviction can improve utilization~\citep{mishra_bellur_2016,larsson_klein_elmroth_2023}. Nevertheless, fragmentation-aware consolidation by itself is not sufficient for microservice workloads because improving packing can accidentally worsen communication locality. Network-aware placement studies show that service communication patterns and network conditions can affect placement quality~\citep{marchese2022network,marchese_tomarchio_2022,chen2024trade}, but these works do not fully address how such considerations should be integrated into a Descheduler-based consolidation policy.
+
+Another related direction is group or gang-style movement, where dependent services are moved together to preserve affinity. While this approach can protect communication locality, it may increase the risk of resource deadlock or failed movement because the scheduler must find enough capacity for a larger combined group. For a fragmentation-oriented Descheduler policy, this can worsen the packing problem instead of solving it. Therefore, this research positions itself away from strictly atomic group migration and instead adopts a non-atomic, individual scoring paradigm.
+
+This study addresses the gap by developing a Descheduler-based framework that combines multi-dimensional resource imbalance analysis with network-aware eviction considerations. The proposed direction uses a mathematical imbalance index ($RII_i$) and MCDA/TOPSIS-based ranking to target specific Pods that contribute to stranded capacity, while adding network-aware scoring or filtering so that consolidation does not unnecessarily degrade communication latency.
+
+The research position can be summarized as follows:
+\begin{itemize}
+    \item It broadens resource balancing beyond simple utilization thresholds by considering multi-dimensional imbalance and stranded capacity.
+    \item It uses individual, score-based eviction rather than atomic group migration to reduce the risk of deadlock and excessive fragmentation.
+    \item It incorporates network-aware considerations as a guardrail for consolidation decisions, connecting fragmentation reduction with communication-locality preservation.
+\end{itemize}
 
 %----------------------------------------------------------------------------- %%
 \section{Research Steps}
