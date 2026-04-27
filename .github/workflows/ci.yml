@@ -22,7 +22,8 @@ jobs:
           latexmk --version
 
       - name: Generate PDF
-        run: latexmk -bibtex -output-format=pdf -pdf -time thesis.tex
+        run: |
+          latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode -halt-on-error" thesis.tex
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
