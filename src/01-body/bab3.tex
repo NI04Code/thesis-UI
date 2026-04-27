@@ -2,3 +2,70 @@
 \chapter{\babTiga}
 \label{bab:3}
 %-----------------------------------------------------------------------------%
+\section{Network-Aware Descheduler Design}
+\label{sec:network_aware_design}
+The Network-Aware Descheduler is designed to prevent "blind" evictions that satisfy resource balance at the cost of increased network latency. The design introduces a mechanism to evaluate the communication dependencies of pods before permitting an eviction.
+This plugin work as extension to nodeutilization strategy and it own network evictor plugins that work on preeviction layer.
+
+\subsection{Conceptual Architecture}
+\label{sec:nad_conceptual_arch}
+The architecture relies on three primary components to establish network awareness:
+\begin{itemize}
+    \item \textbf{Cost Providers:} An abstraction layer that computes the "distance" between nodes. It supports a static \textit{Topology-Based} model using node region/zone as it cost input and a dynamic \textit{Latency-Based} model using node to node latency sourced via Prometheus.
+    \item \textbf{Pod Dependency Model:} A grouping mechanism utilizing the \texttt{network-group} label. Pods sharing the same label are considered a single communication entity.
+    \item \textbf{Shared Network Cost Library:} A central utility used by all layers to ensure consistent cost calculations and dependency discovery.
+\end{itemize}
+
+\subsection{Dual-Layer Eviction Strategy}
+\label{sec:nad_strategy}
+\begin{figure}
+	\centering
+	\includegraphics[width=0.4\textwidth]{assets/pics/network-aware/strategy-diagram.png}
+	\caption{High Level Strategy Design}
+	\label{fig:research_position}
+\end{figure}
+The two layers operate as follows:
+
+\begin{enumerate}
+    \item \textbf{Layer 1: Global PreEvictionFilter:} 
+    This layer serves as a universal safety gate for the entire descheduling cycle. It utilizes its own configuration to interface with the \texttt{BuildCostProvider()}, ensuring that regardless of which strategy triggers an eviction, the network cost is evaluated against all ready nodes in the cluster.
+    
+    \item \textbf{Layer 2: Strategy-Specific Awareness (Node Utilization):} 
+    Balancing strategies such as \textit{LowNodeUtilization} and \textit{HighNodeUtilization} are enhanced with their own network-aware configurations. These strategies specifically check potential destination nodes given by these balancing plugins to ensure that resource rebalancing does not inadvertently move communicating pods further apart.
+\end{enumerate}
+
+Both layers rely on a modular \textbf{CostProvider Interface}. Depending on the cluster configuration, the \texttt{BuildCostProvider()} dynamically constructs one of the following:
+\begin{itemize}
+    \item \textbf{TopologyCostProvider:} A fallback mechanism using hardcoded topology weights (e.g., same zone or same region).
+    \item \textbf{LatencyCostProvider:} A dynamic provider that builds a latency matrix based on real-time telemetry. This data is gathered by a \textit{Goldpinger DaemonSet} (one pod per node), which exposes latency metrics to a \textit{Prometheus} instance for the Descheduler to query.
+\end{itemize}
+
+\subsection{Network-Aware Decision Algorithm}
+\label{sec:nad_algorithm}
+The core logic for determining whether to allow or block a pod eviction is based on a relative comparison of placement costs. For a target pod $P$ currently residing on node $A$, and a set of candidate nodes $C$, the decision-making process is formalized into the following stages:
+\begin{enumerate}
+    \item \textbf{Dependency Identification:} 
+    The system first identifies the set of dependency pods $D$ that share the same \texttt{network-group} label as the target pod $P$. If the pod lacks this label, it is considered independent, and the network-aware filter is bypassed.
+
+    \item \textbf{Placement Cost Calculation:} 
+    The cost of placing pod $P$ on any given node $n$ is defined as the aggregate network distance (latency or topology weight) to all identified dependency pods $d \in D$. This is calculated as:
+    \begin{equation}
+        \func{Cost}{n, P} = \sum_{d \in D} \func{Distance}{n, \text{Node}_{d}}
+		\label{eq:networkcost}
+    \end{equation}
+    The distance value is provided by either the static \textit{TopologyCostProvider} or the dynamic \textit{LatencyCostProvider}.
+
+    \item \textbf{Candidate Evaluation and Comparison:} 
+    The algorithm iterates through the set of candidate nodes $C$. For each candidate, it calculates a potential placement cost and compares it strictly against the current placement cost $Cost(Node_{A}, P)$. Only nodes with a lower or equal cost ($\leq$) are counted as improvements.
+
+    \item \textbf{Threshold-Based Validation:} 
+    To mitigate the risk of the Kube-scheduler placing the evicted pod on a suboptimal node, the design enforces a \textit{Min-Better-Candidates} threshold. An eviction is only authorized if the proportion of improved candidate nodes meets or exceeds a predefined percentage:
+    \begin{equation}
+        {\text{Count}(\text{Cost}(C, P) \leq \text{Cost}(Node_{A}, P)) } \geq {\text{TotalCandidates}} \cdot \text{MinBetterCandidatesPercent} 
+		\label{eq:networkthreshold}
+    \end{equation}
+    The default value for this threshold is set to $50\%$, ensuring a high probability of network performance enhancement following the rescheduling event.
+
+	\item \textbf{Final Decision:} 
+	If the percentage of "better" nodes meets the threshold, the eviction is permitted; otherwise, it is blocked to prevent "blind" evictions that might lead to worse latency.
+\end{enumerate}
