@@ -1,11 +1,21 @@
-%-----------------------------------------------------------------------------%
 \chapter{\babTiga}
 \label{bab:3}
-%-----------------------------------------------------------------------------%
+
+This chapter presents the system design and methodology for the development of custom descheduler plugins. It provides a high-level overview of the system architecture and illustrates the operational flow of the proposed plugins. Section 3.1 and its subsections describe the design of the Imbalance Index balancing plugin, including its mathematical formulation for computing cluster imbalance, execution workflow, and the expected YAML configuration. Section 3.2 and its subsections discuss the design and architecture of the Network-Aware Evictor plugin, focusing on the tools used to obtain latency data, its operational workflow, and the corresponding YAML configuration.
+
+%----------------------------------------------------------------------------- %%
+\section{Imbalance Index Design}
+\label{sec:imbalanceindex_design}
+%----------------------------------------------------------------------------- %%
+lorem ipsum
+
+%----------------------------------------------------------------------------- %%
 \section{Network-Aware Descheduler Design}
-\label{sec:network_aware_design}
+\label{sec:networkaware_design}
+%----------------------------------------------------------------------------- %%
 The Network-Aware Descheduler is designed to prevent "blind" evictions that satisfy resource balance at the cost of increased network latency. The design introduces a mechanism to evaluate the communication dependencies of pods before permitting an eviction.
 This plugin work as extension to nodeutilization strategy and it own network evictor plugins that work on preeviction layer.
+
 
 \subsection{Conceptual Architecture}
 \label{sec:nad_conceptual_arch}

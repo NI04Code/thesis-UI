@@ -1,13 +1,13 @@
+%----------------------------------------------------------------------------- %%
 \chapter{\babSatu}
 \label{bab:1}
-
-This chapter explains the background, problem formulation, objectives, contributions, and research structure of this study.
+%----------------------------------------------------------------------------- %%
+This chapter establishes the background and key challenges that motivate this thesis. Section 1.1 presents the research context, highlighting the rationale for utilizing the descheduler and explaining the limitations of relying solely on the Kubernetes scheduler. Section 1.2 defines the research problem by outlining the primary research questions and associated constraints. Section 1.3 specifies the objectives of the study, while Section 1.4 describes the expected contributions. Section 1.5 situates this work within relevant academic domains. Section 1.6 summarizes the main methodological steps undertaken in the research. The chapter concludes with Section 1.7, which outlines the overall structure of the thesis.
 
 %----------------------------------------------------------------------------- %%
 \section{Research Background}
 \label{sec:researchBackground}
 %----------------------------------------------------------------------------- %%
-
 Kubernetes has become the dominant orchestration platform for containerized workloads. However, dynamic Kubernetes clusters still face a persistent multi-resource packing problem commonly discussed as resource fragmentation or the ``Tetris problem''. As Pods are created, scaled, and terminated over time, available CPU and memory can become scattered into small residual gaps across different Nodes. Even when aggregate cluster capacity is still mathematically sufficient, that capacity may no longer be usable for incoming workloads with larger or more imbalanced requests~\citep{mishra_bellur_2016,grandl_tetris_2014}.
 
 This problem is important because fragmentation affects both utilization and operational cost. \citet{larsson_klein_elmroth_2023} show that Kubernetes clusters can enter fragmented states in which poor Pod-to-Node mappings strand resources, and that directed Pod eviction can reduce fragmentation enough to run the same workload using 16.7\% fewer Nodes than standard scheduling alone. Kubernetes itself also recognizes bin packing as a first-class scheduling concern through scoring strategies such as \texttt{MostAllocated} and \texttt{RequestedToCapacityRatio}; however, these strategies act during initial placement and do not automatically repair fragmentation that has already accumulated over time~\citep{k8s_resource_bin_packing}.
@@ -139,7 +139,7 @@ The writing structure of this thesis is organized as follows:
 	This chapter presents the research background, problem formulation, research questions, limitations, objectives, contributions, research position, research steps, and thesis outline.
 	\item \textbf{Chapter 2: Literature Review} \\
 	This chapter discusses Kubernetes scheduling, resource fragmentation, bin packing, MCDA/TOPSIS, Kubernetes Descheduler, communication-aware scheduling, and the research gap addressed by this study.
-	\item \textbf{Chapter 3: Plugins Design and Methodology} \\
+	\item \textbf{Chapter 3: Plugins Design and Architecture} \\
 	This chapter explains the design of the proposed Descheduler plugins, the consolidation pipeline, scoring criteria, network-aware component, and experiment methodology.
 	\item \textbf{Chapter 4: Plugins Implementation} \\
 	This chapter describes the implementation details of the proposed plugins and their integration with the Kubernetes Descheduler framework.
