@@ -1,7 +1,7 @@
 \chapter{\babTiga}
 \label{bab:3}
 
-This chapter presents the system design and methodology for the development of custom descheduler plugins. It provides a high-level overview of the system architecture and illustrates the operational flow of the proposed plugins. Section 3.1 and its subsections describe the design of the Imbalance Index balancing plugin, including its mathematical formulation for computing cluster imbalance, execution workflow, and the expected YAML configuration. Section 3.2 and its subsections discuss the design and architecture of the Network-Aware Evictor plugin, focusing on the tools used to obtain latency data, its operational workflow, and the corresponding YAML configuration.
+This chapter presents the system design and methodology for the development of custom descheduler plugin policies. It provides a high-level overview of the system architecture and illustrates the operational flow of the proposed policies. Section 3.1 and its subsections describe the design of the Imbalance Index balancing policy, including its mathematical formulation for computing cluster imbalance, execution workflow, and the expected YAML configuration. Section 3.2 and its subsections discuss the design and architecture of the Network-Aware Evictor policy, focusing on the tools used to obtain latency data, its operational workflow, and the corresponding YAML configuration.
 
 %----------------------------------------------------------------------------- %%
 \section{Imbalance Index Design}
@@ -10,12 +10,34 @@ This chapter presents the system design and methodology for the development of c
 lorem ipsum
 
 %----------------------------------------------------------------------------- %%
-\section{Network-Aware Descheduler Design}
-\label{sec:networkaware_design}
+\section{Network-Aware Evictor Policy Design}
+\label{sec:netaware_policydesign}
 %----------------------------------------------------------------------------- %%
-The Network-Aware Descheduler is designed to prevent "blind" evictions that satisfy resource balance at the cost of increased network latency. The design introduces a mechanism to evaluate the communication dependencies of pods before permitting an eviction.
-This plugin work as extension to nodeutilization strategy and it own network evictor plugins that work on preeviction layer.
+The Network-Aware Descheduler policy is designed to improve pod eviction decisions in Kubernetes by incorporating network cost considerations. Unlike the default descheduler, which focuses primarily on resource utilization, this approach accounts for communication efficiency between pods to avoid performance degradation caused by poor network locality. 
 
+The system adopts a two-layer plugins design. The first layer, implemented as a global PreEvictionFilter, acts as a safety mechanism by preventing evictions that would increase overall network cost across all candidate nodes. The second layer is integrated into node utilization strategies, providing a more precise filtering mechanism by evaluating only the strategy's selected destination nodes. 
+
+Both layers rely on a shared network cost model, which can be based on either topology distances or real-time latency metrics collected from Prometheus. By evaluating pod dependencies through labeling and comparing current and potential placement costs, the system ensures that evictions are performed only when they are likely to improve or maintain network performance.
+
+%----------------------------------------------------------------------------- %%
+\subsection{System Overview}
+\label{sec:netaware_sysoverview}
+%----------------------------------------------------------------------------- %%
+\begin{figure}
+	\centering
+	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/sysoverview-diagram.png}
+	\caption{System overview diagram of the Network-Aware Descheduler Plugin}
+	\label{fig:netaware_sysarchoverview}
+\end{figure}
+Building upon the design described in the previous section, the overall structure of the Network-Aware Descheduler plugin is illustrated in Figure \ref{fig:netaware_sysarchoverview}. The system is organized into two independent and optionally deployable components within the descheduler framework. 
+
+The first plugin, referred to as the NetworkCostEvictor, operates as a global PreEvictionFilter plugin. It evaluates eviction candidates against all available nodes in the cluster and acts as a safety mechanism by preventing evictions that would lead to increased network cost. This ensures that pod relocation does not degrade communication efficiency at the cluster level. 
+
+The second plugin is integrated within node utilization-based strategies, such as LowNodeUtilization and HighNodeUtilization. This strategy-level component performs network-aware filtering by considering only the subset of nodes selected as potential destinations. As a result, it provides a more targeted evaluation aligned with the resource balancing objectives of the descheduler. 
+
+Both components utilize a shared network cost model to assess the communication cost between pods. During the eviction process, the system compares the cost of the current pod placement with potential alternative placements. The final decision is determined by whether the eviction is expected to maintain or improve network performance; otherwise, the eviction is skipped. 
+
+This modular structure allows the two components to be used independently or in combination, offering flexibility in deployment while ensuring that network-aware considerations are incorporated into pod eviction decisions.
 
 \subsection{Conceptual Architecture}
 \label{sec:nad_conceptual_arch}
