@@ -27,9 +27,10 @@ Both layers rely on a shared network cost model, which can be based on either to
 	\centering
 	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/sysoverview-diagram.png}
 	\caption{System overview diagram of the Network-Aware Descheduler Plugin}
-	\label{fig:netaware_sysarchoverview}
+	\label{fig:netaware_sysoverview}
 \end{figure}
-Building upon the design described in the previous section, the overall structure of the Network-Aware Descheduler plugin is illustrated in Figure \ref{fig:netaware_sysarchoverview}. The system is organized into two independent and optionally deployable components within the descheduler framework. 
+
+The overall structure of the Network-Aware Descheduler plugin is illustrated in Figure \ref{fig:netaware_sysoverview}. The system is organized into two independent and optionally deployable components within the descheduler framework. 
 
 The first plugin, referred to as the NetworkCostEvictor, operates as a global PreEvictionFilter plugin. It evaluates eviction candidates against all available nodes in the cluster and acts as a safety mechanism by preventing evictions that would lead to increased network cost. This ensures that pod relocation does not degrade communication efficiency at the cluster level. 
 
@@ -38,6 +39,47 @@ The second plugin is integrated within node utilization-based strategies, such a
 Both components utilize a shared network cost model to assess the communication cost between pods. During the eviction process, the system compares the cost of the current pod placement with potential alternative placements. The final decision is determined by whether the eviction is expected to maintain or improve network performance; otherwise, the eviction is skipped. 
 
 This modular structure allows the two components to be used independently or in combination, offering flexibility in deployment while ensuring that network-aware considerations are incorporated into pod eviction decisions.
+
+%----------------------------------------------------------------------------- %%
+\subsection{Architecture Design}
+\label{sec:netaware_arcdesign}
+%----------------------------------------------------------------------------- %%
+\begin{figure}
+	\centering
+	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/sysarc-diagram.png}
+	\caption{Architecture design diagram of the Network-Aware Descheduler Plugin}
+	\label{fig:netaware_arcdesign}
+\end{figure}
+
+The architecture of the Network-Aware Descheduler plugin is designed to extend the Kubernetes descheduler framework by incorporating network-aware decision-making into the pod-eviction process. As illustrated in Figure \ref{fig:netaware_arcdesign}, the proposed design consists of two independent yet complementary components: a global filtering mechanism implemented as a PreEvictionFilter plugin and a strategy-level enhancement integrated into nodeutilization balance strategies. 
+
+The first component, referred to as the NetworkCostEvictor, operates as a global filter that evaluates eviction candidates before they enter the main eviction stage. The second component extends existing LowNodeUtilization and HighNodeUtilization strategies by introducing network-aware evaluation using the selected destination (overutilize/underutilize) node provided by their algorithm. These components can be deployed independently or in combination within a descheduler profile, providing flexibility in system configuration. 
+
+To ensure consistent behavior across both components, the architecture is built upon three core abstractions. The first is the Cost Provider, which defines how network distance between nodes is computed. This abstraction supports both topology based estimation using node locality (e.g., zone and region) and latency based evaluation using real-time metrics sourced from Prometheus. The second is the Pod Dependency Model, which groups related pods using the network-group label, allowing the system to evaluate communication cost based on interdependent workloads. The third is the Shared Network Cost Library, which provides a unified implementation for cost computation and dependency resolution. Both components rely on this shared library to ensure that eviction decisions are based on consistent evaluation logic. 
+
+The architecture also enforces consistency through profile-level configuration validation. Each plugin defines its own parameters, including threshold values, dependency labels, and cost model settings. However, when both components are enabled within the same profile, the system ensures that they utilize a consistent cost model configuration; otherwise, it raises an error. For example, if the latency based cost evaluation is enabled for the strategy-level component, the global PreEvictionFilter must also be configured to use a latency based cost. This approach is used to prevent inconsistencies in cost evaluation that could otherwise lead to conflicting eviction decisions. 
+
+The overall eviction decision process is governed by a shared evaluation mechanism. For each candidate pod, the system computes the current network cost and compares it with the potential cost across candidate destination nodes. To balance network latency considerations with resource defragmentation objectives, an eviction is permitted only when a sufficient proportion of candidate nodes, as defined by a configurable threshold, provide a lower or equal ($\leq$) network cost compared to the current placement. Otherwise, the eviction is rejected. This threshold based approach is designed to increase the likelihood that the scheduler will subsequently place the pod on a node that maintains or improves network efficiency. 
+
+The following subsections provide a detailed description of each component, including their respective roles, evaluation scopes, and integration within the descheduler pipeline. 
+
+%----------------------------------------------------------------------------- %%
+\subsubsection{Layer 1: Global PreEviction Filter}
+\label{sec:netaware_arcdesign_layer1}
+%----------------------------------------------------------------------------- %%
+TODO: Add more explanation here
+
+%----------------------------------------------------------------------------- %%
+\subsubsection{Layer 2:  NodeUtilization Strategy-Level Enhancement}
+\label{sec:netaware_arcdesign_layer2}
+%----------------------------------------------------------------------------- %%
+TODO: Add more explanation here
+
+%----------------------------------------------------------------------------- %%
+\subsection{Eviction Algorithm}
+\label{sec:netaware_algorithm}
+%----------------------------------------------------------------------------- %%
+
 
 \subsection{Conceptual Architecture}
 \label{sec:nad_conceptual_arch}
