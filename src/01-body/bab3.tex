@@ -80,15 +80,25 @@ Despite this limitation, the topology-based model provides a practical baseline 
 
 \subsubsection{Latency Base Cost Model}
 \label{sec:netaware_latencycostmodel}
-The latency-based cost model provides a more accurate representation of network conditions by incorporating real-time latency measurements between nodes. Unlike the topology-based approach, this model derives network cost directly from observed communication performance, allowing it to adapt to dynamic changes in the cluster environment.
 
-To enable this functionality, the system integrates with a Prometheus-based monitoring infrastructure, which serves as the source of latency metrics. The user must specify the Prometheus endpoint along with a query that extracts node-to-node latency information. For example, latency can be computed using aggregated metrics collected over a time window, such as the average response time between nodes.
+The latency-based cost model provides a more accurate representation of network conditions by incorporating real-time latency measurements between nodes. Unlike the topology-based approach, this model derives network cost directly from observed node-to-node communication performance, allowing it to adapt to dynamic changes in the cluster environment.
 
-In addition to the query, the configuration must define mappings between metric labels and cluster nodes. Specifically, the source and target node labels are used to associate latency measurements with corresponding node pairs. This allows the system to construct a latency matrix representing the communication cost between nodes.
+To enable this functionality, the system integrates with a Prometheus-based monitoring infrastructure, which serves as the source of latency metrics. The user is required to specify a Prometheus endpoint along with a query that extracts node-to-node latency information. Latency values are typically computed using aggregated metrics over a defined time window, such as the average response time between nodes.
 
-Compared to the topology-based model, the latency-based approach offers higher accuracy and reflects real-world network behavior. It is capable of capturing transient conditions such as network congestion or uneven workload distribution, which may significantly impact communication performance. However, this approach introduces additional complexity, as it depends on external monitoring systems and requires proper configuration of metrics collection and querying.
+\begin{figure}
+	\centering
+	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/prometheus-scrape.png}
+	\caption{}
+	\label{fig:netaware_prometheusscrape}
+\end{figure}
 
-Overall, the latency-based cost model is more suitable for environments where network performance is critical and monitoring infrastructure is available, while the topology-based model remains a simpler alternative for baseline deployments. 
+Figure \ref{fig:netaware_prometheusscrape} illustrates the process by which Prometheus collects latency metrics. In this design, Goldenpinger is used as the probing tool to measure node-to-node latency across the cluster. Each node runs an instance of Goldenpinger that actively probes other nodes and exposes the resulting latency metrics. Prometheus periodically scrapes these metrics and stores them as time-series data. While Goldenpinger is used in this implementation, any alternative tool capable of collecting latency data and exposing it in a Prometheus-compatible format can be used.
+
+In addition to the query definition, the configuration must specify mappings between metric labels and cluster nodes. In particular, source and target node labels are used to associate latency measurements with corresponding node pairs. This enables the system to construct a latency matrix representing the communication cost between nodes.
+
+Compared to the topology-based model, the latency-based approach provides higher accuracy and better reflects real-world network behavior. It is capable of capturing transient conditions such as network congestion or uneven workload distribution, which may significantly impact communication performance. However, this approach introduces additional complexity, as it depends on external monitoring infrastructure and requires careful configuration of metric collection and querying.
+
+Overall, the latency-based cost model is more suitable for environments where network performance is a critical concern and monitoring infrastructure is available, whereas the topology-based model remains a simpler alternative for baseline deployments.
 
 %----------------------------------------------------------------------------- %%
 \subsubsection{Consistency Between Layers}
