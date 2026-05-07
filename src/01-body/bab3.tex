@@ -24,15 +24,15 @@ The system has a two-layers plugin architecture. The first layer is a global Pre
 \begin{figure}
 	\centering
 	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/sysoverview-diagram.png}
-	\caption{System overview diagram of the Network-Aware Descheduler Plugin}
+	\caption{Network-Aware plugin high-level design.}
 	\label{fig:netaware_sysoverview}
 \end{figure}
 
-The overall design of the Network-Aware Descheduler plugin is presented in Figure \ref{fig:netaware_sysoverview}. The system has two distinct independent components that can be deployed optionally in the descheduler design. 
+The overall design of the Network-Aware Descheduler plugin is presented in Figure \ref{fig:netaware_sysoverview}. The system has two distinct independent components that can be deployed optionally in the descheduler design. 
 
-The first component is a global PreEvictionFilter plugin, which is the NetworkCostEvictor. To avoid descheduler process resulting higher network costs, it compares eviction candidates current node with all ready nodes in the cluster. This ensures that the communication efficiency at the cluster level is not degraded due to pod migration. 
+The first component is a global PreEvictionFilter plugin, which is the NetworkCostEvictor. To avoid descheduler process resulting higher network costs, it compares eviction candidates current node with all ready nodes in the cluster. This ensures that the communication efficiency at the cluster level is not degraded due to pod migration. 
 
-The second plugin is integrated into node utilization based approaches, such as LowNodeUtilization and HighNodeUtilization. This strategic element performs network-aware filtering by assessing only the selected subset of nodes that are recognized as potential destinations (e.g. overutilize/underutilize node). This enables a more specific evaluation better aligned with the resource balancing goals of the descheduler. 
+The second plugin is integrated into node utilization based approaches, such as LowNodeUtilization and HighNodeUtilization. This strategic element performs network-aware filtering by assessing only the selected subset of nodes that are recognized as potential destinations (e.g. overutilize/underutilize node). This enables a more specific evaluation better aligned with the resource balancing goals of the descheduler. 
 
 Both components use a network cost model \ref{sec:netaware_costmodel} to estimate communication costs between pods. During the eviction process, the algorithm evaluates the cost of the pod's current placement in comparison to alternative placements. If the eviction does not maintain or improve the performance of the network, it is blocked. Otherwise, the eviction is permitted.
 
@@ -43,21 +43,21 @@ Both components use a network cost model \ref{sec:netaware_costmodel} to estimat
 \begin{figure}
 	\centering
 	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/sysarc-diagram.png}
-	\caption{Architecture design diagram of the Network-Aware Descheduler Plugin}
+	\caption{Network-Aware plugin architecture design.}
 	\label{fig:netaware_arcdesign}
 \end{figure}
 
 The detailed architecture of the Network-Aware Descheduler plugin is shown in Figure \ref{fig:netaware_arcdesign} based on the system overview described in Section \ref{sec:netaware_sysoverview}. The architecture enhances the descheduler eviction process with a common network-aware assessment scheme that is uniformly applied to the architectural levels. 
 
-To support this design, the system is structured around three core components. The first component is the network cost model abstracted into Cost Provider, which describes the calculation of the network distance between nodes. The abstraction enables topology-aware estimation based on node locality like region and zone, and latency-aware estimation based on real-time data collected via Prometheus. 
+To support this design, the system is structured around three core components. The first component is the network cost model abstracted into Cost Provider, which describes the calculation of the network distance between nodes. The abstraction enables topology-aware estimation based on node locality like region and zone, and latency-aware estimation based on real-time data collected via Prometheus. 
 
-The second component is the Pod Dependency Model, which enables the system to estimate the cost of communication considering interdependent workloads. This is done by a labeling method, where pods with the same configuration label (by default \textit{network-group}) value are grouped together and regarded as a close dependency in the cost calculation. 
+The second component is the Pod Dependency Model, which enables the system to estimate the cost of communication considering interdependent workloads. This is done by a labeling method, where pods with the same configuration label (by default \textit{network-group}) value are grouped together and regarded as a close dependency in the cost calculation. 
 
-The third component is Shared Network Cost Library, the centralized implementation for cost computation and the eviction decision maker. Both architectural layers use this library to ensure that the same logic is used to analyze network cost, regardless of the scope of evaluation. 
+The third component is Shared Network Cost Library, the centralized implementation for cost computation and the eviction decision maker. Both architectural layers use this library to ensure that the same logic is used to analyze network cost, regardless of the scope of evaluation. 
 
 The eviction decision making process is based on a common evaluation mechanism. The candidate nodes set is different between layers (from all available nodes to strategy selected subsets), but the same decision mechanism is utilized. 
 
-To balance between network latency and resource defragmentation goals, an eviction is allowed only if a given ratio of candidate nodes, which is specified by a configurable threshold, have a network cost lower or equal to ($\leq$) the current placement. Otherwise the eviction is blocked. This threshold-based solution improves the likelihood of the following scheduling decisions to reschedule pods on nodes that do not degrade the network efficiency and still allow for appropriate workload redistribution. 
+To balance between network latency and resource defragmentation goals, an eviction is allowed only if a given ratio of candidate nodes, which is specified by a configurable threshold, have a network cost lower or equal to ($\leq$) the current placement. Otherwise the eviction is blocked. This threshold-based solution improves the likelihood of the following scheduling decisions to reschedule pods on nodes that do not degrade the network efficiency and still allow for appropriate workload redistribution. 
 
 \subsection{Network Cost Model}
 \label{sec:netaware_costmodel}
@@ -68,9 +68,9 @@ To accommodate various deployment situations and accuracy levels, the Network Co
 %----------------------------------------------------------------------------- %%
 The topology-based cost model calculates the network cost based on the node locality information, e.g., zone and region information. This is based on the assumption that the network latency rises with the physical or logical distance of nodes. Thus, the connection between nodes of the same zone is considered cheaper than the communication across zones or regions. 
 
-The model assigns specified costs based on relative position of nodes. A typical arrangement defines three tiers of cost: same-zone, same-region, and cross-region connectivity. For example, the cost of communication between nodes in the same zone is the lowest while the cost of communication across areas is the largest. The model sets defaults cost numbers to reflect this hierarchy: 1 for same-zone, 5 for same-region, 10 for cross-region. These values can be customized through configuration. 
+The model assigns specified costs based on relative position of nodes. A typical arrangement defines three tiers of cost: same-zone, same-region, and cross-region connectivity. For example, the cost of communication between nodes in the same zone is the lowest while the cost of communication across areas is the largest. The model sets defaults cost numbers to reflect this hierarchy: 1 for same-zone, 5 for same-region, 10 for cross-region. These values can be customized through configuration. 
 
-The advantage of this methods is its low processing overhead and independence from external monitoring systems. However, it is based on the simplistic assumption that the network performance is directly proportional to the physical proximity. In practice, this assumption may not always hold, as network latency might be altered by dynamic factors such as node load, congestion, or infrastructure variations.  Nodes within the same zone can sometimes have higher latency than nodes in separate regions. 
+The advantage of this methods is its low processing overhead and independence from external monitoring systems. However, it is based on the simplistic assumption that the network performance is directly proportional to the physical proximity. In practice, this assumption may not always hold, as network latency might be altered by dynamic factors such as node load, congestion, or infrastructure variations.  Nodes within the same zone can sometimes have higher latency than nodes in separate regions. 
 
 However, the topology-based model is a useful baseline for network-aware scheduling when real-time latency information is not accessible or not needed.
 
@@ -84,11 +84,11 @@ To support this capability the system is integrated with a Prometheus based moni
 \begin{figure}
 	\centering
 	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/prometheus-scrape.png}
-	\caption{}
+	\caption{Prometheus scraping architecture for inter-node latency metrics via GoldenPinger DaemonSets.}
 	\label{fig:netaware_prometheusscrape}
 \end{figure}
 
-As seen in Figure \ref{fig:netaware_prometheusscrape}. In this architecture, Goldenpinger is employed as the probing tool to test the node-to-node latency across the cluster. Each node runs an instance of Goldenpinger, which actively probes other nodes and exposes the resulting latency measurements. Prometheus then scrapes these parameters on a regular basis and stores them as time-series data. This version uses Goldenpinger but any other tool that is able to collect latency data and expose it in a Prometheus compatible format can be used.
+As seen in Figure \ref{fig:netaware_prometheusscrape}. In this architecture, Goldenpinger is employed as the probing tool to test the node-to-node latency across the cluster. Each node runs an instance of Goldenpinger, which actively probes other nodes and exposes the resulting latency measurements. Prometheus then scrapes these parameters on a regular basis and stores them as time-series data. This version uses Goldenpinger but any other tool that is able to collect latency data and expose it in a Prometheus compatible format can be used.
 
 Besides the query description, the configuration has to define the mapping between metric labels and cluster nodes. In particular, the latency measurements are associated with the respective source and target node labels. This enables the system to create a delay matrix that specifies the communication cost between the nodes.
 
@@ -106,12 +106,48 @@ If any inconsistency is detected in the cost model configuration, the system per
 
 
 
-
 %----------------------------------------------------------------------------- %%
-\subsection{Eviction Decision Algorithm}
+\subsection{Eviction Decision Workflow and Algorithm}
 \label{sec:netaware_algorithm}
 %----------------------------------------------------------------------------- %%
+\begin{figure}
+	\centering
+	\includegraphics[width=0.3\textwidth]{assets/pics/network-aware/preevict-chaining.png}
+	\caption{Pre-eviction filter chaining.}
+	\label{fig:netaware_preevictchaining}
+\end{figure}
 
+The network-aware eviction decision workflow is implemented within the chaining of descheduler pre-eviction plugins. As shown in Figure \ref{fig:netaware_preevictchaining}, each candidate pod for eviction undergoes a chain of filtering processes before the actual eviction.
 
+The first stage is the built-in \textit{DefaultEvictor} plugin provided by the Kubernetes descheduler framework. This component evaluates several default eviction constraints such as pod state validation, scheduling constraints and node fit requirements to ensure that the pod is eligible for eviction \citep{k8s_descheduler_docs}. If any of these constraints is violated the eviction procedure is cancelled and the pod is skipped. Otherwise the eviction candidate continues to the next phase. 
 
+After passing the default pre-eviction filtering stage,the proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Figure \ref{fig:netaware_preevictalgo}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster. 
 
+\begin{figure}
+	\centering
+	\includegraphics[width=0.3\textwidth]{assets/pics/network-aware/preevict-algorithm.png}
+	\caption{Network-Aware pre-eviction algorithm flow.}
+	\label{fig:netaware_preevictalgo}
+\end{figure}
+
+During the network-aware evaluation phase for each pod, the algorithm verifies whether the pod has the configured dependence label. If there is no dependency label then the eviction is instantly allowed since there is no communication dependency to be considered. Otherwise, the system finds all dependent pods under the same communication group, which is defined as pods with the same dependency label in different replicas or deployments. 
+
+It then computes the network cost between the candidate pod and all dependent pods. This computation is performed for both the current node and all candidate destination nodes. The pool of candidate nodes relies on the architectural layer in use: the global filtering layer analyses all ready nodes in the cluster, while the strategy-level layer evaluates only nodes selected by the balancing strategy (e.g. overutilized/underutilized nodes).
+
+The network cost calculation is formally stated in Equation (\ref{eq:networkcost}). Given a candidate pod \(P\) residing on node \(n\), then the entire communication cost is computed by the summation of network costs between node \(n\) and the nodes where all dependency pods \(d \in D\) are present.
+
+\begin{equation}
+	\func{Cost}{n, P} = \sum_{d \in D} \func{Network}{n, \text{Node}_{d}}
+	\label{eq:networkcost}
+\end{equation}
+
+After computing the network cost for the current node and all candidate nodes, the algorithm evaluates whether the eviction should be permitted using the threshold condition defined in Equation \ref{eq:networkthreshold}.
+
+\begin{equation}
+	{\text{Count}(\text{Cost}(a, P) \leq \text{Cost}(C, P)) } \geq {\text{TotalCandidates}} \cdot \text{MinBetterCandidatesPercent} 
+	\label{eq:networkthreshold}
+\end{equation}
+
+An eviction is allowed only if a sufficient number of candidate nodes provide a network cost lower than or equal to \(\leq\) the current placement cost. The required amount of candidate nodes is controlled by the configurable \textit{MinBetterCandidatesPercent} threshold, which defaults to 50\%. Otherwise the eviction is blocked.
+
+This threshold-based mechanism is designed to increases the probability that the Kubernetes scheduler will subsequently place the pod onto a node that preserves or improves network locality after eviction by requiring a sufficient number of candidate nodes that maintain or improve communication cost.
