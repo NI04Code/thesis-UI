@@ -1,0 +1,99 @@
+Input:
+  N              // set of all cluster nodes
+  config         //* descheduler policy configuration:
+                     { thresholds, targetThresholds,
+                       labelKey, minBetterPct, excludeSameOwner,
+                       costProvider,
+                       L1Enabled, L2Enabled } *//
+
+Output: Evicted pods with network-locality guarantees
+
+// Phase 1: Initialize Cost Provider
+
+if latencyMetrics is configured then
+    matrix (*$\leftarrow$*) QueryPrometheus(query, sourceLabel, targetLabel)
+    costProvider (*$\leftarrow$*) LatencyCostProvider(matrix)
+else
+    costProvider (*$\leftarrow$*) TopologyCostProvider()
+end if
+nodesMap (*$\leftarrow$*) {n.name (*$\rightarrow$*) n | n (*$\in$*) N}
+
+
+// Phase 2: Classify Nodes by Utilization (only apply if L2 enabled)
+
+overutilized (*$\leftarrow$*) (*$\emptyset$*)
+underutilized (*$\leftarrow$*) (*$\emptyset$*)
+for each node n (*$\in$*) N do
+    usage(n) (*$\leftarrow$*) (*$\Sigma$*) requests of all pods on n
+    util(n) (*$\leftarrow$*) usage(n) / allocatable(n) * 100
+    if util(n) > targetThresholds then
+        overutilized (*$\leftarrow$*) overutilized (*$\cup$*) {n}          // for highnodeutilization strategy
+    else if util(n) < thresholds then
+        underutilized (*$\leftarrow$*) underutilized (*$\cup$*) {n}.       // for lownodeutilization strategy
+    end if
+end for
+
+if nodeutilizationStrategy = highnodeutilization then
+    destNodes (*$\leftarrow$*) overutilized
+else if nodeutilizationStrategy = lownodeutilization then
+    destNodes (*$\leftarrow$*) underutilized
+else then
+    destNodes (*$\leftarrow$*) N
+end if
+
+// Phase 3: Select and Filter Candidate Pods
+
+for each node s (*$\in$*) sourceNodes do
+    candidates (*$\leftarrow$*) GetEvictablePods(s)
+    SortByPriority(candidates)             // lowest priority first
+
+    for each pod P (*$\in$*) candidates do
+        if L2Enabled then
+            D (*$\leftarrow$*) FindDependencyPods(P, labelKey, N, excludeSameOwner) 
+            if D (*$\neq$*) (*$\emptyset$*) then
+                currentCost (*$\leftarrow$*) ComputePlacementCost(
+                    nodesMap[P.nodeName], D,
+                    nodesMap, costProvider
+                )
+
+                betterCount (*$\leftarrow$*) 0
+                for each node c (*$\in$*) destNodes do        
+                    candCost (*$\leftarrow$*) ComputePlacementCost(c, D, nodesMap, costProvider)
+                    if candCost (*$\leq$*) currentCost then
+                        betterCount (*$\leftarrow$*) betterCount + 1
+                    end if
+                end for
+                minReq (*$\leftarrow$*) max(1, (*$\lfloor$*)|destNodes| * minBetterPct / 100(*$\rfloor$*))
+                if betterCount < minReq then
+                    continue                  // BLOCK: no good dest
+                end if
+            end if
+        end if
+            
+
+        if L1Enabled then
+            D (*$\leftarrow$*) FindDependencyPods(P, labelKey, N, excludeSameOwner)
+            if D (*$\neq$*) (*$\emptyset$*) then
+                currentCost (*$\leftarrow$*) ComputePlacementCost(   
+                    nodesMap[P.nodeName], D,
+                    nodesMap, costProvider
+                )
+
+                betterCount (*$\leftarrow$*) 0
+                for each node c (*$\in$*) N do               
+                    candCost (*$\leftarrow$*) ComputePlacementCost(c, D, nodesMap, costProvider)
+                    if candCost (*$\leq$) currentCost then
+                        betterCount (*$\leftarrow$*) betterCount + 1
+                    end if
+                end for
+                minReq (*$\leftarrow$*) max(1, (*$\lfloor$*)|N| * minBetterPct / 100(*$\rfloor$*))
+                if betterCount < minReq then                  
+                    continue                        // BLOCK: global filter
+                end if
+            end if
+        end if
+
+        Evict(P)                                    
+
+    end for
+end for

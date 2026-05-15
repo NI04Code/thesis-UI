@@ -121,14 +121,12 @@ The network-aware eviction decision workflow is implemented within the chaining 
 
 The first stage is the built-in \textit{DefaultEvictor} plugin provided by the Kubernetes descheduler framework. This component evaluates several default eviction constraints such as pod state validation, scheduling constraints and node fit requirements to ensure that the pod is eligible for eviction \citep{k8s_descheduler_docs}. If any of these constraints is violated the eviction procedure is cancelled and the pod is skipped. Otherwise the eviction candidate continues to the next phase. 
 
-After passing the default pre-eviction filtering stage,the proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Figure \ref{fig:netaware_preevictalgo}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster. 
+After passing the default pre-eviction filtering stage,the proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Listing \ref{lst:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster. 
 
-\begin{figure}
-	\centering
-	\includegraphics[width=0.3\textwidth]{assets/pics/network-aware/preevict-algorithm.png}
-	\caption{Network-Aware pre-eviction algorithm flow.}
-	\label{fig:netaware_preevictalgo}
-\end{figure}
+\lstinputlisting[
+    caption={Network-aware unified algorithm}, 
+    label={lst:netaware_unified_algorithm}, 
+]{assets/codes/pseudos/netaware-unifiedalgo.psu}
 
 During the network-aware evaluation phase for each pod, the algorithm verifies whether the pod has the configured dependence label. If there is no dependency label then the eviction is instantly allowed since there is no communication dependency to be considered. Otherwise, the system finds all dependent pods under the same communication group, which is defined as pods with the same dependency label in different replicas or deployments. 
 
