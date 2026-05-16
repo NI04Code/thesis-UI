@@ -1,12 +1,15 @@
+Function: NetworkAwareShouldAllowEviction
+─────────────────────────────────────────────────────────
 Input:
-  N              // set of all cluster nodes
-  config         //* descheduler policy configuration:
+    N              // set of all cluster nodes
+    config         //* descheduler policy configuration:
                      { thresholds, targetThresholds,
                        labelKey, minBetterPct, excludeSameOwner,
                        costProvider,
                        L1Enabled, L2Enabled } *//
 
-Output: Evicted pods with network-locality guarantees
+Output: 
+    None
 
 // Phase 1: Initialize Cost Provider
 
@@ -37,7 +40,7 @@ if nodeutilizationStrategy = highnodeutilization then
     destNodes (*$\leftarrow$*) overutilized
 else if nodeutilizationStrategy = lownodeutilization then
     destNodes (*$\leftarrow$*) underutilized
-else then
+else
     destNodes (*$\leftarrow$*) N
 end if
 
