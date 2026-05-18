@@ -1,0 +1,26 @@
+- name: "LowNodeUtilization" # or "HighNodeUtilization"
+  args:
+    # Strategy thresholds
+    thresholds:   
+      cpu: 20
+      memory: 20
+    targetThresholds:
+      cpu: 50
+      memory: 50
+
+    networkAware:
+      networkGroupLabelKey: "network-group"           # Default: "network-group"
+      latencyBase: true                               
+      minBetterCandidatesPercent: 50                  # Default: 50, Range: 1-100
+      excludeSameOwner: true                          # Default: true
+      latencyMetrics:
+        prometheus:
+          # PromQL query that returns a vector of node-to-node latency
+          # values. Each result must have labels identifying the source
+          # and target node names.
+          query: >-
+            avg_over_time(goldpinger_peers_response_time_s_sum[5m])
+            /
+            avg_over_time(goldpinger_peers_response_time_s_count[5m])
+          sourceNodeLabel: "goldpinger_host_name"   # Default: "goldpinger_host_name"
+          targetNodeLabel: "goldpinger_peer_name"   # Default: "goldpinger_peer_name"
