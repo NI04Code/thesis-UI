@@ -28,11 +28,11 @@ The system has a two-layers plugin architecture. The first layer is a global Pre
 	\label{fig:netaware_sysoverview}
 \end{figure}
 
-The overall design of the Network-Aware Descheduler plugin is presented in Figure \ref{fig:netaware_sysoverview}. The system has two distinct independent components that can be deployed optionally in the descheduler design. 
+The overall design of the Network-Aware Descheduler plugin is presented in Figure \ref{fig:netaware_sysoverview}. The system has two distinct independent components that can be deployed optionally as descheduler policy. 
 
-The first component is a global PreEvictionFilter plugin, which is the NetworkCostEvictor. To avoid descheduler process resulting higher network costs, it compares eviction candidates current node with all ready nodes in the cluster. This ensures that the communication efficiency at the cluster level is not degraded due to pod migration. 
+The first component is a global PreEvictionFilter plugin, which is the \textit{NetworkCostEvictor}. To avoid descheduler process resulting higher network costs, it compares eviction candidates current node with all ready nodes in the cluster. This ensures that the communication efficiency at the cluster level is not degraded due to pod migration. 
 
-The second plugin is integrated into node utilization based approaches, such as LowNodeUtilization and HighNodeUtilization. This strategic element performs network-aware filtering by assessing only the selected subset of nodes that are recognized as potential destinations (e.g. overutilize/underutilize node). This enables a more specific evaluation better aligned with the resource balancing goals of the descheduler. 
+The second plugin is integrated into node utilization based approaches, such as \textit{LowNodeUtilization} and \textit{HighNodeUtilization}. This plugin performs network-aware filtering by assessing only the selected subset of nodes that are recognized as potential destinations (e.g. overutilize/underutilize node). This enables a more specific evaluation better aligned with the resource balancing goals of the descheduler. 
 
 Both components use a network cost model \ref{sec:netaware_costmodel} to estimate communication costs between pods. During the eviction process, the algorithm evaluates the cost of the pod's current placement in comparison to alternative placements. If the eviction does not maintain or improve the performance of the network, it is blocked. Otherwise, the eviction is permitted.
 
@@ -49,15 +49,15 @@ Both components use a network cost model \ref{sec:netaware_costmodel} to estimat
 
 The detailed architecture of the Network-Aware Descheduler plugin is shown in Figure \ref{fig:netaware_arcdesign} based on the system overview described in Section \ref{sec:netaware_sysoverview}. The architecture enhances the descheduler eviction process with a common network-aware assessment scheme that is uniformly applied to the architectural levels. 
 
-To support this design, the system is structured around three core components. The first component is the network cost model abstracted into Cost Provider, which describes the calculation of the network distance between nodes. The abstraction enables topology-aware estimation based on node locality like region and zone, and latency-aware estimation based on real-time data collected via Prometheus. 
+To support this design, the system is structured around three core components. The first component is the Network Cost Model abstracted into Cost Provider, which describes the calculation of the network distance between nodes. The abstraction enables topology-aware estimation based on node locality like region and zone, and latency-aware estimation based on real-time data collected via Prometheus. 
 
 The second component is the Pod Dependency Model, which enables the system to estimate the cost of communication considering interdependent workloads. This is done by a labeling method, where pods with the same configuration label (by default \textit{network-group}) value are grouped together and regarded as a close dependency in the cost calculation. 
 
 The third component is Shared Network Cost Library, the centralized implementation for cost computation and the eviction decision maker. Both architectural layers use this library to ensure that the same logic is used to analyze network cost, regardless of the scope of evaluation. 
 
-The eviction decision making process is based on a common evaluation mechanism. The candidate nodes set is different between layers (from all available nodes to strategy selected subsets), but the same decision mechanism is utilized. 
+The eviction decision itself is based on a common evaluation mechanism. The candidate nodes set is different between layers (from all ready nodes to strategy selected subsets), but the same decision mechanism is utilized. 
 
-To balance between network latency and resource defragmentation goals, an eviction is allowed only if a given ratio of candidate nodes, which is specified by a configurable threshold, have a network cost lower or equal to ($\leq$) the current placement. Otherwise the eviction is blocked. This threshold-based solution improves the likelihood of the following scheduling decisions to reschedule pods on nodes that do not degrade the network efficiency and still allow for appropriate workload redistribution. 
+To balance between network latency and resource defragmentation goals, an eviction is allowed only if a given ratio of candidate nodes, which is specified by a configurable threshold, have a network cost lower or equal to ($\leq$) the current placement, otherwise the eviction is blocked. This threshold-based solution improves the likelihood of the following scheduling decisions to reschedule pods on nodes that do not degrade the network efficiency and still allow for appropriate workload redistribution. 
 
 \subsection{Network Cost Model}
 \label{sec:netaware_costmodel}
@@ -102,7 +102,7 @@ In particular, the selection of the cost evaluation approach must be consistent 
 
 An exception to this requirement is the threshold parameter (e.g., \textit{minBetterCandidatesPercent}), which may be configured independently for each component. This allows different levels of strictness to be applied at the global filtering stage and the strategy-level evaluation.
 
-If any inconsistency is detected in the cost model configuration, the system performs validation at the profile level and raises an error. This design ensures that both components operate within a consistent cost model, thereby preventing discrepancies in cost evaluation that could otherwise lead to conflicting eviction decisions. The corresponding configuration parameters are presented in Chapter 4 (see Listing X) TODO: Add yaml config in part 4.
+If any inconsistency is detected in the cost model configuration, the system performs validation at the profile level and raises an error. This design ensures that both components operate within a consistent cost model, thereby preventing discrepancies in cost evaluation that could otherwise lead to conflicting eviction decisions. The corresponding configuration parameters are presented in Section \ref{sec:netaware_config}.
 
 
 
@@ -121,33 +121,90 @@ The network-aware eviction decision workflow is implemented within the chaining 
 
 The first stage is the built-in \textit{DefaultEvictor} plugin provided by the Kubernetes descheduler framework. This component evaluates several default eviction constraints such as pod state validation, scheduling constraints and node fit requirements to ensure that the pod is eligible for eviction \citep{k8s_descheduler_docs}. If any of these constraints is violated the eviction procedure is cancelled and the pod is skipped. Otherwise the eviction candidate continues to the next phase. 
 
-After passing the default pre-eviction filtering stage,the proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Figure \ref{fig:netaware_preevictalgo}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster. 
+After passing the default pre-eviction filtering stage,the proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Listing \ref{lst:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster. 
 
-\begin{figure}
-	\centering
-	\includegraphics[width=0.3\textwidth]{assets/pics/network-aware/preevict-algorithm.png}
-	\caption{Network-Aware pre-eviction algorithm flow.}
-	\label{fig:netaware_preevictalgo}
-\end{figure}
+\lstinputlisting[
+    caption={Network-aware algorithm}, 
+    label={lst:netaware_unified_algorithm}, 
+]{assets/codes/pseudos/netaware-unifiedalgo.psu}
 
-During the network-aware evaluation phase for each pod, the algorithm verifies whether the pod has the configured dependence label. If there is no dependency label then the eviction is instantly allowed since there is no communication dependency to be considered. Otherwise, the system finds all dependent pods under the same communication group, which is defined as pods with the same dependency label in different replicas or deployments. 
+During the network-aware evaluation phase, the system first initializes the network cost provider used for communication cost computation. If latency metrics are configured, the plugin queries Prometheus to obtain node-to-node latency measurements and constructs a latency-based cost provider. Otherwise, the system falls back to the topology-based cost provider, which estimates communication cost using predefined topology distances such as zone and region locality.
 
-It then computes the network cost between the candidate pod and all dependent pods. This computation is performed for both the current node and all candidate destination nodes. The pool of candidate nodes relies on the architectural layer in use: the global filtering layer analyses all ready nodes in the cluster, while the strategy-level layer evaluates only nodes selected by the balancing strategy (e.g. overutilized/underutilized nodes).
+When the strategy-level component is enabled, the system additionally classifies cluster nodes according to their utilization state. Resource utilization is computed by comparing the total requested resources on each node against the allocatable node capacity. Nodes whose utilization exceeds the configured target threshold are classified as overutilized nodes, whereas nodes below the lower utilization threshold are classified as underutilized nodes. Depending on the selected balancing strategy, the candidate destination set is then derived from either the overutilized or underutilized node group. In contrast, the global filtering layer evaluates all ready nodes in the cluster as potential destination candidates.
 
-The network cost calculation is formally stated in Equation (\ref{eq:networkcost}). Given a candidate pod \(P\) residing on node \(n\), then the entire communication cost is computed by the summation of network costs between node \(n\) and the nodes where all dependency pods \(d \in D\) are present.
+For each selected eviction candidate pod, the algorithm first checks whether the pod contains the configured dependency label. If no dependency label is present, the eviction is immediately permitted because no communication dependency needs to be preserved. Otherwise, the system identifies all dependent pods belonging to the same communication group using the \textit{FindDependencyPods} function shown in Listing \ref{lst:netaware_finddeppods_algo}.
+
+\lstinputlisting[
+    caption={\textit{FindDependencyPods} function}, 
+    label={lst:netaware_finddeppods_algo}, 
+]{assets/codes/pseudos/netaware-finddeppods.psu}
+\lstinputlisting[
+    caption={\textit{HasSameOwner} function}, 
+    label={lst:netaware_hasowner_algo}, 
+]{assets/codes/pseudos/netaware-hasowner.psu}
+
+The \textit{FindDependencyPods} function discovers communication dependencies by examining all pods across cluster nodes and comparing their configured dependency labels. Pods sharing the same dependency label are considered part of the same communication group. During this process, the algorithm excludes the evaluated pod itself and may optionally exclude pods managed by the same controller, such as replicas belonging to the same Deployment, StatefulSet, or ReplicaSet by evaluating \textit{HasSameOwner} function shown in Listing \ref{lst:netaware_hasowner_algo}. This behavior is controlled through the \textit{excludeSameOwner} configuration parameter. The ownership relationship is determined by comparing Kubernetes owner references between pods.
+
+After dependency discovery, the algorithm computes the communication cost between the evaluated pod and all dependency pods using the \textit{ComputePlacementCost} procedure shown in Listing \ref{lst:netaware_computeplacement_algo}. This procedure evaluates the communication cost for both the current node placement and all candidate destination nodes. The set of evaluated candidate nodes depends on the architectural layer being used. The global filtering layer evaluates all ready nodes in the cluster, whereas the strategy-level layer evaluates only the nodes selected by the balancing strategy.
+
+\lstinputlisting[
+    caption={\textit{ComputePlacementCost} function}, 
+    label={lst:netaware_computeplacement_algo}, 
+]{assets/codes/pseudos/netaware-computecost.psu}
+
+The network cost calculation performed by the \textit{ComputePlacementCost} procedure is formally defined in Equation (\ref{eq:networkcost}). Given a candidate pod $P$ residing on node $n$, the total communication cost is calculated as the summation of network costs between node $n$ and the nodes hosting all dependency pods $d \in D$.
 
 \begin{equation}
-	\func{Cost}{n, P} = \sum_{d \in D} \func{Network}{n, \text{Node}_{d}}
-	\label{eq:networkcost}
+\func{Cost}{n, P} = \sum_{d \in D} \func{Network}{n, \text{Node}_{d}}
+\label{eq:networkcost}
 \end{equation}
 
-After computing the network cost for the current node and all candidate nodes, the algorithm evaluates whether the eviction should be permitted using the threshold condition defined in Equation \ref{eq:networkthreshold}.
+The \textit{ComputePlacementCost} procedure iterates through all dependency pods and retrieves the node hosting each dependency pod. Using the configured cost provider, the algorithm computes the pairwise communication cost between the candidate destination node and each dependency node. The resulting costs are accumulated to produce the total placement cost for the evaluated node.
+
+After computing the communication cost for the current placement and all candidate nodes, the algorithm evaluates whether the eviction satisfies the configured threshold condition. For each candidate node, the computed candidate cost is compared against the current placement cost. The system then counts the number of candidate nodes whose communication cost is lower than or equal to the current placement cost.
+
+The eviction decision is determined using the threshold condition defined in Equation (\ref{eq:networkthreshold}).
 
 \begin{equation}
-	{\text{Count}(\text{Cost}(a, P) \leq \text{Cost}(C, P)) } \geq {\text{TotalCandidates}} \cdot \text{MinBetterCandidatesPercent} 
-	\label{eq:networkthreshold}
+{\text{Count}(\text{Cost}(C, P) \leq \text{Cost}(a, P))}
+\geq
+{\text{TotalCandidates}} \cdot \text{MinBetterCandidatesPercent}
+\label{eq:networkthreshold}
 \end{equation}
 
-An eviction is allowed only if a sufficient number of candidate nodes provide a network cost lower than or equal to \(\leq\) the current placement cost. The required amount of candidate nodes is controlled by the configurable \textit{MinBetterCandidatesPercent} threshold, which defaults to 50\%. Otherwise the eviction is blocked.
+An eviction is permitted only if the number of candidate nodes satisfying the condition exceeds the minimum threshold defined by \textit{MinBetterCandidatesPercent}, which defaults to 50\%. Otherwise, the eviction is rejected.
 
-This threshold-based mechanism is designed to increases the probability that the Kubernetes scheduler will subsequently place the pod onto a node that preserves or improves network locality after eviction by requiring a sufficient number of candidate nodes that maintain or improve communication cost.
+This threshold-based mechanism is intended to balance workload redistribution objectives with communication efficiency. By requiring a sufficient proportion of candidate nodes to maintain or improve network cost, the algorithm increases the likelihood that the Kubernetes scheduler will subsequently place the evicted pod onto a node that preserves or improves network locality after rescheduling.
+
+%----------------------------------------------------------------------------- %%
+\subsection{Plugin Configuration}
+\label{sec:netaware_config}
+%----------------------------------------------------------------------------- %%
+The configuration structure of the proposed Network-Aware Descheduler policy consists of two independent configuration corresponding to the two layers architectural components discussed in Section \ref{sec:netaware_sysoverview} and \ref{sec:netaware_arcdesign}. The first layer configures the global \textit{NetworkCostEvictor} plugin operating at the \textit{PreEvictionFilter} phases, while the second layer extends node utilization balancing strategies with network-aware evaluation capabilities.
+
+\lstinputlisting[
+    caption={Layer 1: Global preEvictionFilter configuration}, 
+    label={lst:netaware_l1config},
+]{assets/codes/pseudos/netaware-configL1.psu}
+
+Listing \ref{lst:netaware_l1config} show the \textit{NetworkCostEvictor} configuration that defines the behavior of the global network-aware filtering mechanism. This component evaluates candidate pod evictions against all ready nodes in the cluster before the eviction is permitted. The configuration includes parameters for dependency identification, minimum threshold percentage, pods ownership filtering flag, and optional latency-based cost evaluation through Prometheus metrics.
+
+The \textit{networkGroupLabelKey} parameter specifies the label key used to identify communication groups between pods. Pods sharing the same label value are treated as interdependent workloads during network cost evaluation. The \textit{minBetterCandidatesPercent} parameter controls the strictness of the global filtering stage by defining the minimum percentage of candidate nodes that must provide a lower or equal communication cost before eviction is allowed. The \textit{excludeSameOwner} parameter determines whether replicas managed by the same Kubernetes controller are excluded from dependency discovery.
+
+The optional \textit{latencyMetrics} section enables latency-based communication cost evaluation using Prometheus metrics. The configuration defines the PromQL query used to retrieve node-to-node latency measurements together with the source and destination node label mappings required to construct the latency matrix used during cost evaluation.
+
+\lstinputlisting[
+    caption={Layer 2: NodeUtilization extended configuration}, 
+    label={lst:netaware_l2config},
+]{assets/codes/pseudos/netaware-configL2.psu}
+
+The second configuration \ref{lst:netaware_l2config} extends node utilization strategies such as \textit{LowNodeUtilization} and \textit{HighNodeUtilization} with network-aware filtering capabilities. In addition to the standard resource balancing parameters such as \textit{thresholds} and \textit{targetThresholds}, the strategy exposes an optional \textit{networkAware} configuration block. When this block is removed, the strategy behaves identically to the default Kubernetes descheduler implementation without network-aware evaluation.
+
+The \textit{networkAware} section defines the network cost evaluation behavior used during the strategy-level eviction filtering stage. Similar to the global filtering layer, this configuration supports dependency identification, minimum threshold percentage, pods ownership filtering flag, and multiple cost evaluation approaches. Unlike the global filtering layer, however, the strategy-level component evaluates only the subset of candidate destination nodes selected by the balancing strategy rather than all ready nodes in the cluster.
+
+The configuration supports two mutually exclusive cost evaluation modes: \textit{topologyBase} and \textit{latencyBase}. The topology-based mode uses predefined locality weights without the need for any external monitoring infrastructure, whereas the latency-based mode derives communication cost from real-time Prometheus metrics. When latency-based evaluation is enabled, the configuration must additionally provide the Prometheus query and node label mappings required to retrieve node-to-node latency measurements.
+
+As discussed in Section \ref{sec:netaware_costmodelconsistency}, several configuration parameters must remain consistent when both architectural layers are enabled at the same time within the same descheduler profile. In particular, the dependency label configuration, the selected cost evaluation model, the Prometheus query definition, and the source and destination node label mappings must be identical across both layers. This ensures that both components evaluate network cost using the same communication model and underlying latency data. 
+
+The only exception to this consistency requirement is the \textit{minBetterCandidatesPercent} parameter, which may be configured differently for each layer. This enables the global filtering stage and the strategy-level filtering stage to apply different levels of strictness during eviction evaluation. The system validates these configuration constraints during profile initialization and rejects invalid configurations that could result in inconsistent network cost evaluation behaviour between architectural layers.
+
