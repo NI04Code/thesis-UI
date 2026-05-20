@@ -1,160 +1,284 @@
-%-----------------------------------------------------------------------------%
-\chapter{System Design and Experimental Methodology}
+%----------------------------------------------------------------------------- %%
+\chapter{\babTiga}
 \label{bab:3}
-%-----------------------------------------------------------------------------%
-This chapter describes the proposed real-usage-aware descheduler design and the experimental methodology used to evaluate it. The proposed system keeps the default Kubernetes scheduler unchanged and extends the descheduler decision process so that eviction candidates are selected using observed runtime resource usage. This separation is deliberate: the descheduler is responsible for identifying useful corrective evictions, while the final pod placement remains controlled by the existing request-based \texttt{kube-scheduler}.
+%----------------------------------------------------------------------------- %%
+This chapter presents the design and methodology for the custom Kubernetes Descheduler policies developed in this research. The design has three related parts. First, the Resource Defragmentation policy uses Resource Imbalance Index (RII) and TOPSIS to select eviction candidates that can reduce fragmented CPU-memory capacity. Second, the real-usage extension replaces request-only scoring with runtime usage signals and evaluates EWMA smoothing for noisy workload metrics. Third, the Network-Aware Evictor acts as a guardrail so that consolidation decisions do not unnecessarily worsen communication locality.
 
-The chapter is organized as follows. Section~\ref{sec:real_usage_scope} defines the design scope and the scheduling limitation that must be handled. Section~\ref{sec:real_usage_architecture} presents the proposed architecture. Section~\ref{sec:real_usage_model} explains the real-usage resource model and scoring method. Section~\ref{sec:real_usage_eviction_algorithm} describes the eviction feasibility guard and decision flow. Finally, Section~\ref{sec:real_usage_experiment_design} presents the phased experimental plan.
+The proposed system keeps the default \texttt{kube-scheduler} unchanged. The descheduler decides which Pods are worth evicting, while the scheduler remains responsible for final placement after eviction. This separation is important because Kubernetes scheduling feasibility is still based mainly on declared resource requests. Therefore, every eviction decision must consider both the expected improvement in RII/TOPSIS score and the probability that the evicted Pod can be scheduled safely on a useful non-origin Node.
 
+%----------------------------------------------------------------------------- %%
+\section{Resource Defragmentation Policy Design}
+\label{sec:imbalanceindex_design}
+%----------------------------------------------------------------------------- %%
+The Resource Defragmentation policy targets multi-resource fragmentation in which a cluster still has enough aggregate CPU and memory, but the free capacity is scattered across Nodes in combinations that cannot fit an incoming workload. The policy periodically observes the current cluster state, computes an imbalance score for each Node, ranks eligible Pods, and evicts a limited number of candidates so that the scheduler can repack the workload.
 
-%-----------------------------------------------------------------------------%
-\section{Design Scope}
-\label{sec:real_usage_scope}
-%-----------------------------------------------------------------------------%
-The primary design choice in this thesis is to implement a real-usage-aware descheduler while preserving the default Kubernetes scheduler. This choice is referred to as Option A in the design discussion. The descheduler uses runtime metrics to decide whether a running pod should be evicted, but it does not replace or modify the \texttt{kube-scheduler}. As a result, the system can be evaluated as an extension of the existing Kubernetes descheduler framework rather than as a full scheduler replacement.
-
-This scope is important because Kubernetes normally schedules pods based on declared resource requests, not on their current runtime usage. A pod can therefore consume less CPU or memory than requested, yet still be difficult to reschedule if its request is large relative to the remaining allocatable resources on other nodes. The proposed descheduler must explicitly account for this mismatch. It is not sufficient to evict a pod only because its observed usage suggests that moving it would improve balance; the system must also verify that there is at least one non-origin node that can satisfy the pod request and is expected to improve the real-usage score after placement.
-
-The fallback design, referred to as Option C, is a custom real-usage-aware scheduler. This option would allow the scheduling decision itself to use runtime usage or target-aware placement logic. However, it increases implementation scope because both eviction and placement behavior must be changed. Therefore, Option C is treated as future work or a fallback if the descheduler-only approach cannot produce measurable improvement. A third alternative, temporarily mutating pod affinity or scheduling constraints during rescheduling, is excluded from the design because it adds operational complexity and can interfere with existing workload specifications.
-
-
-%-----------------------------------------------------------------------------%
-\section{System Architecture}
-\label{sec:real_usage_architecture}
-%-----------------------------------------------------------------------------%
-The proposed system extends the descheduler cycle with four logical components: a metrics collector, a usage estimator, a candidate ranking module, and a target-aware feasibility guard. The overall control flow remains consistent with the Kubernetes descheduler model, where policies periodically inspect cluster state and evict selected pods through the Kubernetes eviction API~\citep{k8s_descheduler_docs}.
-
-\begin{enumerate}
-    \item \textbf{Metrics Collector.} The collector obtains current pod and node usage metrics. The initial implementation uses \texttt{metrics-server} because it is lightweight and already provides Kubernetes resource metrics through the resource metrics API~\citep{k8s_metrics_server}. Prometheus is considered as an alternative or complementary source for experiments that require a longer history or more flexible queries~\citep{prometheus_docs}. A cAdvisor-based source may also be evaluated as a comparison point when reproducing approaches from related work.
-    \item \textbf{Usage Estimator.} The estimator converts raw metrics into the usage values consumed by the policy. Two variants are considered: direct usage, which uses the latest observed value, and exponentially weighted moving average (EWMA), which smooths short-term spikes before scoring.
-    \item \textbf{Candidate Ranking Module.} The ranking module computes a real-usage imbalance score and ranks candidate pods according to the expected improvement produced by evicting them from their current node.
-    \item \textbf{Target-Aware Feasibility Guard.} Before eviction, the guard checks whether the candidate pod has at least one feasible non-origin target node according to Kubernetes request-based capacity and whether projected placement on that target improves the real-usage score. This component reduces the risk of evicting pods that are likely to become Pending or return without benefit.
-\end{enumerate}
-
-The architecture intentionally does not assume that the scheduler will choose the best projected target. The feasibility guard is used as a safety condition, not as a guarantee of final placement. After eviction, the default scheduler may place the pod on a better node, return it to the origin node, place it on another node without improving the score, or leave it Pending if no request-feasible placement is available at scheduling time. These outcomes are measured explicitly in the experiments.
-
-
-%-----------------------------------------------------------------------------%
-\section{Real-Usage Resource Model}
-\label{sec:real_usage_model}
-%-----------------------------------------------------------------------------%
-Let $N$ be the set of nodes and $P_n$ be the set of pods running on node $n$. For each resource dimension $r$, such as CPU or memory, the observed usage of pod $p$ is denoted by $u_{p,r}$. The capacity of node $n$ for resource $r$ is denoted by $C_{n,r}$. The real-usage utilization of node $n$ for resource $r$ is then defined as:
+For each Node \(n\), let \(U_{n,cpu}\) and \(U_{n,mem}\) denote CPU and memory utilization ratios. In the request-based variant, these ratios are computed from Kubernetes resource requests. In the actual-usage variants, they are computed from runtime metrics. The Resource Imbalance Index for Node \(n\) is defined as:
 
 \begin{equation}
-    U_{n,r} = \frac{\sum_{p \in P_n} u_{p,r}}{C_{n,r}}
-    \label{equ:real_usage_utilization}
+    RII_n = U_{n,cpu} - U_{n,mem}
+    \label{eq:rii_node}
 \end{equation}
 
-For the direct usage variant, $u_{p,r}$ is taken directly from the latest available metric sample. For the EWMA variant, the usage estimate $\hat{u}_{p,r}^{(t)}$ at time $t$ is computed as:
+A Node with \(RII_n\) close to zero has balanced CPU-memory usage. A large positive value indicates relatively high CPU usage compared with memory usage, while a large negative value indicates the opposite. The policy uses \(|RII_n|\) as an indicator of stranded capacity. Because RII alone does not prove that a fragmentation problem has affected scheduling, the experiments also measure probe Pod schedulability, Pending state, and post-eviction relocation outcome.
+
+TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~\citep{topsis_1981}. Candidate Pods can be evaluated using criteria such as contribution to the origin Node imbalance, projected score improvement after removal, request feasibility on target Nodes, expected disruption, and optional network-locality risk. The preferred candidate is the Pod that is closest to the ideal solution and farthest from the negative ideal solution.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.75cm,
+        box/.style={draw, rounded corners=2pt, align=center, minimum width=3.2cm, minimum height=0.9cm, font=\small},
+        wide/.style={draw, rounded corners=2pt, align=center, minimum width=4.2cm, minimum height=0.9cm, font=\small},
+        arrow/.style={->, thick}
+    ]
+        \node[box, fill=gray!10] (state) {Cluster state\\Pods and Nodes};
+        \node[box, fill=blue!8, right=of state] (metrics) {Resource input\\requests or usage};
+        \node[box, fill=blue!8, right=of metrics] (rii) {Compute\\\(RII_n\)};
+        \node[wide, fill=yellow!12, below=of rii] (topsis) {TOPSIS candidate ranking\\benefit, risk, disruption};
+        \node[wide, fill=orange!12, left=of topsis] (guard) {Target feasibility guard\\non-origin Node fit};
+        \node[box, fill=green!10, left=of guard] (evict) {Evict best\\safe candidate};
+        \node[box, fill=gray!10, below=of guard] (sched) {Default\\kube-scheduler};
+        \node[wide, fill=gray!10, below=of topsis] (observe) {Observe outcome\\moved, returned, Pending};
+
+        \draw[arrow] (state) -- (metrics);
+        \draw[arrow] (metrics) -- (rii);
+        \draw[arrow] (rii) -- (topsis);
+        \draw[arrow] (topsis) -- (guard);
+        \draw[arrow] (guard) -- (evict);
+        \draw[arrow] (evict) -- (sched);
+        \draw[arrow] (sched) -- (observe);
+        \draw[arrow] (observe.east) -- ++(1.0,0) |- (state.south);
+    \end{tikzpicture}
+    \caption{Resource Defragmentation flow using RII, TOPSIS, and a target feasibility guard.}
+    \label{fig:rii_topsis_flow}
+\end{figure}
+
+Figure~\ref{fig:rii_topsis_flow} summarizes the policy flow. The feasibility guard is deliberately placed after candidate ranking because a high-scoring Pod is not useful if it cannot be rescheduled safely. A candidate Pod \(p\) from origin Node \(n_o\) is considered useful only if at least one non-origin target Node \(n_t\) satisfies the Pod request and is projected to reduce the resource imbalance score after placement.
+
+%----------------------------------------------------------------------------- %%
+\section{Real-Usage and EWMA Extension}
+\label{sec:real_usage_design}
+%----------------------------------------------------------------------------- %%
+The request-based Resource Defragmentation policy follows the same input model used by the default scheduler. This is safe for scheduling feasibility, but it can misrepresent the actual runtime state when a Pod requests more resources than it currently uses or when bursty workloads change rapidly. Prior load-aware Kubernetes orchestration work motivates the use of runtime CPU, memory, network, and disk telemetry for scheduling or descheduling decisions~\citep{marchese2024loadaware,marchese2025enhancing}.
+
+The real-usage extension introduces a metrics path that can read current usage from \texttt{metrics-server}, Prometheus, kubelet statistics, or another runtime telemetry source. For each resource \(r\), the real-usage utilization of Node \(n\) is defined as:
+
+\begin{equation}
+    U_{n,r}^{actual} = \frac{\sum_{p \in P_n} u_{p,r}}{C_{n,r}}
+    \label{eq:actual_usage_utilization}
+\end{equation}
+
+where \(u_{p,r}\) is the observed usage of Pod \(p\) for resource \(r\), \(P_n\) is the set of Pods on Node \(n\), and \(C_{n,r}\) is Node capacity. This value can replace request-based utilization inside the RII and TOPSIS scoring path. However, actual usage can be noisy. A single CPU or memory spike should not automatically trigger eviction, because eviction disrupts a running workload and may not improve the final scheduler outcome.
+
+To reduce short-term noise, the EWMA variant computes a smoothed estimate:
 
 \begin{equation}
     \hat{u}_{p,r}^{(t)} = \alpha u_{p,r}^{(t)} + (1 - \alpha)\hat{u}_{p,r}^{(t-1)}
-    \label{equ:ewma_usage}
+    \label{eq:ewma_usage}
 \end{equation}
 
-where $\alpha$ controls the weight assigned to the newest observation. A higher $\alpha$ makes the policy more responsive to recent changes, while a lower $\alpha$ produces a smoother but slower signal. The EWMA variant is included because descheduler actions are disruptive; a policy that reacts too strongly to temporary spikes may evict pods unnecessarily.
+where \(\alpha\) controls responsiveness to the latest observation. A higher \(\alpha\) reacts faster but is more sensitive to spikes, while a lower \(\alpha\) produces a steadier signal. Prior cloud and container resource-management studies use exponential smoothing or related time-series smoothing methods to improve resource prediction and reduce noisy autoscaling or placement decisions~\citep{wang2021predicting,hassan2020integrated,zhang2015service,xie2020realtime}.
 
-To evaluate imbalance, the policy compares node utilization across resource dimensions. One simple cluster-level imbalance score is defined as the sum of per-resource spread across nodes:
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.65cm,
+        box/.style={draw, rounded corners=2pt, align=center, minimum width=3.4cm, minimum height=0.9cm, font=\small},
+        wide/.style={draw, rounded corners=2pt, align=center, minimum width=4.8cm, minimum height=0.9cm, font=\small},
+        arrow/.style={->, thick}
+    ]
+        \node[box, fill=gray!10] (backend) {Metrics backend\\metrics-server / Prometheus};
+        \node[wide, fill=blue!8, below left=1.0cm and 0.5cm of backend] (tight) {E4 tight mode\\Descheduler reads metrics\\and computes EWMA};
+        \node[wide, fill=green!10, below right=1.0cm and 0.5cm of backend] (agent) {E5 loose mode\\Monitoring agent keeps\\EWMA state};
+        \node[wide, fill=green!10, below=of agent] (publish) {Published state\\Node annotation / ConfigMap / CRD};
+        \node[wide, fill=yellow!12, below=1.1cm of backend] (policy) {RII + TOPSIS scoring\\using smoothed usage};
+        \node[box, fill=orange!12, below=of policy] (eviction) {Eviction decision};
+
+        \draw[arrow] (backend) -- (tight);
+        \draw[arrow] (backend) -- (agent);
+        \draw[arrow] (agent) -- (publish);
+        \draw[arrow] (tight) -- (policy);
+        \draw[arrow] (publish) -- (policy);
+        \draw[arrow] (policy) -- (eviction);
+    \end{tikzpicture}
+    \caption{EWMA integration alternatives for actual-usage-aware descheduling.}
+    \label{fig:ewma_architecture}
+\end{figure}
+
+Figure~\ref{fig:ewma_architecture} shows the two EWMA architectures evaluated in this thesis. The tight mode computes EWMA directly in or near the descheduler logic. This is simpler, but if the descheduler runs as a CronJob, EWMA state must be persisted outside the process. The loose mode uses a long-running monitoring agent to maintain EWMA state and publish the latest values for the descheduler to consume. This aligns with monitoring-agent designs in prior load-aware Kubernetes work and avoids resetting the smoothing history on each descheduler run~\citep{marchese2024loadaware,marchese2025enhancing}.
+
+%----------------------------------------------------------------------------- %%
+\section{Eviction Feasibility Guard}
+\label{sec:real_usage_eviction_algorithm}
+%----------------------------------------------------------------------------- %%
+The descheduler cannot assume that the default scheduler will place an evicted Pod on the best projected target. Therefore, the policy applies a feasibility guard before eviction. The guard evaluates only non-origin target Nodes because returning the Pod to the same Node does not improve fragmentation and only adds disruption.
+
+For a candidate Pod \(p\) currently running on Node \(n_o\), a target Node \(n_t\) is considered useful if it satisfies two conditions:
+
+\begin{enumerate}
+    \item \textbf{Request feasibility.} The target Node has enough allocatable requested capacity for the Pod according to Kubernetes scheduling constraints.
+    \item \textbf{Projected improvement.} Moving the Pod from \(n_o\) to \(n_t\) is expected to reduce \(|RII|\), improve the TOPSIS objective, or meet a configured minimum improvement threshold.
+\end{enumerate}
+
+This guard can reduce the number of evictions, but that behavior is intentional. The policy should prefer no action over an eviction that is likely to leave the Pod Pending, return it to the origin Node, or produce no measurable fragmentation improvement.
+
+%----------------------------------------------------------------------------- %%
+\section{Network-Aware Evictor Policy Design}
+\label{sec:netaware_policydesign}
+%----------------------------------------------------------------------------- %%
+We also propose the Network-Aware Descheduler policy to improve the pod eviction decisions in Kubernetes by considering the network cost factors. Different from the default descheduler that mainly considers the resource consumption, this policy considers the communication efficiency between the pods to avoid the performance deterioration caused by poor network locality.
+
+The system has a two-layers plugin architecture. The first layer is a global PreEvictionFilter which is a safety device to prevent evictions that would increase the total network cost across all candidate nodes. The second layer is incorporated in node utilization strategies, offering a more accurate filtering mechanism by only analyzing the destination nodes selected by the strategy.
+
+%----------------------------------------------------------------------------- %%
+\subsection{System Overview}
+\label{sec:netaware_sysoverview}
+%----------------------------------------------------------------------------- %%
+\begin{figure}
+	\centering
+	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/sysoverview-diagram.png}
+	\caption{Network-Aware plugin high-level design.}
+	\label{fig:netaware_sysoverview}
+\end{figure}
+
+The overall design of the Network-Aware Descheduler plugin is presented in Figure \ref{fig:netaware_sysoverview}. The system has two distinct independent components that can be deployed optionally in the descheduler design.
+
+The first component is a global PreEvictionFilter plugin, which is the NetworkCostEvictor. To avoid descheduler process resulting higher network costs, it compares eviction candidates current node with all ready nodes in the cluster. This ensures that the communication efficiency at the cluster level is not degraded due to pod migration.
+
+The second plugin is integrated into node utilization based approaches, such as LowNodeUtilization and HighNodeUtilization. This strategic element performs network-aware filtering by assessing only the selected subset of nodes that are recognized as potential destinations (e.g. overutilize/underutilize node). This enables a more specific evaluation better aligned with the resource balancing goals of the descheduler.
+
+Both components use a network cost model \ref{sec:netaware_costmodel} to estimate communication costs between pods. During the eviction process, the algorithm evaluates the cost of the pod's current placement in comparison to alternative placements. If the eviction does not maintain or improve the performance of the network, it is blocked. Otherwise, the eviction is permitted.
+
+%----------------------------------------------------------------------------- %%
+\subsection{Architecture Design}
+\label{sec:netaware_arcdesign}
+%----------------------------------------------------------------------------- %%
+\begin{figure}
+	\centering
+	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/sysarc-diagram.png}
+	\caption{Network-Aware plugin architecture design.}
+	\label{fig:netaware_arcdesign}
+\end{figure}
+
+The detailed architecture of the Network-Aware Descheduler plugin is shown in Figure \ref{fig:netaware_arcdesign} based on the system overview described in Section \ref{sec:netaware_sysoverview}. The architecture enhances the descheduler eviction process with a common network-aware assessment scheme that is uniformly applied to the architectural levels.
+
+To support this design, the system is structured around three core components. The first component is the network cost model abstracted into Cost Provider, which describes the calculation of the network distance between nodes. The abstraction enables topology-aware estimation based on node locality like region and zone, and latency-aware estimation based on real-time data collected via Prometheus.
+
+The second component is the Pod Dependency Model, which enables the system to estimate the cost of communication considering interdependent workloads. This is done by a labeling method, where pods with the same configuration label (by default \textit{network-group}) value are grouped together and regarded as a close dependency in the cost calculation.
+
+The third component is Shared Network Cost Library, the centralized implementation for cost computation and the eviction decision maker. Both architectural layers use this library to ensure that the same logic is used to analyze network cost, regardless of the scope of evaluation.
+
+The eviction decision making process is based on a common evaluation mechanism. The candidate nodes set is different between layers (from all available nodes to strategy selected subsets), but the same decision mechanism is utilized.
+
+To balance between network latency and resource defragmentation goals, an eviction is allowed only if a given ratio of candidate nodes, which is specified by a configurable threshold, have a network cost lower or equal to (\(\leq\)) the current placement. Otherwise the eviction is blocked. This threshold-based solution improves the likelihood of the following scheduling decisions to reschedule pods on nodes that do not degrade the network efficiency and still allow for appropriate workload redistribution.
+
+\subsection{Network Cost Model}
+\label{sec:netaware_costmodel}
+%----------------------------------------------------------------------------- %%
+To accommodate various deployment situations and accuracy levels, the Network Cost Model employs two distinct methodologies for cost computation: a topology-based cost model and a latency-based cost model. Both methodologies are encompassed inside the Cost Provider abstraction and can be chosen via configuration, as detailed in Chapter \ref{sec:netaware_arcdesign}. The topology-based model offers a lightweight and static assessment, whereas the latency-based model facilitates a dynamic and measurement-driven evaluation grounded in real-time network conditions.
+
+\subsubsection{Topology Base Cost Model}
+\label{sec:netaware_topologycostmodel}
+%----------------------------------------------------------------------------- %%
+The topology-based cost model calculates the network cost based on the node locality information, e.g., zone and region information. This is based on the assumption that the network latency rises with the physical or logical distance of nodes. Thus, the connection between nodes of the same zone is considered cheaper than the communication across zones or regions.
+
+The model assigns specified costs based on relative position of nodes. A typical arrangement defines three tiers of cost: same-zone, same-region, and cross-region connectivity. For example, the cost of communication between nodes in the same zone is the lowest while the cost of communication across areas is the largest. The model sets defaults cost numbers to reflect this hierarchy: 1 for same-zone, 5 for same-region, 10 for cross-region. These values can be customized through configuration.
+
+The advantage of this methods is its low processing overhead and independence from external monitoring systems. However, it is based on the simplistic assumption that the network performance is directly proportional to the physical proximity. In practice, this assumption may not always hold, as network latency might be altered by dynamic factors such as node load, congestion, or infrastructure variations. Nodes within the same zone can sometimes have higher latency than nodes in separate regions.
+
+However, the topology-based model is a useful baseline for network-aware scheduling when real-time latency information is not accessible or not needed.
+
+\subsubsection{Latency Base Cost Model}
+\label{sec:netaware_latencycostmodel}
+
+The latency-based cost model computes the network cost according to the observed node-to-node communication performance, which can provide a more accurate representation of the network conditions by considering the real-time latency between nodes and can adapt to the dynamic changes in the cluster environment by capturing temporary factors like network congestion or unequal workload allocation, which may dramatically affect the communication performance.
+
+To support this capability the system is integrated with a Prometheus based monitoring infrastructure that provides the latency metrics. The user must provide a Prometheus endpoint and a query for fetching node-to-node latency details. Latency numbers are usually derived from aggregated data across a certain time window (e.g. the average response time between nodes).
+
+\begin{figure}
+	\centering
+	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/prometheus-scrape.png}
+	\caption{Prometheus scraping architecture for inter-node latency metrics via GoldenPinger DaemonSets.}
+	\label{fig:netaware_prometheusscrape}
+\end{figure}
+
+As shown in Figure \ref{fig:netaware_prometheusscrape}, Goldenpinger is employed as the probing tool to test the node-to-node latency across the cluster. Each node runs an instance of Goldenpinger, which actively probes other nodes and exposes the resulting latency measurements. Prometheus then scrapes these parameters on a regular basis and stores them as time-series data. This version uses Goldenpinger, but any other tool that is able to collect latency data and expose it in a Prometheus-compatible format can be used.
+
+Besides the query description, the configuration has to define the mapping between metric labels and cluster nodes. In particular, the latency measurements are associated with the respective source and target node labels. This enables the system to create a delay matrix that specifies the communication cost between the nodes.
+
+%----------------------------------------------------------------------------- %%
+\subsubsection{Consistency Between Layers}
+\label{sec:netaware_costmodelconsistency}
+%----------------------------------------------------------------------------- %%
+The proposed architecture enforces consistency between the global PreEvictionFilter and the strategy-level component through profile-level configuration validation. Although each plugin exposes its own set of configurable parameters including threshold values, dependency labels, and cost model settings, specific elements related to network cost computation must remain aligned when both components are enabled within the same descheduler profile.
+
+In particular, the selection of the cost evaluation approach must be consistent across both layers. When latency based cost evaluation is selected, both components are required to utilize identical Prometheus query definitions and consistent node label mappings, such as the source and target node identifiers. This ensures that network cost is derived from the same underlying observations and measurement semantics. Similarly, the dependency identification mechanism, defined through the \textit{network-group} label, must be consistently configured to guarantee uniform grouping of interdependent pods during cost evaluation.
+
+An exception to this requirement is the threshold parameter (e.g., \textit{minBetterCandidatesPercent}), which may be configured independently for each component. This allows different levels of strictness to be applied at the global filtering stage and the strategy-level evaluation.
+
+If any inconsistency is detected in the cost model configuration, the system performs validation at the profile level and raises an error. This design ensures that both components operate within a consistent cost model, thereby preventing discrepancies in cost evaluation that could otherwise lead to conflicting eviction decisions. The corresponding configuration parameters are presented in Chapter 4.
+
+%----------------------------------------------------------------------------- %%
+\subsection{Eviction Decision Workflow and Algorithm}
+\label{sec:netaware_algorithm}
+%----------------------------------------------------------------------------- %%
+\begin{figure}
+	\centering
+	\includegraphics[width=0.3\textwidth]{assets/pics/network-aware/preevict-chaining.png}
+	\caption{Pre-eviction filter chaining.}
+	\label{fig:netaware_preevictchaining}
+\end{figure}
+
+The network-aware eviction decision workflow is implemented within the chaining of descheduler pre-eviction plugins. As shown in Figure \ref{fig:netaware_preevictchaining}, each candidate pod for eviction undergoes a chain of filtering processes before the actual eviction.
+
+The first stage is the built-in \textit{DefaultEvictor} plugin provided by the Kubernetes descheduler framework. This component evaluates several default eviction constraints such as pod state validation, scheduling constraints and node fit requirements to ensure that the pod is eligible for eviction \citep{k8s_descheduler_docs}. If any of these constraints is violated the eviction procedure is cancelled and the pod is skipped. Otherwise the eviction candidate continues to the next phase.
+
+After passing the default pre-eviction filtering stage,the proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Figure \ref{fig:netaware_preevictalgo}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster.
+
+\begin{figure}
+	\centering
+	\includegraphics[width=0.3\textwidth]{assets/pics/network-aware/preevict-algorithm.png}
+	\caption{Network-Aware pre-eviction algorithm flow.}
+	\label{fig:netaware_preevictalgo}
+\end{figure}
+
+During the network-aware evaluation phase for each pod, the algorithm verifies whether the pod has the configured dependence label. If there is no dependency label then the eviction is instantly allowed since there is no communication dependency to be considered. Otherwise, the system finds all dependent pods under the same communication group, which is defined as pods with the same dependency label in different replicas or deployments.
+
+It then computes the network cost between the candidate pod and all dependent pods. This computation is performed for both the current node and all candidate destination nodes. The pool of candidate nodes relies on the architectural layer in use: the global filtering layer analyses all ready nodes in the cluster, while the strategy-level layer evaluates only nodes selected by the balancing strategy (e.g. overutilized/underutilized nodes).
+
+The network cost calculation is formally stated in Equation (\ref{eq:networkcost}). Given a candidate pod \(P\) residing on node \(n\), then the entire communication cost is computed by the summation of network costs between node \(n\) and the nodes where all dependency pods \(d \in D\) are present.
 
 \begin{equation}
-    I = \sum_{r \in R} w_r \left(\max_{n \in N} U_{n,r} - \min_{n \in N} U_{n,r}\right)
-    \label{equ:imbalance_score}
+	\func{Cost}{n, P} = \sum_{d \in D} \func{Network}{n, \text{Node}_{d}}
+	\label{eq:networkcost}
 \end{equation}
 
-where $w_r$ is the weight of resource $r$. Lower values indicate a more balanced cluster according to observed usage. This score can be used directly or incorporated into a TOPSIS-based candidate ranking method, consistent with the MCDA foundation described in Chapter~\ref{bab:2}~\citep{topsis_1981}. In both cases, the core principle is the same: the preferred eviction candidate is the pod whose removal and projected relocation produce the largest useful reduction in real-usage imbalance with minimal disruption.
+After computing the network cost for the current node and all candidate nodes, the algorithm evaluates whether the eviction should be permitted using the threshold condition defined in Equation \ref{eq:networkthreshold}.
 
+\begin{equation}
+	{\text{Count}(\text{Cost}(a, P) \leq \text{Cost}(C, P)) } \geq {\text{TotalCandidates}} \cdot \text{MinBetterCandidatesPercent}
+	\label{eq:networkthreshold}
+\end{equation}
 
-%-----------------------------------------------------------------------------%
-\section{Eviction Feasibility Guard and Decision Algorithm}
-\label{sec:real_usage_eviction_algorithm}
-%-----------------------------------------------------------------------------%
-Because final placement remains request-based, the descheduler must avoid evicting pods whose declared requests cannot fit anywhere useful. The feasibility guard therefore evaluates a candidate pod $p$ on non-origin target nodes only. The origin node is excluded from the target set because an eviction that simply causes the pod to return to the same node does not improve fragmentation and only introduces disruption.
+An eviction is allowed only if a sufficient number of candidate nodes provide a network cost lower than or equal to \(\leq\) the current placement cost. The required amount of candidate nodes is controlled by the configurable \textit{MinBetterCandidatesPercent} threshold, which defaults to 50\%. Otherwise the eviction is blocked.
 
-For a candidate pod $p$ currently running on node $n_o$, a target node $n_t$ is considered feasible only if it satisfies two conditions:
+This threshold-based mechanism is designed to increases the probability that the Kubernetes scheduler will subsequently place the pod onto a node that preserves or improves network locality after eviction by requiring a sufficient number of candidate nodes that maintain or improve communication cost.
 
-\begin{enumerate}
-    \item \textbf{Request feasibility.} The target node has enough allocatable requested capacity to accept the pod according to Kubernetes scheduling constraints. This mirrors the resource feasibility that the default scheduler will apply.
-    \item \textbf{Projected score improvement.} Moving the pod from $n_o$ to $n_t$ reduces the real-usage imbalance score compared with the current state or meets a configured minimum improvement threshold.
-\end{enumerate}
-
-The proposed Phase 1 algorithm is shown below.
-
-\begin{enumerate}
-    \item Collect pod and node metrics from the configured metrics source.
-    \item Estimate usage using either direct metrics or EWMA.
-    \item Compute the current real-usage imbalance score.
-    \item Build a list of eviction candidates from pods that are eligible under standard descheduler safety rules, such as pod disruption budget and namespace exclusions.
-    \item For each candidate pod, simulate removing the pod from its origin node.
-    \item For each non-origin node, check whether the pod request can fit and whether projected placement improves the real-usage score.
-    \item Rank candidates by projected improvement, disruption cost, and configured policy limits.
-    \item Evict the best candidate only if at least one useful non-origin target exists.
-    \item Observe the scheduler outcome after eviction and record whether the pod moved to an improved node, returned to the origin node, moved without improvement, or became Pending.
-\end{enumerate}
-
-This guard may reduce the number of evictions, but that behavior is intentional. A real-usage-aware descheduler should prefer no action over unsafe or non-useful action. The key evaluation question is therefore not only how many pods are evicted, but how many evictions produce measurable improvement per unit of disruption.
-
-
-%-----------------------------------------------------------------------------%
-\section{Experimental Design}
+%----------------------------------------------------------------------------- %%
+\section{Experiment Matrix}
 \label{sec:real_usage_experiment_design}
-%-----------------------------------------------------------------------------%
-The evaluation is divided into three phases. Phase 1 verifies correctness and safety. Phase 2 measures effectiveness against baselines. Phase 3 tunes configuration parameters and studies sensitivity.
-
-%-----------------------------------------------------------------------------%
-\subsection{Phase 1: Safety and Correctness Test}
-\label{sec:phase1_safety_correctness}
-%-----------------------------------------------------------------------------%
-Phase 1 evaluates whether the proposed policy can make safe eviction decisions under the request-based scheduler limitation. The experiment constructs cluster states where pods have different relationships between requested resources and actual usage. The expected behavior is that the policy only evicts a pod when a useful non-origin target is request-feasible and projected to improve the real-usage imbalance score.
-
-The main observations in this phase are:
-
-\begin{itemize}
-    \item whether the policy can read and use runtime metrics correctly;
-    \item whether direct usage and EWMA produce valid candidate scores;
-    \item whether the feasibility guard blocks candidates that have no useful target;
-    \item whether evicted pods are successfully rescheduled;
-    \item whether any pod becomes Pending after eviction;
-    \item whether the pod returns to the origin node or moves without improvement.
-\end{itemize}
-
-Phase 1 is considered successful if the policy avoids clearly unsafe evictions and produces traceable decisions that match the feasibility model. This phase is not primarily intended to prove overall performance; it establishes that the design is safe enough to evaluate further.
-
-%-----------------------------------------------------------------------------%
-\subsection{Phase 2: Effectiveness Comparison}
-\label{sec:phase2_effectiveness}
-%-----------------------------------------------------------------------------%
-Phase 2 compares the real-usage-aware policy against baseline approaches. The planned variants are:
+%----------------------------------------------------------------------------- %%
+The evaluation uses six experiment groups so that each added design element can be compared against a clear baseline:
 
 \begin{enumerate}
-    \item \textbf{Baseline without custom descheduling.} The cluster runs with the default scheduler and no proposed policy intervention.
-    \item \textbf{Request-based descheduler policy.} The policy uses requested resources, matching the scheduler's admission model.
-    \item \textbf{Original RII-TOPSIS variant.} If available from the implementation baseline, the existing Relative Imbalance Index or TOPSIS-based approach is evaluated using its original input model.
-    \item \textbf{Real-usage direct variant.} The proposed policy uses the latest runtime usage sample.
-    \item \textbf{Real-usage EWMA variant.} The proposed policy uses smoothed runtime usage.
+    \item \textbf{E0 -- Scheduler only.} The default Kubernetes scheduler runs without descheduler intervention.
+    \item \textbf{E1 -- Official Descheduler baseline.} The official Descheduler runs a standard utilization policy such as \textit{LowNodeUtilization}.
+    \item \textbf{E2 -- Request-based RII + TOPSIS.} The custom Resource Defragmentation policy uses request-based CPU and memory ratios.
+    \item \textbf{E3 -- Actual-usage RII + TOPSIS raw.} The same policy uses raw runtime usage from the configured metrics source.
+    \item \textbf{E4 -- Actual-usage RII + TOPSIS with tight EWMA.} The descheduler-side policy uses smoothed usage and keeps EWMA state directly or through a lightweight persistent store.
+    \item \textbf{E5 -- Actual-usage RII + TOPSIS with loose EWMA agent.} A monitoring agent keeps EWMA state and publishes the result for the descheduler CronJob.
 \end{enumerate}
 
-The effectiveness metrics include imbalance before and after descheduler cycles, eviction count, successful relocation rate, return-to-origin rate, Pending count, rescheduling latency, workload disruption, and improvement per eviction. Improvement per eviction is especially important because an aggressive policy may show short-term imbalance reduction while causing excessive restarts or failed relocations.
+The main comparisons are E0--E2 for the value of custom RII/TOPSIS over default behavior, E2--E3 for the value of actual usage over request-based input, E3--E4 for EWMA stability, and E4--E5 for the architectural trade-off between tight and loose EWMA state management. All groups use comparable staged workloads, including CPU-heavy, memory-heavy, mixed, bursty, and probe Pods.
 
-%-----------------------------------------------------------------------------%
-\subsection{Phase 3: Parameter and Metrics Source Tuning}
-\label{sec:phase3_tuning}
-%-----------------------------------------------------------------------------%
-Phase 3 evaluates how the policy behaves under different operational settings. The tuning dimensions are:
-
-\begin{enumerate}
-    \item \textbf{Metrics source.} The initial source is \texttt{metrics-server}. Prometheus-only, combined metrics-server and Prometheus, or cAdvisor-based variants may be compared if implementation time permits.
-    \item \textbf{Usage estimator.} Direct usage is compared with EWMA to measure the trade-off between responsiveness and stability.
-    \item \textbf{Maximum evictions per cycle.} The conservative setting is one eviction per cycle. Higher values, such as two or three evictions per cycle, are tested gradually to measure whether faster convergence is worth the additional disruption risk.
-    \item \textbf{Descheduler cycle interval.} Candidate intervals are 30 seconds, 60 seconds, and 120 seconds. Shorter cycles may react faster but can amplify noisy metrics, while longer cycles reduce churn but may delay correction.
-\end{enumerate}
-
-The goal of Phase 3 is to identify a configuration that improves real-usage balance without making the system unstable. The expected final recommendation is not necessarily the most aggressive configuration, but the configuration that offers the best balance between improvement, relocation success, and workload disruption.
-
-
-%-----------------------------------------------------------------------------%
-\section{Expected Limitations}
-\label{sec:real_usage_limitations}
-%-----------------------------------------------------------------------------%
-The main limitation of the proposed design is that eviction and placement are not controlled by the same objective function. The descheduler uses real usage to identify beneficial evictions, while the scheduler still uses requests and its configured scoring plugins to select the destination node. Therefore, the descheduler can only estimate whether a useful target exists; it cannot force the scheduler to choose that target.
-
-This limitation is handled empirically rather than hidden. The experiments explicitly record scheduler outcomes after eviction, including successful improvement, return to origin, non-improving relocation, and Pending state. If the descheduler-only approach produces too few useful evictions or too many failed outcomes, the result would motivate the fallback Option C: a custom or extended scheduler that uses a compatible real-usage-aware placement objective.
+The evaluation metrics include total Pods deployed, Pods evicted, probe Pod schedulability, probe scheduling latency, Pending Pod count, fragmented Node count, average and maximum absolute RII, request-versus-actual mismatch, relocation outcome after eviction, return-to-origin rate, and improvement per eviction. These metrics keep the final claim grounded in observable schedulability improvement rather than in RII reduction alone.

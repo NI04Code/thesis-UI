@@ -3,7 +3,7 @@
 \label{bab:2}
 %----------------------------------------------------------------------------- %%
 
-This chapter reviews the concepts and prior work that form the foundation of this study: Kubernetes scheduling, resource fragmentation, multi-resource bin packing, MCDA/TOPSIS, the Kubernetes Descheduler, communication-aware scheduling, and the resulting research gap.
+This chapter reviews the concepts and prior work that form the foundation of this study: Kubernetes scheduling, resource fragmentation, multi-resource bin packing, MCDA/TOPSIS, the Kubernetes Descheduler, runtime resource metrics, communication-aware scheduling, and the resulting research gap.
 
 %----------------------------------------------------------------------------- %%
 \section{Kubernetes Architecture and Resource Management}
@@ -48,6 +48,17 @@ Existing Descheduler strategies are useful, but they are not a complete solution
 These limitations motivate a custom Descheduler plugin or policy that combines fragmentation-aware source-node selection, strategic Pod ranking, and network-aware scoring or filtering. The goal is to use Descheduler as a consolidation trigger while preserving the kube-scheduler as the component responsible for final placement.
 
 %----------------------------------------------------------------------------- %%
+\section{Runtime Metrics, Actual Usage, and Smoothing}
+\label{sec:runtimeMetricsActualUsage}
+%----------------------------------------------------------------------------- %%
+
+Kubernetes scheduling feasibility is primarily based on declared resource requests. This request-based model is necessary because the scheduler must make admission decisions before a Pod starts running, but it can differ from the actual resource usage observed after the workload is active. A Pod may request more CPU or memory than it normally consumes, while bursty workloads may temporarily exceed their typical usage pattern. For a descheduler policy that runs after placement, runtime telemetry can therefore provide additional information that is unavailable during initial scheduling.
+
+Metrics-driven Kubernetes orchestration has been studied as a way to improve load-aware placement and descheduling. Marchese and Tomarchio propose a Kubernetes orchestration strategy that uses real-time monitoring data from Prometheus-style infrastructure metrics to support load-aware scheduling and descheduling decisions~\citep{marchese2024loadaware,marchese2025enhancing}. Their approach motivates the architecture used in this research: a descheduler can consume runtime CPU and memory signals directly, or it can rely on a monitoring agent that maintains a longer-lived view of the cluster state.
+
+However, raw runtime metrics can be noisy. Short spikes may cause a policy to overreact, especially when the action is Pod eviction. Time-series smoothing techniques such as exponential smoothing have been used in cloud and container resource management to make utilization signals more stable for prediction or control~\citep{wang2021predicting,hassan2020integrated,zhang2015service,xie2020realtime}. In this thesis, exponentially weighted moving average (EWMA) is evaluated as a lightweight smoothing method for actual-usage-based RII/TOPSIS scoring.
+
+%----------------------------------------------------------------------------- %%
 \section{Communication-Aware and Network-Aware Scheduling}
 \label{sec:networkAwareScheduling}
 %----------------------------------------------------------------------------- %%
@@ -74,8 +85,8 @@ This study therefore adopts a score-based network-aware direction rather than a 
 \label{sec:researchGap}
 %----------------------------------------------------------------------------- %%
 
-Prior work and existing Kubernetes mechanisms address parts of the problem, but not the complete combination targeted by this study. Kubernetes scheduling provides filtering and scoring mechanisms for initial placement, including bin-packing-oriented scoring strategies~\citep{k8s_resource_bin_packing}. The Descheduler provides a mechanism for post-placement correction~\citep{k8s_descheduler_docs}. Research on resource fragmentation and directed eviction shows that consolidation can reduce the number of Nodes needed for the same workload~\citep{larsson_klein_elmroth_2023}. Meanwhile, communication-aware scheduling research shows that network conditions and service dependencies can affect application performance~\citep{marchese_tomarchio_2022,chen2024trade}.
+Prior work and existing Kubernetes mechanisms address parts of the problem, but not the complete combination targeted by this study. Kubernetes scheduling provides filtering and scoring mechanisms for initial placement, including bin-packing-oriented scoring strategies~\citep{k8s_resource_bin_packing}. The Descheduler provides a mechanism for post-placement correction~\citep{k8s_descheduler_docs}. Research on resource fragmentation and directed eviction shows that consolidation can reduce the number of Nodes needed for the same workload~\citep{larsson_klein_elmroth_2023}. Metrics-driven Kubernetes orchestration motivates actual-usage-aware placement and descheduling~\citep{marchese2024loadaware,marchese2025enhancing}. Meanwhile, communication-aware scheduling research shows that network conditions and service dependencies can affect application performance~\citep{marchese_tomarchio_2022,chen2024trade}.
 
 The gap is that existing approaches do not sufficiently combine these concerns inside a Descheduler-based eviction policy. A fragmentation-only policy may improve packing but worsen communication locality. A network-aware placement policy may improve latency but may not target resource fragmentation or autoscaler node reclamation. A threshold-based descheduler may rebalance utilization but may not strategically identify the Pods that most contribute to stranded capacity.
 
-This research addresses that gap by proposing a Descheduler-based policy that ranks eviction candidates using MCDA/TOPSIS, targets resource fragmentation and imbalance, and incorporates network-aware scoring or filtering. The expected result is a consolidation strategy that improves packing and node reclaimability while reducing the risk of unnecessary latency degradation.
+This research addresses that gap by proposing a Descheduler-based policy that ranks eviction candidates using MCDA/TOPSIS, targets resource fragmentation and imbalance, compares request-based and actual-usage-based signals, evaluates EWMA smoothing, and incorporates network-aware scoring or filtering. The expected result is a consolidation strategy that improves schedulability and node reclaimability while reducing the risk of unnecessary latency degradation.
