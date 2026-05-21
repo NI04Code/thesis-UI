@@ -25,30 +25,7 @@ TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~
 
 \begin{figure}[H]
     \centering
-    \begin{tikzpicture}[
-        node distance=0.75cm,
-        box/.style={draw, rounded corners=2pt, align=center, minimum width=3.2cm, minimum height=0.9cm, font=\small},
-        wide/.style={draw, rounded corners=2pt, align=center, minimum width=4.2cm, minimum height=0.9cm, font=\small},
-        arrow/.style={->, thick}
-    ]
-        \node[box, fill=gray!10] (state) {Cluster state\\Pods and Nodes};
-        \node[box, fill=blue!8, right=of state] (metrics) {Resource input\\requests or usage};
-        \node[box, fill=blue!8, right=of metrics] (rii) {Compute\\\(RII_n\)};
-        \node[wide, fill=yellow!12, below=of rii] (topsis) {TOPSIS candidate ranking\\benefit, risk, disruption};
-        \node[wide, fill=orange!12, left=of topsis] (guard) {Target feasibility guard\\non-origin Node fit};
-        \node[box, fill=green!10, left=of guard] (evict) {Evict best\\safe candidate};
-        \node[box, fill=gray!10, below=of guard] (sched) {Default\\kube-scheduler};
-        \node[wide, fill=gray!10, below=of topsis] (observe) {Observe outcome\\moved, returned, Pending};
-
-        \draw[arrow] (state) -- (metrics);
-        \draw[arrow] (metrics) -- (rii);
-        \draw[arrow] (rii) -- (topsis);
-        \draw[arrow] (topsis) -- (guard);
-        \draw[arrow] (guard) -- (evict);
-        \draw[arrow] (evict) -- (sched);
-        \draw[arrow] (sched) -- (observe);
-        \draw[arrow] (observe.east) -- ++(1.0,0) |- (state.south);
-    \end{tikzpicture}
+    \includegraphics[width=1.0\textwidth]{assets/pics/real-usage/rii-topsis-flow.png}
     \caption{Resource Defragmentation flow using RII, TOPSIS, and a target feasibility guard.}
     \label{fig:rii_topsis_flow}
 \end{figure}
@@ -81,26 +58,7 @@ where \(\alpha\) controls responsiveness to the latest observation. A higher \(\
 
 \begin{figure}[H]
     \centering
-    \begin{tikzpicture}[
-        node distance=0.65cm,
-        box/.style={draw, rounded corners=2pt, align=center, minimum width=3.4cm, minimum height=0.9cm, font=\small},
-        wide/.style={draw, rounded corners=2pt, align=center, minimum width=4.8cm, minimum height=0.9cm, font=\small},
-        arrow/.style={->, thick}
-    ]
-        \node[box, fill=gray!10] (backend) {Metrics backend\\metrics-server / Prometheus};
-        \node[wide, fill=blue!8, below left=1.0cm and 0.5cm of backend] (tight) {E4 tight mode\\Descheduler reads metrics\\and computes EWMA};
-        \node[wide, fill=green!10, below right=1.0cm and 0.5cm of backend] (agent) {E5 loose mode\\Monitoring agent keeps\\EWMA state};
-        \node[wide, fill=green!10, below=of agent] (publish) {Published state\\Node annotation / ConfigMap / CRD};
-        \node[wide, fill=yellow!12, below=1.1cm of backend] (policy) {RII + TOPSIS scoring\\using smoothed usage};
-        \node[box, fill=orange!12, below=of policy] (eviction) {Eviction decision};
-
-        \draw[arrow] (backend) -- (tight);
-        \draw[arrow] (backend) -- (agent);
-        \draw[arrow] (agent) -- (publish);
-        \draw[arrow] (tight) -- (policy);
-        \draw[arrow] (publish) -- (policy);
-        \draw[arrow] (policy) -- (eviction);
-    \end{tikzpicture}
+    \includegraphics[width=1.0\textwidth]{assets/pics/real-usage/ewma-architecture.png}
     \caption{EWMA integration alternatives for actual-usage-aware descheduling.}
     \label{fig:ewma_architecture}
 \end{figure}
