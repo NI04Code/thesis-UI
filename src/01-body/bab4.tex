@@ -5,23 +5,48 @@
 
 This chapter presents the experiment design and evaluation plan for the proposed descheduler policies. The methodology in Chapter~\ref{bab:3} defines how Resource Defragmentation, actual-usage-aware scoring, EWMA smoothing, and Network-Aware eviction filtering operate. This chapter separates the evaluation design from the policy design so that each experiment group can be compared against a clear baseline.
 
+\section{Evaluation Rationale}
+\label{sec:evaluation_rationale}
+
+The evaluation separates two related but different questions. First, following the directed Pod eviction perspective of \citet{larsson_klein_elmroth_2023}, the experiment must show that descheduling can improve a fragmented Kubernetes cluster after the initial kube-scheduler placement. This part remains request-aware because Kubernetes scheduling feasibility is based on declared resource requests. Second, following load-aware orchestration work by \citet{marchese2024loadaware,marchese2025enhancing}, the experiment studies whether runtime CPU and memory usage provide a better eviction-ranking signal when Pod requests do not reflect actual behavior.
+
+This separation is important because actual usage does not replace Kubernetes scheduling feasibility. A Pod can only be admitted by the scheduler if its declared requests fit on a Node. Therefore, fragmentation is validated using schedulability evidence, while actual usage is evaluated as an additional signal for choosing which Pods should be evicted.
+
 \section{Experiment Matrix}
 \label{sec:real_usage_experiment_design}
 
 The evaluation uses six experiment groups so that each added design element can be measured independently:
 
 \begin{enumerate}
-    \item \textbf{E0 -- Scheduler only.} The default Kubernetes scheduler runs without descheduler intervention.
-    \item \textbf{E1 -- Official Descheduler baseline.} The official Descheduler runs a standard utilization policy such as \textit{LowNodeUtilization}.
-    \item \textbf{E2 -- Request-based RII + TOPSIS.} The custom Resource Defragmentation policy uses request-based CPU and memory ratios.
-    \item \textbf{E3 -- Actual-usage RII + TOPSIS raw.} The same policy uses raw runtime usage from the configured metrics source.
+    \item \textbf{E0 -- Scheduler only.} The default Kubernetes scheduler runs without descheduler intervention. This group verifies that the workload can create a fragmented state in which a target Pod remains Pending even when aggregate cluster resources are sufficient.
+    \item \textbf{E1 -- Official Descheduler baseline.} The official Descheduler runs a standard utilization policy such as \textit{LowNodeUtilization}. This group represents an existing threshold-based descheduling baseline.
+    \item \textbf{E2 -- Request-based RII + TOPSIS.} The custom Resource Defragmentation policy uses request-based CPU and memory ratios. This is the primary request-space baseline for the fragmentation-focused evaluation.
+    \item \textbf{E3 -- Actual-usage RII + TOPSIS raw.} The same policy uses raw runtime CPU and memory usage from the configured metrics source. This is the first actual-usage extension.
     \item \textbf{E4 -- Actual-usage RII + TOPSIS with tight EWMA.} The descheduler-side policy uses smoothed usage and keeps EWMA state directly or through a lightweight persistent store.
     \item \textbf{E5 -- Actual-usage RII + TOPSIS with loose EWMA agent.} A monitoring agent keeps EWMA state and publishes the result for the descheduler CronJob.
 \end{enumerate}
 
-The main comparisons are E0--E2 for the value of custom RII/TOPSIS over default behavior, E2--E3 for the value of actual usage over request-based input, E3--E4 for EWMA stability, and E4--E5 for the architectural trade-off between tight and loose EWMA state management. All groups use comparable staged workloads, including CPU-heavy, memory-heavy, mixed, bursty, and probe Pods.
+The main comparisons are E0--E2 for the value of custom request-based RII/TOPSIS over default behavior, E2--E3 for the value of actual usage over request-based input, E3--E4 for EWMA stability, and E4--E5 for the architectural trade-off between tight and loose EWMA state management. All groups use comparable staged workloads, including CPU-heavy, memory-heavy, mixed, bursty, and probe Pods.
 
 The evaluation metrics include total Pods deployed, Pods evicted, probe Pod schedulability, probe scheduling latency, Pending Pod count, fragmented Node count, average and maximum absolute RII, request-versus-actual mismatch, relocation outcome after eviction, return-to-origin rate, and improvement per eviction. These metrics keep the final claim grounded in observable schedulability improvement rather than in RII reduction alone.
+
+\section{Workload Design}
+\label{sec:workload_design}
+
+The workload design combines two ideas from the literature. The fragmentation part follows the spirit of Larsson et al.'s repeatable Kubernetes workload schedule: a controlled set of Pods and scaling events creates resource pressure and makes schedulability measurable. The actual-usage part follows Marchese and Tomarchio's load-aware experiments: an external load generator creates runtime CPU and memory behavior that may differ from declared requests.
+
+For the request-space fragmentation baseline, the workload contains Pods with CPU-heavy, memory-heavy, and balanced request shapes. The target or probe Pod is designed so that the cluster has enough aggregate free CPU and memory, but no single worker Node has the required combination before descheduling. This confirms that the problem is fragmentation rather than a lack of total resources.
+
+For the actual-usage extension, the workload introduces request-vs-runtime mismatch. Some Pods may request relatively little CPU while receiving high runtime load, while other Pods may request larger resources but remain mostly idle. A k6 runner VM outside the Kubernetes cluster drives HTTP load through the cluster ingress so that k6's own CPU and memory usage do not pollute worker-node metrics. The application workload is intentionally simple because the goal is not to reproduce a full microservice benchmark, but to create controlled runtime CPU and memory signals.
+
+\section{RII, RRF, and Fragmentation Evidence}
+\label{sec:rii_rrf_fragmentation_evidence}
+
+The implementation uses the Resource Imbalance Index (RII) as a lightweight CPU-memory imbalance signal. RII is useful for identifying Nodes whose resource shape is skewed and for ranking candidate evictions with TOPSIS. However, RII is not treated as sufficient proof that fragmentation has been solved.
+
+The Relative Resource Fragmentation (RRF) idea from \citet{mishra_bellur_2016} is conceptually closer to a direct fragmentation metric because it asks whether remaining capacity is usable for a target request. This research keeps RRF as evaluation context rather than replacing the implementation algorithm. The practical validation is therefore RRF-like: before descheduling, aggregate free resources must be sufficient for the target Pod while no individual Node can fit it; after descheduling, the target Pod should become schedulable or Running.
+
+Thus, RII and TOPSIS are used as decision signals, while the final claim is grounded in schedulability outcomes. This avoids claiming success only because an index improved.
 
 \section{Simulator-Based TOPSIS-RDG Evaluation}
 \label{sec:simulator_topsis_rdg_evaluation}
