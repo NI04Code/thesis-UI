@@ -1,0 +1,15 @@
+Function: HasSameOwner
+─────────────────────────────────────────────────────────
+Input:  
+    a, b // two pods
+Output: 
+    HasSameOwner // boolean, true if they share at least one controller
+
+  for each ownerRef (*$r_a \in$*) a.ownerReferences do
+      for each ownerRef (*$r_\beta \in$*) b.ownerReferences do
+          if (*$r_a$*).uid = (*$r_\beta$*).uid then
+              return true
+          end if
+      end for
+  end for
+  return false

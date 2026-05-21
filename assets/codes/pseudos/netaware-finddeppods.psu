@@ -1,0 +1,33 @@
+Function: FindDependencyPods
+─────────────────────────────────────────────────────────
+Input:
+    pod              // the source pod being evaluated
+    labelKey         // the network group label key (e.g., "network-group")
+    nodes            // list of all cluster nodes
+    excludeSameOwner // boolean flag to skip same-controller replicas
+
+Output:
+    D  // set of dependency pods
+
+    groupValue (*$\leftarrow$*) pod.labels[labelKey]
+    if groupValue is empty then
+        return (*$\emptyset$*)
+    end if
+
+    D (*$\leftarrow$*) (*$\emptyset$*)
+    for each node n (*$\in$*) nodes do
+        for each pod p on node n do
+            if p.uid = pod.uid then
+                continue                           
+            end if
+            if p.labels[labelKey] (*$\neq$*) groupValue then
+                continue                          
+            end if
+            if excludeSameOwner (*$\wedge$*) HasSameOwner(pod, p) then
+                continue                          
+            end if
+            D (*$\leftarrow$*) D (*$\cup$*) {p}
+        end for
+    end for
+
+    return D
