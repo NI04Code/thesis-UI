@@ -25,7 +25,36 @@ TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=1.0\textwidth]{assets/pics/real-usage/rii-topsis-flow.png}
+    \resizebox{0.92\textwidth}{!}{%
+    \begin{tikzpicture}[
+        x=1cm,y=1cm,>=stealth,
+        box/.style={draw, line width=0.5pt, fill=white, align=center, minimum height=1.0cm, inner sep=4pt},
+        smallbox/.style={draw, line width=0.5pt, fill=white, align=center, minimum height=0.78cm, inner sep=4pt},
+        line/.style={draw, line width=0.5pt, -stealth},
+        plain/.style={draw, line width=0.5pt},
+        body/.style={font=\sffamily\small}
+    ]
+        \node[box, minimum width=2.9cm] (state) at (1.45,4.1) {\textbf{\sffamily Cluster State}\\[-1pt]{\sffamily\small Pods and Nodes}};
+        \node[box, minimum width=3.0cm] (input) at (5.0,4.1) {\textbf{\sffamily Resource Input}\\[-1pt]{\sffamily\small requests or usage}};
+        \node[box, minimum width=2.6cm] (rii) at (8.35,4.1) {\textbf{\sffamily Compute RII}\\[-1pt]{\sffamily\small CPU-memory gap}};
+        \node[box, minimum width=2.3cm] (topsis) at (11.35,4.1) {\textbf{\sffamily TOPSIS}\\[-1pt]{\sffamily\small rank candidates}};
+
+        \node[box, minimum width=3.2cm] (guard) at (1.85,1.45) {\textbf{\sffamily Feasibility Guard}\\[-1pt]{\sffamily\small non-origin node fit}};
+        \node[box, minimum width=2.55cm] (evict) at (5.25,1.45) {\textbf{\sffamily Evict Pod}\\[-1pt]{\sffamily\small best safe candidate}};
+        \node[box, minimum width=2.55cm] (sched) at (8.55,1.45) {\textbf{\sffamily Scheduler}\\[-1pt]{\sffamily\small default placement}};
+        \node[box, minimum width=2.1cm] (observe) at (11.6,1.45) {\textbf{\sffamily Observe}\\[-1pt]{\sffamily\small outcome}};
+
+        \draw[line] (state) -- (input);
+        \draw[line] (input) -- (rii);
+        \draw[line] (rii) -- (topsis);
+        \draw[plain] (topsis.south) -- ++(0,-0.85) -| (guard.north);
+        \draw[line] (guard) -- (evict);
+        \draw[line] (evict) -- (sched);
+        \draw[line] (sched) -- (observe);
+        \draw[plain] (observe.south) -- ++(0,-0.65) -| (state.south);
+        \draw[line] (state.south) -- ++(0,0.01);
+    \end{tikzpicture}%
+    }
     \caption{Resource Defragmentation flow using RII, TOPSIS, and a target feasibility guard.}
     \label{fig:rii_topsis_flow}
 \end{figure}
@@ -58,7 +87,30 @@ where \(\alpha\) controls responsiveness to the latest observation. A higher \(\
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=1.0\textwidth]{assets/pics/real-usage/ewma-architecture.png}
+    \resizebox{0.92\textwidth}{!}{%
+    \begin{tikzpicture}[
+        x=1cm,y=1cm,>=stealth,
+        box/.style={draw, line width=0.5pt, fill=white, align=center, minimum height=1.0cm, inner sep=4pt},
+        smallbox/.style={draw, line width=0.5pt, fill=white, align=center, minimum height=0.72cm, inner sep=4pt},
+        line/.style={draw, line width=0.5pt, -stealth},
+        plain/.style={draw, line width=0.5pt},
+        body/.style={font=\sffamily\small}
+    ]
+        \node[box, minimum width=3.8cm] (backend) at (6.5,4.4) {\textbf{\sffamily Metrics Backend}\\[-1pt]{\sffamily\footnotesize metrics-server / Prometheus}};
+        \node[box, minimum width=3.45cm] (tight) at (2.1,2.55) {\textbf{\sffamily E4: Tight EWMA}\\[-1pt]{\sffamily\footnotesize descheduler computes state}};
+        \node[box, minimum width=3.45cm] (loose) at (10.9,2.55) {\textbf{\sffamily E5: Loose Agent}\\[-1pt]{\sffamily\footnotesize monitoring agent keeps state}};
+        \node[box, minimum width=4.1cm] (published) at (10.9,0.95) {\textbf{\sffamily Published Usage}\\[-1pt]{\sffamily\footnotesize annotation / ConfigMap / CRD}};
+        \node[box, minimum width=3.45cm] (score) at (6.0,0.95) {\textbf{\sffamily RII + TOPSIS}\\[-1pt]{\sffamily\footnotesize uses smoothed usage}};
+        \node[smallbox, minimum width=1.8cm] (eviction) at (6.0,-0.1) {\textbf{\sffamily Eviction}};
+
+        \draw[plain] (backend.south) -- ++(0,-0.45) -| (tight.north);
+        \draw[plain] (backend.south) -- ++(0,-0.45) -| (loose.north);
+        \draw[line] (loose) -- (published);
+        \draw[plain] (tight.south) -- ++(0,-0.78) -| (score.west);
+        \draw[line] (published.west) -- (score.east);
+        \draw[line] (score) -- (eviction);
+    \end{tikzpicture}%
+    }
     \caption{EWMA integration alternatives for actual-usage-aware descheduling.}
     \label{fig:ewma_architecture}
 \end{figure}
