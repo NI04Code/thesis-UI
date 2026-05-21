@@ -2,3 +2,250 @@
 \chapter{\babEmpat}
 \label{bab:4}
 %-----------------------------------------------------------------------------%
+
+This chapter presents the experiment design and evaluation plan for the proposed descheduler policies. The methodology in Chapter~\ref{bab:3} defines how Resource Defragmentation, actual-usage-aware scoring, EWMA smoothing, and Network-Aware eviction filtering operate. This chapter separates the evaluation design from the policy design so that each experiment group can be compared against a clear baseline.
+
+\section{Experiment Matrix}
+\label{sec:real_usage_experiment_design}
+
+The evaluation uses six experiment groups so that each added design element can be measured independently:
+
+\begin{enumerate}
+    \item \textbf{E0 -- Scheduler only.} The default Kubernetes scheduler runs without descheduler intervention.
+    \item \textbf{E1 -- Official Descheduler baseline.} The official Descheduler runs a standard utilization policy such as \textit{LowNodeUtilization}.
+    \item \textbf{E2 -- Request-based RII + TOPSIS.} The custom Resource Defragmentation policy uses request-based CPU and memory ratios.
+    \item \textbf{E3 -- Actual-usage RII + TOPSIS raw.} The same policy uses raw runtime usage from the configured metrics source.
+    \item \textbf{E4 -- Actual-usage RII + TOPSIS with tight EWMA.} The descheduler-side policy uses smoothed usage and keeps EWMA state directly or through a lightweight persistent store.
+    \item \textbf{E5 -- Actual-usage RII + TOPSIS with loose EWMA agent.} A monitoring agent keeps EWMA state and publishes the result for the descheduler CronJob.
+\end{enumerate}
+
+The main comparisons are E0--E2 for the value of custom RII/TOPSIS over default behavior, E2--E3 for the value of actual usage over request-based input, E3--E4 for EWMA stability, and E4--E5 for the architectural trade-off between tight and loose EWMA state management. All groups use comparable staged workloads, including CPU-heavy, memory-heavy, mixed, bursty, and probe Pods.
+
+The evaluation metrics include total Pods deployed, Pods evicted, probe Pod schedulability, probe scheduling latency, Pending Pod count, fragmented Node count, average and maximum absolute RII, request-versus-actual mismatch, relocation outcome after eviction, return-to-origin rate, and improvement per eviction. These metrics keep the final claim grounded in observable schedulability improvement rather than in RII reduction alone.
+
+\section{Simulator-Based TOPSIS-RDG Evaluation}
+\label{sec:simulator_topsis_rdg_evaluation}
+
+In addition to the E0--E5 Kubernetes experiment matrix, the TOPSIS-based Resource Defragmentation candidate selector is evaluated with a simulator-based scenario. This preliminary evaluation focuses on the request-based TOPSIS-RDG behavior and compares it with common utilization-based descheduling strategies and the RDG baseline.
+
+\subsection{Experimental Setup}
+\label{sec:experimental_setup}
+
+The simulator reproduces the Kubernetes scheduling pipeline, including filtering, scoring, reservation, and binding phases. Using a simulator allows the same workload trace and cluster topology to be repeated across policies without the noise introduced by live-cluster timing, autoscaling, or external workload variation.
+
+\subsubsection{Workload: Google Borg Cluster Trace}
+\label{sec:borg_workload}
+
+The experimental workload is derived from the publicly available Google Borg cluster trace. Task submission events are converted into Pod-like workload objects and scaled against a reference machine of 96 vCPUs and 384 GiB memory.
+
+To create multi-dimensional contention, Pods are classified into three strata through stratified sampling: \texttt{HIGH\_CPU}, \texttt{HIGH\_MEM}, and \texttt{BALANCED}. Resource requests are then scaled so that the total demand exceeds the simulated cluster capacity on both CPU and memory dimensions. This creates an initial set of unscheduled Pods that can be used to evaluate whether descheduling improves later schedulability.
+
+\subsubsection{Cluster Topology}
+\label{sec:cluster_topology}
+
+The simulated cluster consists of 20 heterogeneous Nodes divided into three capacity tiers, as shown in Table~\ref{tab:cluster_topology}. The tiered topology is used to avoid an overly uniform bin-packing problem and to create realistic differences in Pod placement options.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Simulated Cluster Node Topology}
+    \label{tab:cluster_topology}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{l c c c c}
+        \hline
+        \textbf{Tier} & \textbf{vCPUs (milliCPU)} & \textbf{Memory (MiB)} & \textbf{Weight} & \textbf{Expected Count} \\
+        \hline
+        Small & 16000 & 65536 & 30\% & 6 Nodes \\
+        Medium & 32000 & 131072 & 40\% & 8 Nodes \\
+        Large & 64000 & 262144 & 30\% & 6 Nodes \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\subsubsection{Policies Under Evaluation}
+\label{sec:policies_under_evaluation}
+
+Five simulator configurations are evaluated:
+
+\begin{itemize}
+    \item \textbf{D1 -- No Descheduler.} Baseline control with no descheduling.
+    \item \textbf{D2 -- LowNodeUtilization.} Official utilization policy that evicts Pods from underutilized Nodes to consolidate load.
+    \item \textbf{D3 -- HighNodeUtilization.} Official utilization policy that evicts Pods from overutilized Nodes to spread load.
+    \item \textbf{D4 -- ResourceDefragmentation.} The proposed TOPSIS-based multi-criteria eviction strategy.
+    \item \textbf{D5 -- RDG.} The Resource Defragmentation Greedy strategy proposed by Guo et al.~\citep{guo2025joint}.
+\end{itemize}
+
+All descheduler-enabled runs use the same eviction budget so that policy effectiveness is not explained by allowing one policy to evict substantially more Pods than another.
+
+\section{Results and Analysis}
+\label{sec:results_analysis}
+
+\subsection{Initial Scheduling}
+\label{sec:initial_scheduling_results}
+
+Table~\ref{tab:init_scheduling} shows the initial scheduling outcome before descheduling. Because the workload is intentionally oversubscribed, every policy starts with a comparable number of unscheduled Pods.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Initial Scheduling Phase Results}
+    \label{tab:init_scheduling}
+    \begin{tabular}{l r r r r}
+        \hline
+        \textbf{Experiment} & \textbf{Pods Scheduled} & \textbf{Pods Failed} & \textbf{CPU Alloc.} & \textbf{Memory Alloc.} \\
+        \hline
+        D1 & 4100 & 900 & 96.1\% & 96.0\% \\
+        D2 & 4104 & 896 & 96.2\% & 96.3\% \\
+        D3 & 4088 & 912 & 96.0\% & 96.2\% \\
+        D4 & 4114 & 886 & 96.1\% & 96.4\% \\
+        D5 & 4117 & 883 & 96.7\% & 96.1\% \\
+        \hline
+    \end{tabular}
+\end{table}
+
+The initial phase confirms that the workload creates similar pressure across all runs. Therefore, later differences in unscheduled Pod count, eviction count, and rescheduling yield can be attributed to descheduler behavior rather than to a substantially different initial workload.
+
+\subsection{Descheduling Behavior}
+\label{sec:descheduling_behavior}
+
+The descheduling phase reveals the cost of each policy in terms of evictions and runtime, as shown in Table~\ref{tab:descheduling_behavior}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Descheduling Phase Behavior}
+    \label{tab:descheduling_behavior}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l l r r l}
+        \hline
+        \textbf{Exp.} & \textbf{Policy} & \textbf{Evictions} & \textbf{Time} & \textbf{Observation} \\
+        \hline
+        D1 & None & 0 & -- & No descheduling performed \\
+        D2 & LowNodeUtilization & 0 & 0.14s & No underutilized Nodes found \\
+        D3 & HighNodeUtilization & 407 & 23.2s & Aggressive eviction from overutilized Nodes \\
+        D4 & ResourceDefragmentation & 31 & 2.0s & Targeted evictions from fragmented Nodes \\
+        D5 & RDG & 410 & 21.9s & Eviction budget exhausted \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+LowNodeUtilization does not evict any Pods because the cluster is already highly utilized. HighNodeUtilization and RDG both perform hundreds of evictions. In contrast, ResourceDefragmentation performs only 31 evictions, indicating that TOPSIS candidate selection is more selective and does not rely on broad churn to create placement opportunities.
+
+\subsection{Post-Deschedule Rescheduling}
+\label{sec:post_deschedule_rescheduling}
+
+The main effectiveness metric is how many previously unscheduled Pods can be admitted after descheduling. Table~\ref{tab:post_deschedule_outcomes} summarizes this result.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Post-Deschedule Rescheduling Outcomes}
+    \label{tab:post_deschedule_outcomes}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l l r r r r}
+        \hline
+        \textbf{Exp.} & \textbf{Policy} & \textbf{Evictions} & \textbf{Rescheduled} & \textbf{Final Unscheduled} & \textbf{Improvement} \\
+        \hline
+        D1 & None & 0 & -- & 900 & Baseline \\
+        D2 & LowNodeUtilization & 0 & 69 & 827 & 8.1\% \\
+        D3 & HighNodeUtilization & 407 & 113 & 803 & 10.8\% \\
+        D4 & ResourceDefragmentation & 31 & 215 & \textbf{671} & \textbf{25.4\%} \\
+        D5 & RDG & 410 & 176 & 707 & 21.4\% \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+ResourceDefragmentation produces the lowest final unscheduled Pod count. More importantly, it reaches this result with far fewer evictions than HighNodeUtilization or RDG. This supports the claim that targeted defragmentation should be evaluated by schedulability improvement and eviction cost together, not by RII reduction alone.
+
+\subsection{Eviction Efficiency}
+\label{sec:eviction_efficiency}
+
+Table~\ref{tab:eviction_efficiency} reports rescheduling yield, defined as the number of previously unscheduled Pods admitted per eviction.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Eviction Efficiency and Yield}
+    \label{tab:eviction_efficiency}
+    \begin{tabular}{l r r r r}
+        \hline
+        \textbf{Policy} & \textbf{Evictions} & \textbf{Rescheduled} & \textbf{Yield} & \textbf{Desched. Failures} \\
+        \hline
+        LowNodeUtilization & 0 & 69 & -- & 0 \\
+        HighNodeUtilization & 407 & 113 & 0.28 & 4 \\
+        ResourceDefragmentation & 31 & 215 & \textbf{6.94} & 0 \\
+        RDG & 410 & 176 & 0.43 & 0 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+HighNodeUtilization and RDG free capacity by evicting many Pods, but their rescheduling yield remains low. ResourceDefragmentation achieves the highest yield because it selects Pods whose removal is expected to correct CPU-memory imbalance and create useful placement space for previously Pending workloads.
+
+\subsection{Final Cluster Utilization}
+\label{sec:final_cluster_utilization}
+
+Table~\ref{tab:final_cluster_utilization} compares final utilization after rescheduling.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Final Cluster Utilization Post-Rescheduling}
+    \label{tab:final_cluster_utilization}
+    \begin{tabular}{l r r r r}
+        \hline
+        \textbf{Experiment} & \textbf{Final CPU} & \textbf{Final Mem.} & \textbf{vs Init CPU} & \textbf{vs Init Mem.} \\
+        \hline
+        D1 & 96.1\% & 96.0\% & -- & -- \\
+        D2 & 96.6\% & 96.6\% & +0.4\% & +0.3\% \\
+        D3 & 97.3\% & 96.2\% & +1.3\% & 0.0\% \\
+        D4 & \textbf{99.5\%} & \textbf{99.1\%} & \textbf{+3.4\%} & \textbf{+2.7\%} \\
+        D5 & 99.1\% & 97.8\% & +2.4\% & +1.7\% \\
+        \hline
+    \end{tabular}
+\end{table}
+
+The TOPSIS-based ResourceDefragmentation policy reaches the highest final utilization while using the smallest number of evictions among the successful policies. This result is consistent with the intended design: the policy should minimize disruptive churn while improving the cluster's ability to admit previously unscheduled Pods.
+
+\subsection{Execution Time}
+\label{sec:execution_time}
+
+\begin{table}[htbp]
+    \centering
+    \caption{Simulation Execution Time Comparison}
+    \label{tab:execution_time}
+    \begin{tabular}{l c c}
+        \hline
+        \textbf{Policy} & \textbf{Deschedule Time} & \textbf{Total Simulation Time} \\
+        \hline
+        None & -- & 228.0s \\
+        LowNodeUtilization & 0.14s & 312.6s \\
+        HighNodeUtilization & 23.2s & 273.4s \\
+        ResourceDefragmentation & 2.0s & 236.3s \\
+        RDG & 21.9s & 254.4s \\
+        \hline
+    \end{tabular}
+\end{table}
+
+ResourceDefragmentation completes the descheduling phase faster than HighNodeUtilization and RDG because it evaluates and evicts fewer Pods. The additional runtime in descheduler-enabled runs is mainly caused by the retry and rescheduling phases rather than by the TOPSIS selector itself.
+
+\subsection{Summary of Findings}
+\label{sec:summary_findings}
+
+Table~\ref{tab:summary_descheduling_outcomes} summarizes the simulator outcomes.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Summary of Final Descheduling Outcomes}
+    \label{tab:summary_descheduling_outcomes}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{c l r r r l}
+        \hline
+        \textbf{Rank} & \textbf{Policy} & \textbf{Unscheduled} & \textbf{Evictions} & \textbf{Yield} & \textbf{Verdict} \\
+        \hline
+        1 & ResourceDefragmentation & \textbf{671} & 31 & \textbf{6.94} & Best schedulability and efficiency \\
+        2 & RDG & 707 & 410 & 0.43 & Good result with high eviction cost \\
+        3 & HighNodeUtilization & 803 & 407 & 0.28 & High churn and low yield \\
+        4 & LowNodeUtilization & 827 & 0 & -- & Mismatched with oversubscribed clusters \\
+        5 & None & 900 & 0 & -- & Baseline control \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+Overall, the simulator result indicates that the TOPSIS-based ResourceDefragmentation policy reduces unscheduled Pods more effectively than the baseline policies while requiring substantially fewer evictions. This supports the broader experiment direction: the final evaluation should emphasize observable schedulability improvement, Pending Pod reduction, and eviction efficiency, with RII used as a decision aid rather than as the only proof of fragmentation reduction.

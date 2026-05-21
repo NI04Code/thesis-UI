@@ -12,12 +12,26 @@ The proposed system keeps the default \texttt{kube-scheduler} unchanged. The des
 %----------------------------------------------------------------------------- %%
 The Resource Defragmentation policy targets multi-resource fragmentation in which a cluster still has enough aggregate CPU and memory, but the free capacity is scattered across Nodes in combinations that cannot fit an incoming workload. The policy periodically observes the current cluster state, computes an imbalance score for each Node, ranks eligible Pods, and evicts a limited number of candidates so that the scheduler can repack the workload.
 
+The implementation adapts the Resource Defragmentation Greedy (RDG) strategy from Guo et al.~\citep{guo2025joint}, but replaces the single greedy candidate rule with a TOPSIS multi-criteria ranking stage. The RDG reference is used as the conceptual baseline for detecting dimensional resource imbalance, while TOPSIS is used to compare eviction candidates across local imbalance reduction, target-node improvement, contiguous free-space expansion, and disruption cost.
+
 For each Node \(n\), let \(U_{n,cpu}\) and \(U_{n,mem}\) denote CPU and memory utilization ratios. In the request-based variant, these ratios are computed from Kubernetes resource requests. In the actual-usage variants, they are computed from runtime metrics. The Resource Imbalance Index for Node \(n\) is defined as:
 
 \begin{equation}
     RII_n = U_{n,cpu} - U_{n,mem}
     \label{eq:rii_node}
 \end{equation}
+
+For request-based evaluation, the utilization ratios can be expanded as:
+
+\begin{equation}
+    RII_i =
+    \frac{\sum_{j=1}^{m} r_{j,cpu}}{C_{i,cpu}}
+    -
+    \frac{\sum_{j=1}^{m} r_{j,mem}}{C_{i,mem}}
+    \label{eq:rii_request_expanded}
+\end{equation}
+
+where \(r_{j,cpu}\) and \(r_{j,mem}\) are the CPU and memory requests of Pod \(j\), and \(C_{i,cpu}\) and \(C_{i,mem}\) are the allocatable CPU and memory capacities of Node \(i\).
 
 A Node with \(RII_n\) close to zero has balanced CPU-memory usage. A large positive value indicates relatively high CPU usage compared with memory usage, while a large negative value indicates the opposite. The policy uses \(|RII_n|\) as an indicator of stranded capacity. Because RII alone does not prove that a fragmentation problem has affected scheduling, the experiments also measure probe Pod schedulability, Pending state, and post-eviction relocation outcome.
 
@@ -60,6 +74,86 @@ TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~
 \end{figure}
 
 Figure~\ref{fig:rii_topsis_flow} summarizes the policy flow. The feasibility guard is deliberately placed after candidate ranking because a high-scoring Pod is not useful if it cannot be rescheduled safely. A candidate Pod \(p\) from origin Node \(n_o\) is considered useful only if at least one non-origin target Node \(n_t\) satisfies the Pod request and is projected to reduce the resource imbalance score after placement.
+
+\subsection{Execution Flow}
+\label{sec:resource_defrag_execution_flow}
+
+The Resource Defragmentation execution flow is divided into two phases: fragmentation detection and eviction-loop execution.
+
+In the fragmentation detection phase, the plugin builds a local snapshot of Nodes and Pods through the descheduler \texttt{Balance} extension point. Non-evictable workloads, such as DaemonSets, static Pods, and Pods excluded by namespace or policy, are filtered out before scoring. For each Node, the plugin computes requested or observed CPU-memory utilization, derives \(RII_i\), and marks the Node as fragmented when \(|RII_i|\) exceeds the configured imbalance threshold.
+
+Fragmented Nodes are processed in priority order. The priority combines dimensional imbalance and available free-space pressure:
+
+\begin{equation}
+    Priority_i = w_p \cdot |RII_i| + (1 - w_p) \cdot \frac{1}{FSI_i + \epsilon}
+    \label{eq:priority_index}
+\end{equation}
+
+where \(FSI_i\) is the Node free-space index, \(w_p\) controls the balance between imbalance severity and free-space pressure, and \(\epsilon\) prevents division by zero. In this design, \(w_p = 0.5\) gives equal importance to skewed resource dimensions and low usable capacity. This avoids chasing Nodes that are skewed but mostly empty, while also avoiding policies that only target high utilization without considering CPU-memory shape.
+
+In the eviction-loop phase, each fragmented Node contributes its eligible Pods to a TOPSIS decision matrix. The best-scoring Pod is submitted to the framework evictor API. If eviction succeeds, the local Node snapshot is updated immediately by subtracting the evicted Pod resources, and \(RII_i\) is recalculated. The Node is removed from the fragmented queue once it falls below the threshold; otherwise, the remaining Pod candidates continue to be evaluated until the queue or eviction budget is exhausted.
+
+\subsection{TOPSIS Candidate Criteria}
+\label{sec:topsis_candidate_criteria}
+
+For each candidate Pod \(j\) on a fragmented origin Node \(i\), the TOPSIS decision matrix uses four criteria:
+
+\begin{itemize}
+    \item \textbf{\(C_1\): Imbalance alignment.} This benefit criterion measures whether the Pod's resource profile aligns with the origin Node's dominant imbalance. A CPU-heavy Pod on a CPU-skewed Node, or a memory-heavy Pod on a memory-skewed Node, is a stronger candidate because removing it directly reduces the skew.
+    \begin{equation}
+        C_1 = RII_i \cdot RII_j \cdot \max\left(\frac{r_{j,cpu}}{C_{i,cpu}}, \frac{r_{j,mem}}{C_{i,mem}}\right)
+        \label{eq:topsis_c1}
+    \end{equation}
+
+    \item \textbf{\(C_2\): Target Node improvement.} This benefit criterion estimates the best reduction in resource imbalance if the Pod is placed on another feasible Node.
+    \begin{equation}
+        C_2 = \max_{k \neq i}\left(|RII_k| - |RII_k'|\right)
+        \label{eq:topsis_c2}
+    \end{equation}
+    where \(RII_k'\) is the simulated imbalance of target Node \(k\) after receiving Pod \(j\). Candidates that cannot fit on any non-origin Node are rejected by the feasibility guard.
+
+    \item \textbf{\(C_3\): Free-space expansion.} This benefit criterion estimates the normalized contiguous CPU-memory space recovered on the origin Node. Let \(c\) and \(m\) be the current available CPU and memory ratios on Node \(i\), and let \(p_c\) and \(p_m\) be the Pod's CPU and memory request ratios. The free-space increase is:
+    \begin{equation}
+        C_3 = (c + p_c)(m + p_m) - cm = c \cdot p_m + m \cdot p_c + p_c \cdot p_m
+        \label{eq:topsis_c3}
+    \end{equation}
+
+    \item \textbf{\(C_4\): Pod priority penalty.} This cost criterion represents Kubernetes Pod priority. Higher-priority Pods are penalized so that critical workloads are avoided unless they are the only viable candidate.
+\end{itemize}
+
+The decision matrix is vector-normalized and weighted using \(W = [0.30, 0.30, 0.25, 0.15]\). \(C_1\) and \(C_2\) receive the largest weights because correcting the origin Node and improving the target Node are the core defragmentation objectives. \(C_3\) is slightly lower because raw free-space expansion should support, not dominate, dimensional alignment. \(C_4\) remains a cost guardrail that protects higher-priority workloads while still allowing TOPSIS to choose a strong candidate when priority values are comparable.
+
+For each Pod \(j\), TOPSIS computes the distance to the ideal best solution \(D_j^+\), the distance to the ideal worst solution \(D_j^-\), and the closeness coefficient:
+
+\begin{equation}
+    CC_j = \frac{D_j^-}{D_j^+ + D_j^-}
+    \label{eq:closeness_coefficient}
+\end{equation}
+
+The Pod with the highest \(CC_j\) is selected as the preferred eviction candidate, subject to the feasibility guard described in Section~\ref{sec:real_usage_eviction_algorithm}.
+
+\subsection{Illustrative TOPSIS Scenario}
+\label{sec:topsis_example}
+
+Table~\ref{tab:topsis_example} illustrates a simplified candidate comparison on a CPU-skewed Node. Pod 1 is CPU-heavy and low priority, so it directly addresses the Node bottleneck. Pod 2 is memory-heavy and therefore does not align with the origin Node imbalance. Pod 3 has a strong resource profile but is system-critical, so the priority penalty prevents unnecessary disruption.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Illustrative TOPSIS Decision Matrix for Candidate Pods}
+    \label{tab:topsis_example}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l c c c c c}
+        \hline
+        \textbf{Candidate Pod} & \textbf{\(C_1\)} & \textbf{\(C_2\)} & \textbf{\(C_3\)} & \textbf{\(C_4\)} & \textbf{\(CC_j\)} \\
+        \hline
+        Pod 1 (CPU-heavy, low priority) & 0.45 & 0.20 & 0.35 & 100 & \textbf{0.88} \\
+        Pod 2 (memory-heavy, low priority) & -0.10 & 0.05 & 0.15 & 100 & 0.22 \\
+        Pod 3 (CPU-heavy, critical) & 0.50 & 0.20 & 0.40 & 10000 & 0.05 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+This example shows why the policy needs a multi-criteria ranking stage. A candidate can be resource-aligned but too disruptive, or low priority but ineffective for reducing fragmentation. TOPSIS makes these trade-offs explicit before the descheduler attempts eviction.
 
 %----------------------------------------------------------------------------- %%
 \section{Real-Usage and EWMA Extension}
@@ -273,22 +367,3 @@ After computing the network cost for the current node and all candidate nodes, t
 An eviction is allowed only if a sufficient number of candidate nodes provide a network cost lower than or equal to \(\leq\) the current placement cost. The required amount of candidate nodes is controlled by the configurable \textit{MinBetterCandidatesPercent} threshold, which defaults to 50\%. Otherwise the eviction is blocked.
 
 This threshold-based mechanism is designed to increases the probability that the Kubernetes scheduler will subsequently place the pod onto a node that preserves or improves network locality after eviction by requiring a sufficient number of candidate nodes that maintain or improve communication cost.
-
-%----------------------------------------------------------------------------- %%
-\section{Experiment Matrix}
-\label{sec:real_usage_experiment_design}
-%----------------------------------------------------------------------------- %%
-The evaluation uses six experiment groups so that each added design element can be compared against a clear baseline:
-
-\begin{enumerate}
-    \item \textbf{E0 -- Scheduler only.} The default Kubernetes scheduler runs without descheduler intervention.
-    \item \textbf{E1 -- Official Descheduler baseline.} The official Descheduler runs a standard utilization policy such as \textit{LowNodeUtilization}.
-    \item \textbf{E2 -- Request-based RII + TOPSIS.} The custom Resource Defragmentation policy uses request-based CPU and memory ratios.
-    \item \textbf{E3 -- Actual-usage RII + TOPSIS raw.} The same policy uses raw runtime usage from the configured metrics source.
-    \item \textbf{E4 -- Actual-usage RII + TOPSIS with tight EWMA.} The descheduler-side policy uses smoothed usage and keeps EWMA state directly or through a lightweight persistent store.
-    \item \textbf{E5 -- Actual-usage RII + TOPSIS with loose EWMA agent.} A monitoring agent keeps EWMA state and publishes the result for the descheduler CronJob.
-\end{enumerate}
-
-The main comparisons are E0--E2 for the value of custom RII/TOPSIS over default behavior, E2--E3 for the value of actual usage over request-based input, E3--E4 for EWMA stability, and E4--E5 for the architectural trade-off between tight and loose EWMA state management. All groups use comparable staged workloads, including CPU-heavy, memory-heavy, mixed, bursty, and probe Pods.
-
-The evaluation metrics include total Pods deployed, Pods evicted, probe Pod schedulability, probe scheduling latency, Pending Pod count, fragmented Node count, average and maximum absolute RII, request-versus-actual mismatch, relocation outcome after eviction, return-to-origin rate, and improvement per eviction. These metrics keep the final claim grounded in observable schedulability improvement rather than in RII reduction alone.
