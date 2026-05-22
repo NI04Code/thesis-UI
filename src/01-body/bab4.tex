@@ -4,7 +4,7 @@
 %-----------------------------------------------------------------------------%
 
 %-----------------------------------------------------------------------------%
-\section{Latency & Defragmentation Tradeoff Test}
+\section{Latency and Defragmentation Tradeoff Test}
 \label{sec:netaware4_test}
 %-----------------------------------------------------------------------------%
 In this section we evaluates the trade-off between network latency preservation and resource defragmentation within a Kubernetes cluster using the proposed Network-Aware plugin. The evaluation focuses on how the plugin maintains communication efficiency by preventing pod evictions that could potentially increase network latency. The experiments are conducted using three balancing strategies, namely LowNodeUtilization, HighNodeUtilization, and custom ImbalanceIndexUtilization, to analyze the impact of network-aware eviction filtering under different workload redistribution approaches.
@@ -17,7 +17,7 @@ To evaluate the effectiveness of the proposed Network-Aware Descheduler against 
 
 %-----------------------------------------------------------------------------%
 \subsubsection{Infrastructure and Cluster Topology}
-\label{sec:netaware4_experimentsetup}
+\label{sec:netaware4_infrasetup}
 %-----------------------------------------------------------------------------%
 The experimental testing cluster is hosted inside an isolated Virtual Private Cloud (VPC) on Amazon Web Services (AWS). Due to the structural restrictions of the cloud sandbox environment, all instances are physically provisioned within the \textit{us-east-1} geographic region. The infrastructure pool comprises five distinct \textit{t3.micro} virtual machines acting as worker nodes, alongside a dedicated administrative control plane and one worker specific for Prometheus.  
 
@@ -32,7 +32,7 @@ To model real-world high-availability environments, the underlying physical clus
 
 %-----------------------------------------------------------------------------%
 \subsubsection{Network Profile and Topology Modeling}
-\label{sec:netaware4_experimentsetup}
+\label{sec:netaware4_networksetup}
 %-----------------------------------------------------------------------------%
 To bypass the single-region limitation of the sandbox environment, a hybrid logical topology was engineered using Linux kernel traffic shaping. A two-tier infrastructure matrix was established by dividing the cluster into two logical regions:
 
@@ -63,7 +63,7 @@ kubectl label node worker-5 topology.kubernetes.io/region=eu-west-1
 This creates a split-horizon configuration where the nodes are physically local but logically segregated into distinct regional tiers.
 %-----------------------------------------------------------------------------%
 \subsubsection{Telemetry and Monitoring Architecture}
-\label{sec:netaware4_experimentsetup}
+\label{sec:netaware4_monitoringsetup}
 %-----------------------------------------------------------------------------%
 To provide the network-aware descheduler with continuous data streams, a tight telemetry loop was deployed combining a full-mesh prober with a time-series database.
 
@@ -73,3 +73,17 @@ To capture and aggregate this data, a minimal installation of Prometheus was dep
 
 The Prometheus server instance was pinned to worker-6 (specific to prometheus deployment) using a targeted \emph{nodeSelector}. Its operational resource limits were tightly bounded to prevent memory leakage from exhausting the node's approximately 800 MiB allocatable ceiling:
 
+\lstinputlisting[
+    caption={Prometheus resources config}, 
+    label={lst:prometheus_config},
+]{assets/codes/pseudos/netaware/prometheusconfig.psu}
+
+By expanding the global scrapeInterval to 45s and restricting data retention to a lean 6h window, the internal time-series indexing map remains small enough to sit safely in 800 MiB usable RAM. Telemetry target discovery is governed by a native PodMonitor custom resource deployed to the \emph{prom} namespace. This monitor hooks directly into the named container exposed in the Goldpinger daemon manifest, automatically mapping the scraping loop to target port 8080.
+
+The telemetry data is collected by evaluating two core histogram vectors: \textit{goldpinger\_peers\_response\_time\_s\_sum} and \textit{goldpinger\_peers\_response\_time\_s\_count}. The network-aware descheduler will queries these metrics using an integrated PromQL engine over a rolling 5-minute mathematical average (\textit{avg\_over\_time}) via the following unified query string:
+
+\begin{equation}
+\text{Network Latency (Seconds)} = \frac{\text{avg\_over\_time}(\text{goldpinger\_peers\_response\_time\_s\_sum}[5\text{m}])}{\text{avg\_over\_time}(\text{goldpinger\_peers\_response\_time\_s\_count}[5\text{m}])} 
+\end{equation}
+
+The query utilizes \textit{goldpinger\_host\_name} as its source indicator and \textit{goldpinger\_peer\_name} as its target label mapping. This allows the descheduler to programmatically construct a real-time topology map of the cluster's network characteristics.
