@@ -2,4 +2,74 @@
 \chapter{\babEmpat}
 \label{bab:4}
 %-----------------------------------------------------------------------------%
-$\cdot$
+
+%-----------------------------------------------------------------------------%
+\section{Latency & Defragmentation Tradeoff Test}
+\label{sec:netaware4_test}
+%-----------------------------------------------------------------------------%
+In this section we evaluates the trade-off between network latency preservation and resource defragmentation within a Kubernetes cluster using the proposed Network-Aware plugin. The evaluation focuses on how the plugin maintains communication efficiency by preventing pod evictions that could potentially increase network latency. The experiments are conducted using three balancing strategies, namely LowNodeUtilization, HighNodeUtilization, and custom ImbalanceIndexUtilization, to analyze the impact of network-aware eviction filtering under different workload redistribution approaches.
+
+%-----------------------------------------------------------------------------%
+\subsection{Experimental Setup and Environment Configuration}
+\label{sec:netaware4_experimentsetup}
+%-----------------------------------------------------------------------------%
+To evaluate the effectiveness of the proposed Network-Aware Descheduler against resource fragmentation and cross-region latency anomalies, a physical-to-logical hybrid testing sandbox was built. The design validates descheduling actions against varying node performance tiers under tight resource ceilings, providing deterministic telemetry data for thesis synthesis.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Infrastructure and Cluster Topology}
+\label{sec:netaware4_experimentsetup}
+%-----------------------------------------------------------------------------%
+The experimental testing cluster is hosted inside an isolated Virtual Private Cloud (VPC) on Amazon Web Services (AWS). Due to the structural restrictions of the cloud sandbox environment, all instances are physically provisioned within the \textit{us-east-1} geographic region. The infrastructure pool comprises five distinct \textit{t3.micro} virtual machines acting as worker nodes, alongside a dedicated administrative control plane and one worker specific for Prometheus.  
+
+A critical engineering constraint of the \textit{t3.micro} hardware profile is its highly restricted footprint: each instance features 2 vCPUs and a bare 1 GiB (1024 MiB) of physical RAM. After accounting for vital system daemon overheads (including the Linux kernel, Kubelet, container runtime, and Flannel network plugins), the net allocatable memory per node drops to a constrained window of approximately 800 MiB.  
+
+To model real-world high-availability environments, the underlying physical cluster nodes are distributed across distinct Availability Zones (AZs) as follows:  
+
+\begin{itemize}
+    \item Availability Zone \textit{us-east-1a}: worker-1, worker-2, worker-4, worker-5
+    \item Availability Zone \textit{us-east-1b}: worker-3
+\end{itemize}
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Network Profile and Topology Modeling}
+\label{sec:netaware4_experimentsetup}
+%-----------------------------------------------------------------------------%
+To bypass the single-region limitation of the sandbox environment, a hybrid logical topology was engineered using Linux kernel traffic shaping. A two-tier infrastructure matrix was established by dividing the cluster into two logical regions:
+
+\begin{itemize}
+    \item \textbf{Logical Region ``us-east-1'' (Tier 1 -- High Performance):} Consists of worker-1, worker-2 (in \textit{us-east-1d}), and worker-3 (in \textit{us-east-1b}). These nodes maintain their native high-speed cloud provider data paths. Communication between worker-1 and worker-2 incurs a localized intra-zone latency of approximately 0.3 ms. Communication crossing over to worker-3 experiences a natural cross-zone physical network transition averaging approximately 1 - 2 ms.
+    \item \textbf{Logical Region ``eu-west-1'' (Tier 2 -- Network Degraded):} Consists of worker-4 and worker-5. Although physically anchored inside \textit{us-east-1d}, these nodes are systematically degraded on a logical layer to emulate a distant edge zone or an independent geographical continent.
+\end{itemize}
+
+To achieve this network degradation, the primary operating system network interface (\emph{ens5}) on both worker-4 and worker-5 was targeted. A deterministic outbound network emulation queue discipline (\emph{qdisc}) rule was applied directly to the root interface using the Linux Traffic Control (\emph{tc}) framework:
+
+\begin{lstlisting}[language=bash]
+sudo tc qdisc add dev ens5 root netem delay 80ms 5ms distribution normal
+\end{lstlisting}
+
+Crucially, because this traffic shaping rule acts as a uniform egress filter, it creates a multi-hop latency matrix depending on the communication path. When a normal node (worker-1) initiates a round-trip connection with a degraded node (worker-4), the packet triggers an 80 ms delay leaving worker-4's interface during the response phase. However, when worker-4 and worker-5 communicate with each other, both machines enforce their outbound egress rules. This creates an additive round-trip time (RTT) accumulation:
+
+\begin{equation}
+RTT_{\text{Tier2}\leftrightarrow\text{Tier2}} = Delay_{\text{Node4 (Egress)}} + Delay_{\text{Node5 (Egress)}} \approx 160\,\text{ms}
+\end{equation}
+
+To align this logical simulation with the Kubernetes descheduler framework, the native cloud provider topology metadata labels were manually overridden on worker-4 and worker-5 via the control plane API:
+
+\begin{lstlisting}[language=bash]
+kubectl label node worker-4 topology.kubernetes.io/region=eu-west-1
+kubectl label node worker-5 topology.kubernetes.io/region=eu-west-1
+\end{lstlisting}
+
+This creates a split-horizon configuration where the nodes are physically local but logically segregated into distinct regional tiers.
+%-----------------------------------------------------------------------------%
+\subsubsection{Telemetry and Monitoring Architecture}
+\label{sec:netaware4_experimentsetup}
+%-----------------------------------------------------------------------------%
+To provide the network-aware descheduler with continuous data streams, a tight telemetry loop was deployed combining a full-mesh prober with a time-series database.
+
+Bloomberg's Goldpinger (version 3.10.1) was deployed as a cluster-wide DaemonSet, pinning a network auditing pod to each of the five worker nodes. Every 30 seconds, each Goldpinger instance executes a cross-node internal web check to every discovered peer over port 8080. This creates an active, real-time matrix of the data paths between all five nodes.
+
+To capture and aggregate this data, a minimal installation of Prometheus was deployed via the kube-prometheus-stack Helm chart. Because of the strict memory limits of the \textit{t3.micro} nodes, the monitoring stack was explicitly optimized to prevent system crashes. High-overhead default dependencies including Grafana, Alertmanager, kube-state-metrics, and node-exporter were entirely disabled.
+
+The Prometheus server instance was pinned to worker-6 (specific to prometheus deployment) using a targeted \emph{nodeSelector}. Its operational resource limits were tightly bounded to prevent memory leakage from exhausting the node's approximately 800 MiB allocatable ceiling:
+
