@@ -52,7 +52,8 @@ Based on the problem statement, this study addresses the following research ques
 To maintain focus and define the scope of this study, the research limitations are established as follows:
 
 \begin{itemize}
-    \item \textbf{Infrastructure:} Evaluation is limited to a small-scale Kubernetes cluster of 3--5 Nodes on AWS EC2 in the us-east-2 region.
+    \item \textbf{Infrastructure:} Evaluation is conducted on a small-scale Kubernetes cluster of 3--5 AWS EC2 nodes in the us-east-1 region, with additional logical topology separation to emulate multi-region network conditions.
+    \item \textbf{Simulator:} Extended evaluation for large-scale cluster topologies is conducted using a custom Kubernetes cluster simulator.
     \item \textbf{Metrics source:} Runtime resource usage is collected from lightweight Kubernetes metrics sources such as \texttt{metrics-server} or Prometheus-compatible exporters, depending on the experiment group.
     \item \textbf{Network:} Experiments assume standard AWS networking without specialized hardware acceleration such as SR-IOV.
     \item \textbf{Provisioning:} The cluster is provisioned using kubeadm to approximate production behavior, but excludes enterprise-grade storage features and complex service meshes unless specifically required for the evaluation scenario.
