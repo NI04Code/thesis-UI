@@ -12,7 +12,6 @@ Output:
     None
 
 // Phase 1: Initialize Cost Provider
-
 if latencyMetrics is configured then
     matrix (*$\leftarrow$*) QueryPrometheus(query, sourceLabel, targetLabel)
     costProvider (*$\leftarrow$*) LatencyCostProvider(matrix)
@@ -23,7 +22,6 @@ nodesMap (*$\leftarrow$*) {n.name (*$\rightarrow$*) n | n (*$\in$*) N}
 
 
 // Phase 2: Classify Nodes by Utilization (only apply if L2 enabled)
-
 overutilized (*$\leftarrow$*) (*$\emptyset$*)
 underutilized (*$\leftarrow$*) (*$\emptyset$*)
 for each node n (*$\in$*) N do
@@ -45,7 +43,6 @@ else
 end if
 
 // Phase 3: Select and Filter Candidate Pods
-
 for each node s (*$\in$*) sourceNodes do
     candidates (*$\leftarrow$*) GetEvictablePods(s)
     SortByPriority(candidates)             // lowest priority first
@@ -73,7 +70,6 @@ for each node s (*$\in$*) sourceNodes do
             end if
         end if
             
-
         if L1Enabled then
             D (*$\leftarrow$*) FindDependencyPods(P, labelKey, N, excludeSameOwner)
             if D (*$\neq$*) (*$\emptyset$*) then
