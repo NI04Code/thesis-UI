@@ -39,34 +39,33 @@ TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~
 
 \begin{figure}[H]
     \centering
-    \resizebox{0.92\textwidth}{!}{%
+    \resizebox{0.95\textwidth}{!}{%
     \begin{tikzpicture}[
         x=1cm,y=1cm,>=stealth,
-        box/.style={draw, line width=0.5pt, fill=white, align=center, minimum height=1.0cm, inner sep=4pt},
-        smallbox/.style={draw, line width=0.5pt, fill=white, align=center, minimum height=0.78cm, inner sep=4pt},
+        box/.style={draw, line width=0.5pt, fill=white, align=center, text width=1.85cm, minimum height=0.72cm, inner sep=3pt},
+        observebox/.style={draw, line width=0.5pt, fill=white, align=center, text width=1.6cm, minimum height=0.72cm, inner sep=3pt},
         line/.style={draw, line width=0.5pt, -stealth},
         plain/.style={draw, line width=0.5pt},
-        body/.style={font=\sffamily\small}
+        body/.style={font=\sffamily\scriptsize}
     ]
-        \node[box, minimum width=2.9cm] (state) at (1.45,4.1) {\textbf{\sffamily Cluster State}\\[-1pt]{\sffamily\small Pods and Nodes}};
-        \node[box, minimum width=3.0cm] (input) at (5.0,4.1) {\textbf{\sffamily Resource Input}\\[-1pt]{\sffamily\small requests or usage}};
-        \node[box, minimum width=2.6cm] (rii) at (8.35,4.1) {\textbf{\sffamily Compute RII}\\[-1pt]{\sffamily\small CPU-memory gap}};
-        \node[box, minimum width=2.3cm] (topsis) at (11.35,4.1) {\textbf{\sffamily TOPSIS}\\[-1pt]{\sffamily\small rank candidates}};
+        \node[box] (state) at (0.0,4.1) {\textbf{\sffamily State}\\[-1pt]{\sffamily\scriptsize Pods and Nodes}};
+        \node[box] (input) at (3.0,4.1) {\textbf{\sffamily Input}\\[-1pt]{\sffamily\scriptsize requests or usage}};
+        \node[box] (rii) at (6.0,4.1) {\textbf{\sffamily RII}\\[-1pt]{\sffamily\scriptsize CPU-memory gap}};
+        \node[box] (topsis) at (9.0,4.1) {\textbf{\sffamily TOPSIS}\\[-1pt]{\sffamily\scriptsize rank candidates}};
 
-        \node[box, minimum width=3.2cm] (guard) at (1.85,1.45) {\textbf{\sffamily Feasibility Guard}\\[-1pt]{\sffamily\small non-origin node fit}};
-        \node[box, minimum width=2.55cm] (evict) at (5.25,1.45) {\textbf{\sffamily Evict Pod}\\[-1pt]{\sffamily\small best safe candidate}};
-        \node[box, minimum width=2.55cm] (sched) at (8.55,1.45) {\textbf{\sffamily Scheduler}\\[-1pt]{\sffamily\small default placement}};
-        \node[box, minimum width=2.1cm] (observe) at (11.6,1.45) {\textbf{\sffamily Observe}\\[-1pt]{\sffamily\small outcome}};
+        \node[observebox] (observe) at (0.0,1.3) {\textbf{\sffamily Observe}\\[-1pt]{\sffamily\scriptsize outcome}};
+        \node[box] (sched) at (3.0,1.3) {\textbf{\sffamily Scheduler}\\[-1pt]{\sffamily\scriptsize default place}};
+        \node[box] (evict) at (6.0,1.3) {\textbf{\sffamily Evict}\\[-1pt]{\sffamily\scriptsize best safe Pod}};
+        \node[box] (guard) at (9.0,1.3) {\textbf{\sffamily Guard}\\[-1pt]{\sffamily\scriptsize non-origin fit}};
 
-        \draw[line] (state) -- (input);
-        \draw[line] (input) -- (rii);
-        \draw[line] (rii) -- (topsis);
-        \draw[plain] (topsis.south) -- ++(0,-0.85) -| (guard.north);
-        \draw[line] (guard) -- (evict);
-        \draw[line] (evict) -- (sched);
-        \draw[line] (sched) -- (observe);
-        \draw[plain] (observe.south) -- ++(0,-0.65) -| (state.south);
-        \draw[line] (state.south) -- ++(0,0.01);
+        \draw[line] (state.east) -- (input.west);
+        \draw[line] (input.east) -- (rii.west);
+        \draw[line] (rii.east) -- (topsis.west);
+        \draw[line] (topsis.south) -- (guard.north);
+        \draw[line] (guard.west) -- (evict.east);
+        \draw[line] (evict.west) -- (sched.east);
+        \draw[line] (sched.west) -- (observe.east);
+        \draw[line] (observe.west) -- ++(-1.0,0) |- (state.west);
     \end{tikzpicture}%
     }
     \caption{Resource Defragmentation flow using RII, TOPSIS, and a target feasibility guard.}
