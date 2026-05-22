@@ -125,7 +125,7 @@ After passing the default pre-eviction filtering stage,the proposed Network-Awar
 
 \lstinputlisting[
     caption={Network-aware algorithm}, 
-    label={lst:netaware_unified_algorithm}, 
+    label={lst:netaware_unified_algorithm},
 ]{assets/codes/pseudos/netaware-unifiedalgo.psu}
 
 During the network-aware evaluation phase, the system first initializes the network cost provider used for communication cost computation. If latency metrics are configured, the plugin queries Prometheus to obtain node-to-node latency measurements and constructs a latency-based cost provider. Otherwise, the system falls back to the topology-based cost provider, which estimates communication cost using predefined topology distances such as zone and region locality.
