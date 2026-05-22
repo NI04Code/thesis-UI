@@ -163,7 +163,7 @@ The \textit{ComputePlacementCost} procedure iterates through all dependency pods
 
 After computing the communication cost for the current placement and all candidate nodes, the algorithm evaluates whether the eviction satisfies the configured threshold condition. For each candidate node, the computed candidate cost is compared against the current placement cost. The system then counts the number of candidate nodes whose communication cost is lower than or equal to the current placement cost.
 
-The eviction decision is determined using the threshold condition defined in Equation (\ref{eq:networkthreshold}).
+The eviction decision is determined using the threshold condition defined in Equation (\ref{eq:networkthreshold}) below.
 
 \begin{equation}
 {\text{Count}(\text{Cost}(C, P) \leq \text{Cost}(a, P))}
