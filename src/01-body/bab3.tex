@@ -39,25 +39,54 @@ TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~
 
 \begin{figure}[H]
     \centering
-    \resizebox{0.95\textwidth}{!}{%
+    \resizebox{0.88\textwidth}{!}{%
     \begin{tikzpicture}[
         x=1cm,y=1cm,>=stealth,
-        box/.style={draw, line width=0.5pt, fill=white, align=center, text width=1.85cm, minimum height=0.72cm, inner sep=3pt},
-        observebox/.style={draw, line width=0.5pt, fill=white, align=center, text width=1.6cm, minimum height=0.72cm, inner sep=3pt},
+        box/.style={draw, line width=0.5pt, fill=white, align=center, inner sep=2.0pt},
         line/.style={draw, line width=0.5pt, -stealth},
         plain/.style={draw, line width=0.5pt},
-        body/.style={font=\sffamily\scriptsize}
+        start/.style={draw, line width=0.5pt, rounded corners=8pt, fill=white, align=center, inner sep=2.5pt}
     ]
-        \node[box] (state) at (0.0,4.1) {\textbf{\sffamily State}\\[-1pt]{\sffamily\scriptsize Pods and Nodes}};
-        \node[box] (input) at (3.0,4.1) {\textbf{\sffamily Input}\\[-1pt]{\sffamily\scriptsize requests or usage}};
-        \node[box] (rii) at (6.0,4.1) {\textbf{\sffamily RII}\\[-1pt]{\sffamily\scriptsize CPU-memory gap}};
-        \node[box] (topsis) at (9.0,4.1) {\textbf{\sffamily TOPSIS}\\[-1pt]{\sffamily\scriptsize rank candidates}};
+        \node[start, minimum width=1.25cm, minimum height=0.5cm] (start) at (-0.2,3.35)
+        {\textbf{\sffamily\tiny Start}};
 
-        \node[observebox] (observe) at (0.0,1.3) {\textbf{\sffamily Observe}\\[-1pt]{\sffamily\scriptsize outcome}};
-        \node[box] (sched) at (3.0,1.3) {\textbf{\sffamily Scheduler}\\[-1pt]{\sffamily\scriptsize default place}};
-        \node[box] (evict) at (6.0,1.3) {\textbf{\sffamily Evict}\\[-1pt]{\sffamily\scriptsize best safe Pod}};
-        \node[box] (guard) at (9.0,1.3) {\textbf{\sffamily Guard}\\[-1pt]{\sffamily\scriptsize non-origin fit}};
+        \node[box, minimum width=1.95cm, minimum height=0.74cm] (state) at (2.0,3.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize State}\\[-2pt]
+        {\sffamily\tiny Pods and}\\[-2pt]
+        {\sffamily\tiny Nodes}}};
 
+        \node[box, minimum width=1.95cm, minimum height=0.74cm] (input) at (4.85,3.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Input}\\[-2pt]
+        {\sffamily\tiny requests}\\[-2pt]
+        {\sffamily\tiny or usage}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.74cm] (rii) at (7.7,3.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize RII}\\[-2pt]
+        {\sffamily\tiny CPU-memory}\\[-2pt]
+        {\sffamily\tiny gap}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.74cm] (topsis) at (10.55,3.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize TOPSIS}\\[-2pt]
+        {\sffamily\tiny rank}\\[-2pt]
+        {\sffamily\tiny candidates}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.52cm] (guard) at (10.55,1.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Guard}\\[-2pt]
+        {\sffamily\tiny non-origin fit}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.52cm] (evict) at (7.7,1.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Evict}\\[-2pt]
+        {\sffamily\tiny best safe Pod}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.52cm] (sched) at (4.85,1.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Scheduler}\\[-2pt]
+        {\sffamily\tiny default place}}};
+
+        \node[box, minimum width=1.7cm, minimum height=0.52cm] (observe) at (2.0,1.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Observe}\\[-2pt]
+        {\sffamily\tiny outcome}}};
+
+        \draw[line] (start.east) -- (state.west);
         \draw[line] (state.east) -- (input.west);
         \draw[line] (input.east) -- (rii.west);
         \draw[line] (rii.east) -- (topsis.west);
@@ -65,12 +94,13 @@ TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~
         \draw[line] (guard.west) -- (evict.east);
         \draw[line] (evict.west) -- (sched.east);
         \draw[line] (sched.west) -- (observe.east);
-        \draw[line] (observe.west) -- ++(-1.0,0) |- (state.west);
+        \draw[plain] (observe.west) -- ++(-2.30,0) -- ++(0,2.0);
+        \draw[line] (-1.15,3.35) -- (start.west);
     \end{tikzpicture}%
-    }
-    \caption{Resource Defragmentation flow using RII, TOPSIS, and a target feasibility guard.}
-    \label{fig:rii_topsis_flow}
-\end{figure}
+	    }
+	    \caption{Resource Defragmentation flow using RII, TOPSIS, and a target feasibility guard.}
+	    \label{fig:rii_topsis_flow}
+	\end{figure}
 
 Figure~\ref{fig:rii_topsis_flow} summarizes the policy flow. The feasibility guard is deliberately placed after candidate ranking because a high-scoring Pod is not useful if it cannot be rescheduled safely. A candidate Pod \(p\) from origin Node \(n_o\) is considered useful only if at least one non-origin target Node \(n_t\) satisfies the Pod request and is projected to reduce the resource imbalance score after placement.
 
@@ -180,35 +210,66 @@ where \(\alpha\) controls responsiveness to the latest observation. A higher \(\
 
 \begin{figure}[H]
     \centering
-    \resizebox{0.92\textwidth}{!}{%
+    \resizebox{0.95\textwidth}{!}{%
     \begin{tikzpicture}[
         x=1cm,y=1cm,>=stealth,
-        box/.style={draw, line width=0.5pt, fill=white, align=center, minimum height=1.0cm, inner sep=4pt},
-        smallbox/.style={draw, line width=0.5pt, fill=white, align=center, minimum height=0.72cm, inner sep=4pt},
+        box/.style={draw, line width=0.5pt, fill=white, align=center, inner sep=3pt},
+        smallbox/.style={draw, line width=0.5pt, fill=white, align=center, inner sep=2.5pt},
         line/.style={draw, line width=0.5pt, -stealth},
         plain/.style={draw, line width=0.5pt},
-        body/.style={font=\sffamily\small}
+        dottedline/.style={draw, line width=0.5pt, dotted},
+        note/.style={font=\sffamily\tiny\itshape, align=center}
     ]
-        \node[box, minimum width=3.8cm] (backend) at (6.5,4.4) {\textbf{\sffamily Metrics Backend}\\[-1pt]{\sffamily\footnotesize metrics-server / Prometheus}};
-        \node[box, minimum width=3.45cm] (tight) at (2.1,2.55) {\textbf{\sffamily E4: Tight EWMA}\\[-1pt]{\sffamily\footnotesize descheduler computes state}};
-        \node[box, minimum width=3.45cm] (loose) at (10.9,2.55) {\textbf{\sffamily E5: Loose Agent}\\[-1pt]{\sffamily\footnotesize monitoring agent keeps state}};
-        \node[box, minimum width=4.1cm] (published) at (10.9,0.95) {\textbf{\sffamily Published Usage}\\[-1pt]{\sffamily\footnotesize annotation / ConfigMap / CRD}};
-        \node[box, minimum width=3.45cm] (score) at (6.0,0.95) {\textbf{\sffamily RII + TOPSIS}\\[-1pt]{\sffamily\footnotesize uses smoothed usage}};
-        \node[smallbox, minimum width=1.8cm] (eviction) at (6.0,-0.1) {\textbf{\sffamily Eviction}};
+        \node[box, minimum width=2.35cm, minimum height=0.85cm] (metrics) at (1.3,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Runtime Metrics}\\[-2pt]
+        {\sffamily\tiny CPU and memory}\\[-2pt]
+        {\sffamily\tiny observed usage}}};
 
-        \draw[plain] (backend.south) -- ++(0,-0.45) -| (tight.north);
-        \draw[plain] (backend.south) -- ++(0,-0.45) -| (loose.north);
-        \draw[line] (loose) -- (published);
-        \draw[plain] (tight.south) -- ++(0,-0.78) -| (score.west);
-        \draw[line] (published.west) -- (score.east);
-        \draw[line] (score) -- (eviction);
+        \node[box, minimum width=2.35cm, minimum height=0.85cm] (snapshot) at (4.15,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Usage Snapshot}\\[-2pt]
+        {\sffamily\tiny per-Pod usage}\\[-2pt]
+        {\sffamily\tiny aggregated by Node}}};
+
+        \node[box, minimum width=2.45cm, minimum height=0.85cm] (ewma) at (7.0,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Optional EWMA}\\[-2pt]
+        {\sffamily\tiny smooth noisy}\\[-2pt]
+        {\sffamily\tiny usage samples}}};
+
+        \node[box, minimum width=2.6cm, minimum height=0.85cm] (util) at (9.95,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Actual Utilization}\\[-2pt]
+        {\sffamily\tiny raw or smoothed}\\[-2pt]
+        {\sffamily\tiny CPU-memory ratios}}};
+
+        \node[box, minimum width=2.55cm, minimum height=0.85cm] (score) at (12.9,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize RII + TOPSIS}\\[-2pt]
+        {\sffamily\tiny score imbalance}\\[-2pt]
+        {\sffamily\tiny rank candidates}}};
+
+        \node[box, minimum width=2.35cm, minimum height=0.7cm] (guard) at (12.9,1.65)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Feasibility Guard}\\[-2pt]
+        {\sffamily\tiny target can fit Pod}}};
+
+        \node[smallbox, minimum width=1.55cm, minimum height=0.5cm] (evict) at (11.8,0.55)
+        {\sffamily\scriptsize Evict Pod};
+        \node[smallbox, minimum width=1.55cm, minimum height=0.5cm] (skip) at (14.0,0.55)
+        {\sffamily\scriptsize Skip Pod};
+
+        \draw[line] (metrics.east) -- (snapshot.west);
+        \draw[line] (snapshot.east) -- (ewma.west);
+        \draw[line] (ewma.east) -- (util.west);
+        \draw[line] (util.east) -- (score.west);
+        \draw[line] (score.south) -- (guard.north);
+        \draw[line] (guard.south) -- ++(0,-0.32) -| (evict.north);
+        \draw[line] (guard.south) -- ++(0,-0.32) -| (skip.north);
+        \draw[dottedline] (snapshot.south) -- ++(0,-0.55) -| (util.south);
+        \node[note] at (6.95,2.1) {raw usage path when smoothing is disabled};
     \end{tikzpicture}%
     }
-    \caption{EWMA integration alternatives for actual-usage-aware descheduling.}
+    \caption{Actual-usage-aware Resource Defragmentation pipeline with optional EWMA smoothing.}
     \label{fig:ewma_architecture}
 \end{figure}
 
-Figure~\ref{fig:ewma_architecture} shows the two EWMA architectures evaluated in this thesis. The tight mode computes EWMA directly in or near the descheduler logic. This is simpler, but if the descheduler runs as a CronJob, EWMA state must be persisted outside the process. The loose mode uses a long-running monitoring agent to maintain EWMA state and publish the latest values for the descheduler to consume. This aligns with monitoring-agent designs in prior load-aware Kubernetes work and avoids resetting the smoothing history on each descheduler run~\citep{marchese2024loadaware,marchese2025enhancing}.
+Figure~\ref{fig:ewma_architecture} shows how smoothing is added to the real-usage extension. Runtime telemetry is first converted into a per-Node usage snapshot. The policy can use this snapshot directly, or pass the samples through EWMA before computing CPU-memory utilization ratios. The resulting raw or smoothed actual-usage signal then replaces request-based utilization in the RII and TOPSIS scoring path. The feasibility guard remains request-aware because the default Kubernetes scheduler still admits evicted Pods based on requested resources rather than observed usage.
 
 %----------------------------------------------------------------------------- %%
 \section{Eviction Feasibility Guard}
