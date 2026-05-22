@@ -185,7 +185,7 @@ Table~\ref{tab:topsis_example} illustrates a simplified candidate comparison on 
 This example shows why the policy needs a multi-criteria ranking stage. A candidate can be resource-aligned but too disruptive, or low priority but ineffective for reducing fragmentation. TOPSIS makes these trade-offs explicit before the descheduler attempts eviction.
 
 %----------------------------------------------------------------------------- %%
-\section{Real-Usage and EWMA Extension}
+\subsection{Real-Usage and EWMA Extension}
 \label{sec:real_usage_design}
 %----------------------------------------------------------------------------- %%
 The request-based Resource Defragmentation policy follows the same input model used by the default scheduler. This is safe for scheduling feasibility, but it can misrepresent the actual runtime state when a Pod requests more resources than it currently uses or when bursty workloads change rapidly. Prior load-aware Kubernetes orchestration work motivates the use of runtime CPU, memory, network, and disk telemetry for scheduling or descheduling decisions~\citep{marchese2024loadaware,marchese2025enhancing}.
@@ -272,7 +272,7 @@ where \(\alpha\) controls responsiveness to the latest observation. A higher \(\
 Figure~\ref{fig:ewma_architecture} shows how smoothing is added to the real-usage extension. Runtime telemetry is first converted into a per-Node usage snapshot. The policy can use this snapshot directly, or pass the samples through EWMA before computing CPU-memory utilization ratios. The resulting raw or smoothed actual-usage signal then replaces request-based utilization in the RII and TOPSIS scoring path. The feasibility guard remains request-aware because the default Kubernetes scheduler still admits evicted Pods based on requested resources rather than observed usage.
 
 %----------------------------------------------------------------------------- %%
-\section{Eviction Feasibility Guard}
+\subsubsection{Eviction Feasibility Guard}
 \label{sec:real_usage_eviction_algorithm}
 %----------------------------------------------------------------------------- %%
 The descheduler cannot assume that the default scheduler will place an evicted Pod on the best projected target. Therefore, the policy applies a feasibility guard before eviction. The guard evaluates only non-origin target Nodes because returning the Pod to the same Node does not improve fragmentation and only adds disruption.
