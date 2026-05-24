@@ -47,7 +47,7 @@ Both components use a network cost model \ref{sec:netaware_costmodel} to estimat
 	\label{fig:netaware_arcdesign}
 \end{figure}
 
-The detailed architecture of the Network-Aware Descheduler plugin is shown in Figure \ref{fig:netaware_arcdesign} based on the system overview described in Section \ref{sec:netaware_sysoverview}. The architecture enhances the descheduler eviction process with a common network-aware assessment scheme that is uniformly applied to the architectural levels. 
+The detailed architecture of the Network-Aware Descheduler plugin is shown in Figure \ref{fig:netaware_arcdesign} based on the system overview described in Section \ref{sec:netaware_sysoverview}. This architecture enhances the descheduler eviction process with a common network-aware assessment scheme that is uniformly applied to the architectural levels. 
 
 To support this design, the system is structured around three core components. The first component is the Network Cost Model abstracted into Cost Provider, which describes the calculation of the network distance between nodes. The abstraction enables topology-aware estimation based on node locality like region and zone, and latency-aware estimation based on real-time data collected via Prometheus. 
 
@@ -62,7 +62,7 @@ To balance between network latency and resource defragmentation goals, an evicti
 \subsection{Network Cost Model}
 \label{sec:netaware_costmodel}
 %----------------------------------------------------------------------------- %%
-To accommodate various deployment situations and accuracy levels, the Network Cost Model employs two distinct methodologies for cost computation: a topology-based cost model and a latency-based cost model. Both methodologies are encompassed inside the Cost Provider abstraction and can be chosen via configuration, as detailed in Chapter \ref{sec:netaware_arcdesign}. The topology-based model offers a lightweight and static assessment, whereas the latency-based model facilitates a dynamic and measurement-driven evaluation grounded in real-time network conditions.
+To accommodate various deployment situations and accuracy levels, we design our Network Cost Model to have two distinct methodologies for cost computation: a topology-based cost model and a latency-based cost model. Both methodologies are encompassed inside the Cost Provider abstraction and can be chosen via configuration, as detailed in Chapter \ref{sec:netaware_arcdesign}. The topology-based model offers a lightweight and static assessment, whereas the latency-based model facilitates a dynamic and measurement-driven evaluation grounded in real-time network conditions.
 \subsubsection{Topology Base Cost Model}
 \label{sec:netaware_topologycostmodel}
 %----------------------------------------------------------------------------- %%
@@ -96,7 +96,7 @@ Besides the query description, the configuration has to define the mapping betwe
 \subsubsection{Consistency Between Layers}
 \label{sec:netaware_costmodelconsistency}
 %----------------------------------------------------------------------------- %%
-The proposed architecture enforces consistency between the global PreEvictionFilter and the strategy-level component through profile-level configuration validation. Although each plugin exposes its own set of configurable parameters including threshold values, dependency labels, and cost model settings, specific elements related to network cost computation must remain aligned when both components are enabled within the same descheduler profile. 
+Although each plugin exposes its own set of configurable parameters including threshold values, dependency labels, and cost model settings, specific elements related to network cost computation must remain aligned when both components are enabled within the same descheduler profile. 
 
 In particular, the selection of the cost evaluation approach must be consistent across both layers. When latency based cost evaluation is selected, both components are required to utilize identical Prometheus query definitions and consistent node label mappings, such as the source and target node identifiers. This ensures that network cost is derived from the same underlying observations and measurement semantics. Similarly, the dependency identification mechanism, defined through the \textit{network-group} label, must be consistently configured to guarantee uniform grouping of interdependent pods during cost evaluation.
 
@@ -121,7 +121,7 @@ The network-aware eviction decision workflow is implemented within the chaining 
 
 The first stage is the built-in \textit{DefaultEvictor} plugin provided by the Kubernetes descheduler framework. This component evaluates several default eviction constraints such as pod state validation, scheduling constraints and node fit requirements to ensure that the pod is eligible for eviction \citep{k8s_descheduler_docs}. If any of these constraints is violated the eviction procedure is cancelled and the pod is skipped. Otherwise the eviction candidate continues to the next phase. 
 
-After passing the default pre-eviction filtering stage,the proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Listing \ref{lst:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster. 
+After passing the default pre-eviction filtering stage, our proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Listing \ref{lst:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster. 
 
 \lstinputlisting[
     caption={Network-aware algorithm}, 
@@ -180,7 +180,7 @@ This threshold-based mechanism is intended to balance workload redistribution ob
 \subsection{Plugin Configuration}
 \label{sec:netaware_config}
 %----------------------------------------------------------------------------- %%
-The configuration structure of the proposed Network-Aware Descheduler policy consists of two independent configuration corresponding to the two layers architectural components discussed in Section \ref{sec:netaware_sysoverview} and \ref{sec:netaware_arcdesign}. The first layer configures the global \textit{NetworkCostEvictor} plugin operating at the \textit{PreEvictionFilter} phases, while the second layer extends node utilization balancing strategies with network-aware evaluation capabilities.
+The configuration structure of our proposed Network-Aware Descheduler policy consists of two independent configuration corresponding to the two layers architectural components discussed in Section \ref{sec:netaware_sysoverview} and \ref{sec:netaware_arcdesign}. The first layer configures the global \textit{NetworkCostEvictor} plugin operating at the \textit{PreEvictionFilter} phases, while the second layer extends node utilization balancing strategies with network-aware evaluation capabilities.
 
 \lstinputlisting[
     caption={Layer 1: Global preEvictionFilter configuration}, 
