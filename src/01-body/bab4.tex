@@ -49,9 +49,9 @@ sudo tc qdisc add dev ens5 root netem delay 80ms 5ms distribution normal
 
 Crucially, because this traffic shaping rule acts as a uniform egress filter, it creates a multi-hop latency matrix depending on the communication path. When a normal node (worker-1) initiates a round-trip connection with a degraded node (worker-4), the packet triggers an 80 ms delay leaving worker-4's interface during the response phase. However, when worker-4 and worker-5 communicate with each other, both machines enforce their outbound egress rules. This creates an additive round-trip time (RTT) accumulation:
 
-\begin{equation}
+\[
 RTT_{\text{Tier2}\leftrightarrow\text{Tier2}} = Delay_{\text{Node4 (Egress)}} + Delay_{\text{Node5 (Egress)}} \approx 160\,\text{ms}
-\end{equation}
+\]
 
 To align this logical simulation with the Kubernetes descheduler framework, the native cloud provider topology metadata labels were manually overridden on worker-4 and worker-5 via the control plane API:
 
@@ -65,11 +65,11 @@ This creates a split-horizon configuration where the nodes are physically local 
 \subsubsection{Telemetry and Monitoring Architecture}
 \label{subsubsec:netaware4_monitoringsetup}
 %-----------------------------------------------------------------------------%
-To provide the network-aware descheduler with continuous data streams, a tight telemetry loop was deployed combining a full-mesh prober with a time-series database.
+To provide the network-aware descheduler with continuous data streams, we deployed a tight telemetry loop combining a full-mesh prober with a time-series database.
 
 Bloomberg's Goldpinger (version 3.10.1) was deployed as a cluster-wide DaemonSet, pinning a network auditing pod to each of the five worker nodes. Every 30 seconds, each Goldpinger instance executes a cross-node internal web check to every discovered peer over port 8080. This creates an active, real-time matrix of the data paths between all five nodes.
 
-To capture and aggregate this data, a minimal installation of Prometheus was deployed via the kube-prometheus-stack Helm chart. Because of the strict memory limits of the \textit{t3.micro} nodes, the monitoring stack was explicitly optimized to prevent system crashes. High-overhead default dependencies including Grafana, Alertmanager, kube-state-metrics, and node-exporter were entirely disabled.
+To capture and aggregate this data, a minimal installation of Prometheus was deployed using kube-prometheus-stack Helm chart. Because of the strict memory limits of the \textit{t3.micro} nodes, we limit the monitoring stack to prevent system crashes. High-overhead default dependencies including Grafana, Alertmanager, kube-state-metrics, and node-exporter were entirely disabled.
 
 The Prometheus server instance was pinned to worker-6 (dedicated Prometheus node) using a targeted \emph{nodeSelector}. Its operational resource limits were tightly bounded to prevent memory leakage from exhausting the node's approximately 800 MiB allocatable ceiling:
 
@@ -82,9 +82,9 @@ By expanding the global scrapeInterval to 45s and restricting data retention to 
 
 The telemetry data is collected by evaluating two core histogram vectors: \textit{goldpinger\_peers\_response\_time\_s\_sum} and \textit{goldpinger\_peers\_response\_time\_s\_count}. The network-aware descheduler will queries these metrics using an integrated PromQL engine over a rolling 5-minute mathematical average (\textit{avg\_over\_time}) via the following unified query string:
 
-\begin{equation}
+\[
 \text{Network Latency (Seconds)} = \frac{\text{avg\_over\_time}(\text{goldpinger\_peers\_response\_time\_s\_sum}[5\text{m}])}{\text{avg\_over\_time}(\text{goldpinger\_peers\_response\_time\_s\_count}[5\text{m}])} 
-\end{equation}
+\]
 
 The query utilizes \textit{goldpinger\_host\_name} as its source indicator and \textit{goldpinger\_peer\_name} as its target label mapping. This allows the descheduler to programmatically construct a real-time topology map of the cluster's network characteristics.
 
@@ -123,23 +123,26 @@ The combined workload have a total net cluster request of 1750m vCPU and 512 MiB
 
 \begin{table}[H]
     \centering
-    \vspace{0.5em} % Adds consistent vertical spacing below the caption
-    \begin{tabular}{lcccc}
-        \toprule
-        \textbf{Deployment} & \textbf{Replicas} & \textbf{CPU/Mem per Pod} & \textbf{Total CPU/Mem Req.} & \textbf{network-group Label} \\ 
-        \midrule
-        Payment             & 2                 & 250m/64 MiB              & 500m/128 MiB                & checkout-flow \\
-        Transaction         & 2                 & 200m/48 MiB              & 400m/96 MiB                 & checkout-flow \\
-        Database (DB)       & 1                 & 250m/96 MiB              & 250m/96 MiB                 & checkout-flow \\
-        Filler Pods         & 4                 & 150m/48 MiB              & 600m/192 MiB                & None          \\ 
-        \midrule
-        \textbf{Total Workload} & \textbf{9}     & ---                  & \textbf{1750m/512 MiB}         & ---           \\
-        \bottomrule
-    \end{tabular}
+    \resizebox{\textwidth}{!}{%
+        \begin{tabular}{lcccc}
+            \toprule
+            \textbf{Deployment} & \textbf{Replicas} & \textbf{CPU/Mem per Pod} & \textbf{Total CPU/Mem Req.} & \textbf{network-group Label} \\ 
+            \midrule
+            Payment             & 2                 & 250m/64 MiB              & 500m/128 MiB                & checkout-flow \\
+            Transaction         & 2                 & 200m/48 MiB              & 400m/96 MiB                 & checkout-flow \\
+            Database (DB)       & 1                 & 250m/96 MiB              & 250m/96 MiB                 & checkout-flow \\
+            Filler Pods         & 4                 & 150m/48 MiB              & 600m/192 MiB                & None          \\ 
+            \midrule
+            \textbf{Total Workload} & \textbf{9}     & ---                  & \textbf{1750m/512 MiB}         & ---           \\
+            \bottomrule
+        \end{tabular}%
+    }
+    \vspace{0.5em} 
     \caption{Workload profiling and resource allocation}
     \label{tab:netaware4_workloadprofiling}
 \end{table}
+
 %-----------------------------------------------------------------------------%
-\subsubsection{Workload Profiling}
-\label{subsubsec:netaware4_workloadprofiling}
+\subsubsection{Workload Initial State Distribution}
+\label{subsubsec:netaware4_workloaddistribution}
 %-----------------------------------------------------------------------------%

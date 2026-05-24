@@ -152,25 +152,23 @@ After dependency discovery, the algorithm computes the communication cost betwee
     label={lst:netaware_computeplacement_algo}, 
 ]{assets/codes/pseudos/netaware/computecost.psu}
 
-The network cost calculation performed by the \textit{ComputePlacementCost} procedure is formally defined in Equation (\ref{eq:networkcost}). Given a candidate pod $P$ residing on node $n$, the total communication cost is calculated as the summation of network costs between node $n$ and the nodes hosting all dependency pods $d \in D$.
+Given a candidate pod $P$ residing on node $n$, the total communication cost is calculated as the summation of network costs between node $n$ and the nodes hosting all dependency pods $d \in D$, formally defined as follows:
 
-\begin{equation}
+\[
 \func{Cost}{n, P} = \sum_{d \in D} \func{Network}{n, \text{Node}_{d}}
-\label{eq:networkcost}
-\end{equation}
+\]
 
 The \textit{ComputePlacementCost} procedure iterates through all dependency pods and retrieves the node hosting each dependency pod. Using the configured cost provider, the algorithm computes the pairwise communication cost between the candidate destination node and each dependency node. The resulting costs are accumulated to produce the total placement cost for the evaluated node.
 
 After computing the communication cost for the current placement and all candidate nodes, the algorithm evaluates whether the eviction satisfies the configured threshold condition. For each candidate node, the computed candidate cost is compared against the current placement cost. The system then counts the number of candidate nodes whose communication cost is lower than or equal to the current placement cost.
 
-The eviction decision is determined using the threshold condition defined in Equation (\ref{eq:networkthreshold}) below.
+The eviction decision is determined using the threshold condition defined in below equation:
 
-\begin{equation}
+\[
 {\text{Count}(\text{Cost}(C, P) \leq \text{Cost}(a, P))}
 \geq
 {\text{TotalCandidates}} \cdot \text{MinBetterCandidatesPercent}
-\label{eq:networkthreshold}
-\end{equation}
+\]
 
 An eviction is permitted only if the number of candidate nodes satisfying the condition exceeds the minimum threshold defined by \textit{MinBetterCandidatesPercent}, which defaults to 50\%. Otherwise, the eviction is rejected.
 
