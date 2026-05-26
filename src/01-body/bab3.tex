@@ -113,7 +113,7 @@ If any inconsistency is detected in the cost model configuration, the system per
 \begin{figure}
 	\centering
 	\includegraphics[width=0.3\textwidth]{assets/pics/network-aware/preevict-chaining.png}
-	\caption{Pre-eviction filter chaining.}
+	\caption{PreEviction filter chaining.}
 	\label{fig:netaware_preevictchaining}
 \end{figure}
 
@@ -124,7 +124,7 @@ The first stage is the built-in \textit{DefaultEvictor} plugin provided by the K
 After passing the default pre-eviction filtering stage, our proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Listing \ref{lst:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster. 
 
 \lstinputlisting[
-    caption={Network-aware algorithm}, 
+    caption={Network-Aware algorithm}, 
     label={lst:netaware_unified_algorithm},
 ]{assets/codes/pseudos/netaware/unifiedalgo.psu}
 
@@ -135,7 +135,7 @@ When the strategy-level component is enabled, the system additionally classifies
 For each selected eviction candidate pod, the algorithm first checks whether the pod contains the configured dependency label. If no dependency label is present, the eviction is immediately permitted because no communication dependency needs to be preserved. Otherwise, the system identifies all dependent pods belonging to the same communication group using the \textit{FindDependencyPods} function shown in Listing \ref{lst:netaware_finddeppods_algo}.
 
 \lstinputlisting[
-    caption={\textit{FindDependencyPods} function}, 
+    caption={Network-Aware algorithm: \textit{FindDependencyPods} function}, 
     label={lst:netaware_finddeppods_algo}, 
 ]{assets/codes/pseudos/netaware/finddeppods.psu}
 \lstinputlisting[
@@ -148,7 +148,7 @@ The \textit{FindDependencyPods} function discovers communication dependencies by
 After dependency discovery, the algorithm computes the communication cost between the evaluated pod and all dependency pods using the \textit{ComputePlacementCost} procedure shown in Listing \ref{lst:netaware_computeplacement_algo}. This procedure evaluates the communication cost for both the current node placement and all candidate destination nodes. The set of evaluated candidate nodes depends on the architectural layer being used. The global filtering layer evaluates all ready nodes in the cluster, whereas the strategy-level layer evaluates only the nodes selected by the balancing strategy.
 
 \lstinputlisting[
-    caption={\textit{ComputePlacementCost} function}, 
+    caption={Network-Aware algorithm: \textit{ComputePlacementCost} function}, 
     label={lst:netaware_computeplacement_algo}, 
 ]{assets/codes/pseudos/netaware/computecost.psu}
 
@@ -181,7 +181,7 @@ This threshold-based mechanism is intended to balance workload redistribution ob
 The configuration structure of our proposed Network-Aware Descheduler policy consists of two independent configuration corresponding to the two layers architectural components discussed in Section \ref{sec:netaware_sysoverview} and \ref{sec:netaware_arcdesign}. The first layer configures the global \textit{NetworkCostEvictor} plugin operating at the \textit{PreEvictionFilter} phases, while the second layer extends node utilization balancing strategies with network-aware evaluation capabilities.
 
 \lstinputlisting[
-    caption={Layer 1: Global preEvictionFilter configuration}, 
+    caption={Network-Aware Layer 1: Global preEvictionFilter configuration}, 
     label={lst:netaware_l1config},
 ]{assets/codes/pseudos/netaware/configL1.psu}
 
@@ -192,7 +192,7 @@ The \textit{networkGroupLabelKey} parameter specifies the label key used to iden
 The optional \textit{latencyMetrics} section enables latency-based communication cost evaluation using Prometheus metrics. The configuration defines the PromQL query used to retrieve node-to-node latency measurements together with the source and destination node label mappings required to construct the latency matrix used during cost evaluation.
 
 \lstinputlisting[
-    caption={Layer 2: NodeUtilization extended configuration}, 
+    caption={Network-Aware Layer 2: NodeUtilization extended configuration}, 
     label={lst:netaware_l2config},
 ]{assets/codes/pseudos/netaware/configL2.psu}
 
