@@ -120,7 +120,12 @@ Fragmented Nodes are processed in priority order. The priority combines dimensio
 
 where \(FSI_i\) is the Node free-space index, \(w_p\) controls the balance between imbalance severity and free-space pressure, and \(\epsilon\) prevents division by zero. In this design, \(w_p = 0.5\) gives equal importance to skewed resource dimensions and low usable capacity. This avoids chasing Nodes that are skewed but mostly empty, while also avoiding policies that only target high utilization without considering CPU-memory shape.
 
-In the eviction-loop phase, each fragmented Node contributes its eligible Pods to a TOPSIS decision matrix. The best-scoring Pod is submitted to the framework evictor API. If eviction succeeds, the local Node snapshot is updated immediately by subtracting the evicted Pod resources, and \(RII_i\) is recalculated. The Node is removed from the fragmented queue once it falls below the threshold; otherwise, the remaining Pod candidates continue to be evaluated until the queue or eviction budget is exhausted.
+In the eviction-loop phase, each fragmented Node contributes its eligible Pods to a TOPSIS decision matrix. The best-scoring Pod is submitted to the framework evictor API. If eviction succeeds, the local Node snapshot is updated immediately by subtracting the evicted Pod resources, and \(RII_i\) is recalculated. The Node is removed from the fragmented queue once it falls below the threshold; otherwise, the remaining Pod candidates continue to be evaluated until the queue or eviction budget is exhausted. Listing~\ref{lst:resource_defrag_rii_topsis} summarizes the Resource Defragmentation execution loop implemented in the custom descheduler. The algorithm first identifies fragmented nodes using RII, ranks candidate Pods using TOPSIS, and applies a request-feasibility guard before submitting an eviction.
+
+\lstinputlisting[
+    caption={Resource Defragmentation eviction loop with RII and TOPSIS.},
+    label={lst:resource_defrag_rii_topsis},
+]{assets/codes/pseudos/resource-defrag-rii-topsis.psu}
 
 \subsection{TOPSIS Candidate Criteria}
 \label{sec:topsis_candidate_criteria}
@@ -269,7 +274,12 @@ where \(\alpha\) controls responsiveness to the latest observation. A higher \(\
     \label{fig:ewma_architecture}
 \end{figure}
 
-Figure~\ref{fig:ewma_architecture} shows how smoothing is added to the real-usage extension. Runtime telemetry is first converted into a per-Node usage snapshot. The policy can use this snapshot directly, or pass the samples through EWMA before computing CPU-memory utilization ratios. The resulting raw or smoothed actual-usage signal then replaces request-based utilization in the RII and TOPSIS scoring path. The feasibility guard remains request-aware because the default Kubernetes scheduler still admits evicted Pods based on requested resources rather than observed usage.
+Figure~\ref{fig:ewma_architecture} shows how smoothing is added to the real-usage extension. Runtime telemetry is first converted into a per-Node usage snapshot. The policy can use this snapshot directly, or pass the samples through EWMA before computing CPU-memory utilization ratios. The resulting raw or smoothed actual-usage signal then replaces request-based utilization in the RII and TOPSIS scoring path. The feasibility guard remains request-aware because the default Kubernetes scheduler still admits evicted Pods based on requested resources rather than observed usage. Listing~\ref{lst:resource_defrag_actual_ewma} summarizes how the policy selects the resource signal used by RII and TOPSIS. Request-based mode uses declared Pod requests, actual-raw mode reads current metrics, and actual-ewma mode uses smoothed metrics maintained by the metrics collector.
+
+\lstinputlisting[
+    caption={Actual-usage and EWMA resource signal selection.},
+    label={lst:resource_defrag_actual_ewma},
+]{assets/codes/pseudos/resource-defrag-actual-ewma.psu}
 
 %----------------------------------------------------------------------------- %%
 \subsubsection{Eviction Feasibility Guard}
@@ -284,7 +294,7 @@ For a candidate Pod \(p\) currently running on Node \(n_o\), a target Node \(n_t
     \item \textbf{Projected improvement.} Moving the Pod from \(n_o\) to \(n_t\) is expected to reduce \(|RII|\), improve the TOPSIS objective, or meet a configured minimum improvement threshold.
 \end{enumerate}
 
-This guard can reduce the number of evictions, but that behavior is intentional. The policy should prefer no action over an eviction that is likely to leave the Pod Pending, return it to the origin Node, or produce no measurable fragmentation improvement.
+This guard can reduce the number of evictions, but that behavior is intentional. The policy should prefer no action over an eviction that is likely to leave the Pod Pending, return it to the origin Node, or produce no measurable fragmentation improvement. As shown in Listing~\ref{lst:resource_defrag_rii_topsis}, this guard is evaluated after TOPSIS candidate selection and before the framework evictor is called.
 
 %----------------------------------------------------------------------------- %%
 \section{Network-Aware Evictor Policy Design}

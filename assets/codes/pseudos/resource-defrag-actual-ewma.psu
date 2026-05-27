@@ -1,0 +1,68 @@
+Function: SelectResourceSignal
+Input:
+    node
+    requestedUsage
+    usageMode          // requests, actual-raw, actual-ewma
+    metricsCollector
+Output:
+    usage
+    source
+
+    if usageMode = requests then
+        return requestedUsage, "requests"
+    end if
+
+    if metricsCollector is unavailable then
+        return requestedUsage, "requests-fallback"
+    end if
+
+    if usageMode = actual-raw then
+        rawMetrics <- ReadCurrentNodeMetrics(node)
+        if rawMetrics is unavailable then
+            return requestedUsage, "requests-fallback"
+        end if
+        return rawMetrics.cpuMemoryUsage, "actual-raw"
+    end if
+
+    if usageMode = actual-ewma then
+        if metricsCollector has not synced then
+            CollectMetricsWithEWMA(metricsCollector)
+        end if
+
+        smoothedMetrics <- metricsCollector.NodeUsage(node)
+        if smoothedMetrics is unavailable then
+            return requestedUsage, "requests-fallback"
+        end if
+
+        return smoothedMetrics.cpuMemoryUsage, "actual-ewma"
+    end if
+
+    return requestedUsage, "requests-fallback"
+
+--------------------------------------------------------------------------------
+
+Function: CollectMetricsWithEWMA
+Input:
+    N              // nodes
+    previousUsage  // stored smoothed usage per node
+    alpha          // smoothing factor
+Output:
+    updatedUsage
+
+    for each node n in N do
+        current <- ReadCurrentNodeMetrics(n)
+        if current is unavailable then
+            continue        // keep previous smoothed value
+        end if
+
+        if previousUsage[n] is empty then
+            updatedUsage[n] <- current
+        else
+            updatedUsage[n].cpu <- alpha * current.cpu
+                                  + (1 - alpha) * previousUsage[n].cpu
+            updatedUsage[n].memory <- alpha * current.memory
+                                     + (1 - alpha) * previousUsage[n].memory
+        end if
+    end for
+
+    return updatedUsage
