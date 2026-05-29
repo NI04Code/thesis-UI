@@ -12,8 +12,6 @@ The performance metrics confirm that the network-aware framework successfully op
 
 However, a critical systemic limitation was uncovered during \textit{HighNodeUtilization} target filtering testing. When the descheduler attempts to enforce network-aware placement at Layer 2 in isolation, its intent can be entirely subverted by a network-blind default Kubernetes scheduler. Due to standard, density-driven \textit{MostAllocated} scoring rules, pods evicted with the expectation of landing on optimal hosts were frequently misrouted onto degraded nodes because the optimal nodes were already compute-saturated. This confirms that high-precision network locality preservation cannot be solved by descheduling engine alone; it requires explicit, transactional synchronization between the descheduler and the primary cluster scheduler.
 
-\section{4.5.2 Future Works}
-Based on the architectural discoveries and constraints documented throughout this implementation, the following areas are proposed for future research:
 %-----------------------------------------------------------------------------%
 \section{Future Works}
 \label{sec:future_works}
