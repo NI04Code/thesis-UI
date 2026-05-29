@@ -146,12 +146,10 @@ The writing structure of this thesis is organized as follows:
 	This chapter presents the research background, problem formulation, research questions, limitations, objectives, contributions, research position, research steps, and thesis outline.
 	\item \textbf{Chapter 2: Literature Review} \\
 	This chapter discusses Kubernetes scheduling, resource fragmentation, bin packing, MCDA/TOPSIS, Kubernetes Descheduler, communication-aware scheduling, and the research gap addressed by this study.
-	\item \textbf{Chapter 3: Policies Design and Architecture} \\
-	This chapter explains the design of the proposed Descheduler plugin policies, the consolidation pipeline, scoring criteria, network-aware component, and experiment methodology.
-	\item \textbf{Chapter 4: Policies Implementation} \\
-	This chapter describes the implementation details of the proposed plugin policies and their integration with the Kubernetes Descheduler framework.
-	\item \textbf{Chapter 5: Experiment and Evaluation} \\
-	This chapter presents the experimental setup, workload scenarios, evaluation metrics, results, and analysis of fragmentation and latency trade-offs.
-	\item \textbf{Chapter 6: Conclusion and Future Work} \\
+	\item \textbf{Chapter 3: Policies Design and Implementation} \\
+	This chapter explains the design of the proposed Descheduler plugin policies, including the Resource Defragmentation policy with RII and TOPSIS scoring, the actual-usage and EWMA extension, the Network-Aware Evictor policy, and how each policy is implemented within the Kubernetes Descheduler framework.
+	\item \textbf{Chapter 4: Experiment and Evaluation} \\
+	This chapter presents the experimental setup, workload scenarios, evaluation metrics, the synthetic walk-through validation, the live-cluster experiment matrix, the simulator-based evaluation, and the analysis of fragmentation and latency trade-offs.
+	\item \textbf{Chapter 5: Conclusion and Future Work} \\
 	This chapter summarizes the findings, limitations, and future research directions.
 \end{enumerate}
