@@ -342,6 +342,47 @@ For a candidate Pod \(p\) currently running on Node \(n_o\), a target Node \(n_t
 This guard can reduce the number of evictions, but that behavior is intentional. The policy should prefer no action over an eviction that is likely to leave the Pod Pending, return it to the origin Node, or produce no measurable fragmentation improvement. As shown in Listing~\ref{lst:resource_defrag_rii_topsis}, this guard is evaluated after TOPSIS candidate selection and before the framework evictor is called.
 
 %----------------------------------------------------------------------------- %%
+\subsection{Plugin Configuration}
+\label{sec:resource_defrag_config}
+%----------------------------------------------------------------------------- %%
+The Resource Defragmentation policy is enabled through the standard Kubernetes Descheduler configuration model. It is registered as a plugin in the \textit{balance} extension point and exposes a small set of arguments that control fragmentation detection, the eviction budget, and the resource signal used for RII and TOPSIS scoring. Table~\ref{tab:resource_defrag_args} summarizes these parameters.
+
+\begin{table}[htbp]
+    \centering
+    \caption{ResourceDefragmentation Plugin Arguments}
+    \label{tab:resource_defrag_args}
+    \renewcommand{\arraystretch}{1.25}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l l l p{6.5cm}}
+        \hline
+        \textbf{Parameter} & \textbf{Type} & \textbf{Default} & \textbf{Purpose} \\
+        \hline
+        \textit{imbalanceThreshold} & float    & \(0.0\) & A Node is marked fragmented when \(|RII| >\) this value. The default of \(0.0\) is permissive; in this research, \(0.20\) is used so that small numerical noise does not trigger eviction. \\
+        \textit{maxEvictions}       & int      & \(0\)   & Upper bound on the number of evictions per pass. The Go zero value of \(0\) makes the loop guard \(iteration < maxEvictions\) immediately false, so an unset budget produces a no-op pass. An explicit positive value is required to enable evictions. \\
+        \textit{usageMode}          & string   & empty   & Selects the resource signal: \textit{requests} uses declared Pod requests, \textit{actual-raw} reads current metrics from the metrics path, \textit{actual-ewma} uses the EWMA-smoothed signal from Section~\ref{sec:real_usage_design}. An empty value falls back to \textit{actual-ewma} when a metrics collector is available, and to \textit{requests} otherwise. Validation rejects any value outside this set. \\
+        \textit{namespaces}         & object   & nil     & Optional include or exclude list that restricts which Pods are considered for eviction. \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+Listing~\ref{lst:resource_defrag_config_requests} shows a request-based configuration. This variant is the request-space baseline used in the live-cluster experiments and matches the input model used by the default Kubernetes scheduler, so any Pod that the descheduler would prefer to evict is also a Pod the scheduler will admit elsewhere if a feasible Node exists.
+
+\lstinputlisting[
+    caption={Request-based ResourceDefragmentation configuration.},
+    label={lst:resource_defrag_config_requests},
+]{assets/codes/pseudos/resource-defrag-config-requests.psu}
+
+Listing~\ref{lst:resource_defrag_config_ewma} shows the actual-usage variant with EWMA smoothing. The only difference from the request-based listing is the \textit{usageMode} field. This variant requires a metrics collector to be available; otherwise, the implementation falls back to \textit{requests} as described above. The actual-raw variant uses the same shape with \textit{usageMode: actual-raw}.
+
+\lstinputlisting[
+    caption={Actual-usage with EWMA-smoothed signal configuration.},
+    label={lst:resource_defrag_config_ewma},
+]{assets/codes/pseudos/resource-defrag-config-ewma.psu}
+
+The choice of \textit{usageMode} is a deployment-time trade-off rather than a correctness setting. The request-based mode keeps the imbalance signal aligned with Kubernetes scheduling feasibility, which makes it predictable in environments where Pod requests are calibrated. The actual-raw mode reflects the current runtime state but inherits the noise of the underlying metrics source, so a single CPU or memory spike can affect the eviction ranking. The actual-ewma mode reduces this noise by maintaining a smoothed estimate at the cost of additional state management; this trade-off is evaluated in Chapter~\ref{bab:4} through the E3, E4, and E5 experiment groups, where E4 keeps EWMA state on the descheduler side and E5 publishes EWMA from a separate monitoring agent.
+
+%----------------------------------------------------------------------------- %%
 \section{Network-Aware Evictor Policy Design}
 \label{sec:netaware_policydesign}
 %----------------------------------------------------------------------------- %%
