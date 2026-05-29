@@ -342,6 +342,57 @@ For a candidate Pod \(p\) currently running on Node \(n_o\), a target Node \(n_t
 This guard can reduce the number of evictions, but that behavior is intentional. The policy should prefer no action over an eviction that is likely to leave the Pod Pending, return it to the origin Node, or produce no measurable fragmentation improvement. As shown in Listing~\ref{lst:resource_defrag_rii_topsis}, this guard is evaluated after TOPSIS candidate selection and before the framework evictor is called.
 
 %----------------------------------------------------------------------------- %%
+\subsection{Actual-Usage Walk-Through Example}
+\label{sec:actual_usage_walkthrough_example}
+%----------------------------------------------------------------------------- %%
+The walk-through in Section~\ref{sec:topsis_example} keeps Pod requests as the imbalance signal because that variant is well aligned with Kubernetes scheduling feasibility. The actual-usage extension uses the same machinery but reads runtime CPU and memory ratios instead. To make the difference visible, this subsection traces the policy on a synthetic cluster where every Pod declares the same request shape, so request-based RII reports a perfectly balanced cluster while runtime usage exposes a clear CPU--memory imbalance on two of three Nodes.
+
+The scenario uses three worker Nodes \(A\), \(B\), \(C\), each with allocatable capacity \(2000\,m\) CPU and \(2000\,Mi\) memory. Every Pod declares an identical request of \(250\,m / 250\,Mi\), but the runtime usage profile differs: a CPU-bursting profile \(C^{\star}\) reports \(400\,m / 100\,Mi\), a memory-bursting profile \(M^{\star}\) reports \(100\,m / 400\,Mi\), and a balanced profile \(B^{\star}\) reports \(250\,m / 250\,Mi\). The initial layout is \(A = 3C^{\star} + 3B^{\star}\), \(B = 3M^{\star} + 3B^{\star}\), and \(C = 6B^{\star}\). The imbalance threshold is \(0.2\). The same reference script used in Section~\ref{sec:topsis_example} reproduces the calculations through its \texttt{hidden-imbalance} scenario and \texttt{actual-raw} usage mode.
+
+Table~\ref{tab:actual_walkthrough_initial} reports the initial state under both signals. Sums of declared requests are identical across all three Nodes, so the request-based variant flags none of them as fragmented. Switching to the actual-usage signal exposes a CPU-skew on \(A\) and a memory-skew on \(B\); only Node \(C\), where every Pod actually consumes its declared shape, remains balanced.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Initial Cluster State Under Request and Actual-Usage Signals}
+    \label{tab:actual_walkthrough_initial}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l l c c c c}
+        \hline
+        \textbf{Node} & \textbf{Pods} & \textbf{Sum} & \textbf{Sum} & \textbf{\(RII\)} & \textbf{Status} \\
+         & & \textbf{requests} & \textbf{actual} & & \\
+        \hline
+        \(A\) & \(3C^{\star}\!+\!3B^{\star}\) & \(1500/1500\) & \(1950/1050\) & req: \(0.000\) & req: balanced \\
+         & & & & actual: \(+0.450\) & actual: fragmented \\
+        \(B\) & \(3M^{\star}\!+\!3B^{\star}\) & \(1500/1500\) & \(1050/1950\) & req: \(0.000\) & req: balanced \\
+         & & & & actual: \(-0.450\) & actual: fragmented \\
+        \(C\) & \(6B^{\star}\)               & \(1500/1500\) & \(1500/1500\) & req: \(0.000\) & req: balanced \\
+         & & & & actual: \(0.000\) & actual: balanced \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Under the request-based mode the eviction loop has nothing to do: the fragmented set is empty, no Node enters the priority queue, and the policy emits zero evictions. Under the actual-raw mode, Nodes \(A\) and \(B\) join the queue with mirror-image \(RII\) values. Their free-space indices are also mirror images (\(FSI = 0.025 \cdot 0.475 = 0.011875\) on each), which produces identical priorities. The tie is broken by the listing order, so \(A\) is processed first.
+
+At Node \(A\) the candidate list contains the three CPU-bursting Pods and the three balanced Pods. Table~\ref{tab:actual_walkthrough_topsis_a} reports the TOPSIS criteria computed in actual-usage mode, summarized by Pod profile. The decisive criterion is \(C_2\): a balanced Pod removes equal CPU and memory from \(A\), so it does not lower \(|RII_A|\), and the feasibility guard reports the no-feasible-target sentinel. A CPU-bursting Pod, in contrast, removes proportionally more CPU than memory and is also feasible to place on \(B\) by request, so its projected combined improvement is positive. After normalization and weighting, \(C^{\star}\) candidates dominate with closeness coefficient \(1.000\); the implementation selects the first such Pod in the listing order.
+
+\begin{table}[htbp]
+    \centering
+    \caption{TOPSIS Decision Matrix at Node \(A\) in Actual-Usage Mode}
+    \label{tab:actual_walkthrough_topsis_a}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l c c c c c}
+        \hline
+        \textbf{Candidate} & \textbf{\(C_1\)} & \textbf{\(C_2\)} & \textbf{\(C_3\)} & \textbf{\(C_4\)} & \textbf{\(CC_j\)} \\
+        \hline
+        CPU-bursting Pod (\(C^{\star}\)-type, \(\times 3\)) & \(+0.0135\) & \(+0.300\) & \(0.10625\) & \(0\) & \(\mathbf{1.000}\) \\
+        Balanced Pod (\(B^{\star}\)-type, \(\times 3\))   & \(0.0000\) & \(-999.9\) & \(0.07813\) & \(0\) & \(0.000\) \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Evicting one CPU-bursting Pod from \(A\) reduces its actual-usage \(RII\) from \(+0.45\) to \(+0.30\), so \(A\) remains in the fragmented list. The loop advances to \(B\), which is the symmetric case: the memory-bursting profile dominates and one \(M^{\star}\) Pod is selected. After two evictions the cluster has reduced both imbalances by one third while leaving every Node feasible by requests; with a budget of four evictions the loop continues alternating between \(A\) and \(B\) until both Nodes drop below the threshold. The detailed sweep over the eviction budget under this scenario is reported in Section~\ref{sec:actual_usage_walkthrough}.
+
+%----------------------------------------------------------------------------- %%
 \subsection{Plugin Configuration}
 \label{sec:resource_defrag_config}
 %----------------------------------------------------------------------------- %%

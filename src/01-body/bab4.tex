@@ -58,6 +58,36 @@ A practical consequence is that the descheduler outcome cannot be evaluated only
 
 The scheduler stage also provides a sanity check on the failure mode that motivates the feasibility guard. In each successful row of Table~\ref{tab:synthetic_maxev_sweep}, the replacement Pods produced by the ReplicaSet (with the same request shape as the evicted Pods) are placed on Nodes other than the original origin under the \texttt{LeastAllocated} score. That outcome is favorable but not guaranteed in general; under a bin-packing score such as \texttt{MostAllocated}, replacements can return to the origin and erase the defragmentation effect. The walk-through therefore validates the policy under a default-style scheduler while documenting the dependency on the scheduler's scoring strategy as a known limitation.
 
+\subsection{Actual-Usage Walk-Through}
+\label{sec:actual_usage_walkthrough}
+
+The request-based walk-through above relies on Pod requests as the imbalance signal. The actual-usage variant of the policy reads runtime CPU and memory ratios instead, which exposes a different class of fragmentation: a cluster whose declared requests look perfectly balanced but whose actual usage is concentrated on a single resource dimension. This subsection extends the walk-through to cover that case. The scenario, the per-Node initial state, and the TOPSIS step at Node \(A\) are described in Section~\ref{sec:actual_usage_walkthrough_example}; this section reports the eviction sweep and contrasts the two usage modes side by side.
+
+Table~\ref{tab:actual_walkthrough_sweep} reports the descheduler outcome under both signals as the eviction budget grows. The request-based mode uses the same Resource Defragmentation policy with \textit{usageMode = requests}; the actual-usage mode uses \textit{usageMode = actual-raw}. \(RII_A^\star\) and \(RII_B^\star\) denote the actual-usage \(RII\) on Nodes \(A\) and \(B\) after the descheduler pass.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Eviction Sweep on the Hidden-Imbalance Scenario (Threshold \(=0.2\))}
+    \label{tab:actual_walkthrough_sweep}
+    \renewcommand{\arraystretch}{1.25}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c c l c c}
+        \hline
+        \textbf{Mode} & \textbf{\(MaxEv\)} & \textbf{Evictions} & \textbf{Eviction Sequence} & \textbf{\(RII_A^{\star}\)} & \textbf{\(RII_B^{\star}\)} \\
+        \hline
+        requests   & \(5\) & \(0\) & (none, no Node fragmented)                                              & \(+0.450\) & \(-0.450\) \\
+        actual-raw & \(2\) & \(2\) & \(C^{\star}\!-\!1/A\), \(M^{\star}\!-\!1/B\)                                       & \(+0.300\) & \(-0.300\) \\
+        actual-raw & \(4\) & \(4\) & \(C^{\star}\!-\!1/A\), \(M^{\star}\!-\!1/B\), \(C^{\star}\!-\!2/A\), \(M^{\star}\!-\!2/B\) & \(+0.150\) & \(-0.150\) \\
+        actual-raw & \(5\) & \(4\) & same as \(MaxEv = 4\)                                                   & \(+0.150\) & \(-0.150\) \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+Three observations follow from this sweep. First, the request-based mode emits no evictions even with a generous budget because the per-Node sums of declared requests are identical and therefore \(RII_n = 0\) on every Node. The fragmented set is empty before the eviction loop runs, which means a request-only signal cannot detect the runtime contention present in this cluster. Second, the actual-raw mode targets the imbalance directly. The eviction sequence alternates between the CPU-skewed and memory-skewed Nodes, removing one bursting Pod from each before revisiting the other. After two evictions the absolute \(RII\) on \(A\) and \(B\) drops from \(0.45\) to \(0.30\); after four evictions it drops to \(0.15\), at which point both Nodes leave the fragmented list. Third, the row \(MaxEv = 5\) only produces four evictions, because once both fragmented Nodes fall below the threshold the loop exits regardless of any remaining budget; \(MaxEvictions\) remains an upper bound rather than a target.
+
+The descheduler does not change Pod requests, so the request view of the cluster is identical before and after each pass: every Node retains \(750\,m / 750\,Mi\) of free CPU and memory by request after two evictions, and \(1000\,m / 1000\,Mi\) after four evictions. The evictions therefore do not reduce the cluster's request-based capacity for incoming workloads; they shift runtime load away from the skewed dimension while leaving scheduling feasibility intact. This is the regime where actual-usage scoring contributes information that request-based scoring cannot derive on its own.
+
 \section{Simulator-Based Scale-Out}
 \label{sec:simulator_topsis_rdg_evaluation}
 
