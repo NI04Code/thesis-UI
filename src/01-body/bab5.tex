@@ -2,3 +2,24 @@
 \chapter{\babLima}
 \label{bab:5}
 %-----------------------------------------------------------------------------%
+%-----------------------------------------------------------------------------%
+\section{Conclusion}
+\label{sec:conclusion}
+%-----------------------------------------------------------------------------%
+Additionally, The empirical evaluation of the developed Network-Aware Descheduler across three distinct architectural profiles—load-balancing (\textit{LowNodeUtilization}), workload-packing (\textit{HighNodeUtilization} and (\textit{ImbalanceIndexUtilization})) successfully validates the core thesis of this research discussed on \ref{sec:researchQuestion}. Traditional upstream Kubernetes descheduling strategies operate blindly with respect to physical and logical network topologies, consistently sacrificing application performance by shuffling network-critical workloads across high-latency wide-area network links to satisfy raw compute request symmetry. The experimental results demonstrate that the proposed dual-layer network-aware architecture successfully mitigates this structural vulnerability by maintaining a strict balance between resource allocation variance and network locality constraints.
+
+The performance metrics confirm that the network-aware framework successfully optimizes the cluster environment across all testing suites. In load-balancing scenarios, the system successfully restricted the compute request variance to a CPU and Memory standard deviation of just 14.3\%. Concurrently, it successfully insulated the core application mesh from wide-area link degradation, pinning the average cross-service communication latency to an optimal 1.216ms and achieving exactly 0 pods spilled cross-region. This presents a massive optimization over the standard upstream baseline, which suffered from an extreme network latency penalty of 82.590ms due to blind pod migrations. Furthermore, under severe multi-dimensional skews, the Layer 1 pre-eviction filter successfully intercepted volatile balancing loops, maintaining a strict 0 pod cross-region spill and keeping network latency capped at 6.138ms compared to the baseline's 98.370ms penalty. These data points prove that the dual-layer descheduler successfully enforces regional isolation without compromising the core defragmentation capacity of the engine.
+
+However, a critical systemic limitation was uncovered during \textit{HighNodeUtilization} target filtering testing. When the descheduler attempts to enforce network-aware placement at Layer 2 in isolation, its intent can be entirely subverted by a network-blind default Kubernetes scheduler. Due to standard, density-driven \textit{MostAllocated} scoring rules, pods evicted with the expectation of landing on optimal hosts were frequently misrouted onto degraded nodes because the optimal nodes were already compute-saturated. This confirms that high-precision network locality preservation cannot be solved by descheduling engine alone; it requires explicit, transactional synchronization between the descheduler and the primary cluster scheduler.
+
+%-----------------------------------------------------------------------------%
+\section{Future Works}
+\label{sec:future_works}
+%-----------------------------------------------------------------------------%
+Based on the architectural discoveries and constraints documented throughout this implementation, the following areas are proposed for future research:
+
+\begin{itemize}
+    \item \textbf{Coordinated Dual-Engine Scheduling Framework:} Future research should focus on designing a unified extensible network-aware framework for the primary Kubernetes scheduler that can work together with the default descheduler.
+    \item \textbf{Adaptive Dynamic-Threshold Filtering Adjustments:} The \textit{NetworkCostEvictor} currently utilizes a static constraint threshold (\textit{minBetterCandidatesPercent}). Developing a feedback loop algorithm that dynamically tightens or loosens enforcement rules based on active cluster-wide resource scarcity or transient network jitter would maximize balancing freedom without risking SLA violations.
+    \item \textbf{Production Traffic Volume Weighting:} Integrating service mesh traffic volume data (e.g., from Istio or Linkerd) into the network cost calculations. Weighting point-to-point network latency coefficients by actual cross-service packet throughput (e.g., prioritizing Payment $\leftrightarrow$ Database over less active service pathways) would yield highly efficient, traffic-driven workload alignment.
+\end{itemize}

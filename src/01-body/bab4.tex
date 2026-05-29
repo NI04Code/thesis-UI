@@ -366,3 +366,546 @@ Table~\ref{tab:summary_descheduling_outcomes} summarizes the simulator outcomes.
 \end{table}
 
 Overall, the simulator result indicates that the TOPSIS-based ResourceDefragmentation policy reduces unscheduled Pods more effectively than the baseline policies while requiring substantially fewer evictions. This supports the broader experiment direction: the final evaluation should emphasize observable schedulability improvement, Pending Pod reduction, and eviction efficiency, with RII used as a decision aid rather than as the only proof of fragmentation reduction.
+%-----------------------------------------------------------------------------%
+\section{Latency and Defragmentation Trade-off Test}
+\label{sec:netaware4_test}
+%-----------------------------------------------------------------------------%
+In this section we evaluates the trade-off between network latency preservation and resource defragmentation within a Kubernetes cluster using the proposed Network-Aware plugin. The evaluation focuses on how the plugin maintains communication efficiency by preventing pod evictions that could potentially increase network latency. The experiments are conducted using three balancing strategies, namely LowNodeUtilization, HighNodeUtilization, and custom ImbalanceIndexUtilization, to analyze the impact of network-aware eviction filtering under different workload redistribution approaches.
+
+%-----------------------------------------------------------------------------%
+\subsection{Experimental Setup and Environment Configuration}
+\label{subsec:netaware4_experimentsetup}
+%-----------------------------------------------------------------------------%
+To evaluate the effectiveness of the proposed Network-Aware Descheduler against resource fragmentation and cross-region latency anomalies, we built a physical-to-logical hybrid testing sandbox. The design validates descheduling actions against varying node performance tiers under tight resource ceilings, providing deterministic telemetry data for thesis synthesis.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Infrastructure and Cluster Topology}
+\label{subsubsec:netaware4_infrasetup}
+%-----------------------------------------------------------------------------%
+The experimental testing cluster is hosted inside an isolated Virtual Private Cloud (VPC) on Amazon Web Services (AWS). Due to the structural restrictions of the cloud sandbox environment, all instances are physically provisioned within the \textit{us-east-1} geographic region. The infrastructure pool comprises five distinct \textit{t3.micro} virtual machines acting as worker nodes, alongside a dedicated administrative control plane and one worker specific for Prometheus.  
+
+A critical engineering constraint of the \textit{t3.micro} hardware profile is its highly restricted footprint: each instance features 2 vCPUs and a bare 1 GiB (1024 MiB) of physical RAM. After accounting for vital system daemon overheads (including the Linux kernel, Kubelet, container runtime, and Flannel network plugins), the net allocatable memory per node drops to a constrained window of approximately 800 MiB.  
+
+To model real-world high-availability environments, the underlying physical cluster nodes are distributed across distinct Availability Zones (AZs) as follows:  
+
+\begin{itemize}
+    \item \textit{us-east-1d}: worker-1, worker-2, worker-4, worker-5
+    \item \textit{us-east-1b}: worker-3
+\end{itemize}
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Network Profile and Topology Modeling}
+\label{subsubsec:netaware4_networksetup}
+%-----------------------------------------------------------------------------%
+To bypass the single-region limitation of the sandbox environment, a hybrid logical topology was engineered using Linux kernel traffic shaping. A two-tier infrastructure matrix was established by dividing the cluster into two logical regions:
+
+\begin{itemize}
+    \item \textbf{Logical Region \textit{us-east-1} (Tier 1 - High Performance):} Consists of worker-1, worker-2 (in \textit{us-east-1d}), and worker-3 (in \textit{us-east-1b}). These nodes maintain their native high-speed cloud provider data paths. Communication between worker-1 and worker-2 incurs a localized intra-zone latency of approximately 0.3 ms. Communication crossing over to worker-3 experiences a natural cross-zone physical network transition averaging approximately 1 - 2 ms.
+    \item \textbf{Logical Region \textit{eu-west-1} (Tier 2 - Network Degraded):} Consists of worker-4 and worker-5. Although physically anchored inside \textit{us-east-1d}, these nodes are systematically degraded on a logical layer to emulate a distant edge zone or an independent geographical continent.
+\end{itemize}
+
+To achieve this network degradation, the primary operating system network interface (\emph{ens5}) on both worker-4 and worker-5 was targeted. A deterministic outbound network emulation queue discipline (\emph{qdisc}) rule was applied directly to the root interface using the Linux Traffic Control (\emph{tc}) framework:
+
+\begin{lstlisting}[language=bash, numbers=none, xleftmargin=0.5em, framexleftmargin=0em]
+sudo tc qdisc add dev ens5 root netem delay 80ms 5ms distribution normal
+\end{lstlisting}
+
+Crucially, because this traffic shaping rule acts as a uniform egress filter, it creates a multi-hop latency matrix depending on the communication path. When a normal node (worker-1) initiates a round-trip connection with a degraded node (worker-4), the packet triggers an 80 ms delay leaving worker-4's interface during the response phase. However, when worker-4 and worker-5 communicate with each other, both machines enforce their outbound egress rules. This creates an additive round-trip time (RTT) accumulation:
+
+\[
+RTT_{\text{Tier2}\leftrightarrow\text{Tier2}} = Delay_{\text{Node4 (Egress)}} + Delay_{\text{Node5 (Egress)}} \approx 160\,\text{ms}
+\]
+
+To align this logical simulation with the Kubernetes descheduler framework, the native cloud provider topology metadata labels were manually overridden on worker-4 and worker-5 via the control plane API:
+
+\begin{lstlisting}[language=bash, numbers=none, xleftmargin=0.5em, framexleftmargin=0em]
+kubectl label node worker-4 topology.kubernetes.io/region=eu-west-1
+kubectl label node worker-5 topology.kubernetes.io/region=eu-west-1
+\end{lstlisting}
+
+This creates a split-horizon configuration where the nodes are physically local but logically segregated into distinct regional tiers.
+%-----------------------------------------------------------------------------%
+\subsubsection{Telemetry and Monitoring Architecture}
+\label{subsubsec:netaware4_monitoringsetup}
+%-----------------------------------------------------------------------------%
+To provide the network-aware descheduler with continuous data streams, we deployed a tight telemetry loop combining a full-mesh prober with a time-series database.
+
+Bloomberg's Goldpinger (version 3.10.1) was deployed as a cluster-wide DaemonSet, pinning a network auditing pod to each of the five worker nodes. Every 30 seconds, each Goldpinger instance executes a cross-node internal web check to every discovered peer over port 8080. This creates an active, real-time matrix of the data paths between all five nodes.
+
+To capture and aggregate this data, a minimal installation of Prometheus was deployed using kube-prometheus-stack Helm chart. Because of the strict memory limits of the \textit{t3.micro} nodes, we limit the monitoring stack to prevent system crashes. High-overhead default dependencies including Grafana, Alertmanager, kube-state-metrics, and node-exporter were entirely disabled.
+
+The Prometheus server instance was pinned to worker-6 (dedicated Prometheus node) using a targeted \emph{nodeSelector}. Its operational resource limits were tightly bounded to prevent memory leakage from exhausting the node's approximately 800 MiB allocatable ceiling:
+
+\lstinputlisting[
+    caption={Prometheus resources config for Latency and Defragmentation Trade-off Test}, 
+    label={lst:prometheus_config},
+]{assets/codes/pseudos/netaware/prometheusconfig.psu}
+
+By expanding the global scrapeInterval to 45s and restricting data retention to a lean 6h window, the internal time-series indexing map remains small enough to sit safely in 800 MiB usable RAM. Telemetry target discovery is governed by a native PodMonitor custom resource deployed to the \emph{prom} namespace. This monitor hooks directly into the named container exposed in the Goldpinger daemon manifest, automatically mapping the scraping loop to target port 8080.
+
+The telemetry data is collected by evaluating two core histogram vectors: \textit{goldpinger\_peers\_response\_time\_s\_sum} and \textit{goldpinger\_peers\_response\_time\_s\_count}. The network-aware descheduler will queries these metrics using an integrated PromQL engine over a rolling 5-minute mathematical average latency via the following unified query string:
+
+\[
+\text{Network Latency (Seconds)} = \frac{\text{rate}(\text{goldpinger\_peers\_response\_time\_s\_sum}[5\text{m}])}{\text{rate}(\text{goldpinger\_peers\_response\_time\_s\_count}[5\text{m}])} 
+\]
+
+The query utilizes host name as its source indicator and peer name as its target label mapping. This allows the descheduler to programmatically construct a real-time topology map of the cluster's network characteristics.
+
+%-----------------------------------------------------------------------------%
+\subsection{Test Scenarios and Methodology}
+\label{subsec:netaware4_testscenarios}
+%-----------------------------------------------------------------------------%
+Continuing Section \ref{subsec:netaware4_experimentsetup}, we created an automated end-to-end testing framework. The methodology relies on generating reproducible resource utilization imbalances across the cluster's network boundaries and observing whether the descheduler can optimize cluster fragmentation without routing latency-sensitive pods across simulated wide-area network links.
+
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Workload Profiling}
+\label{subsubsec:netaware4_workloadprofiling}
+%-----------------------------------------------------------------------------%
+The test workloads are isolated within a dedicated Kubernetes namespace (\emph{test-app}). To ensure that scheduling changes register clearly on the resource-constrained t3.micro worker nodes (approximately 1800m allocatable CPU and 700 MiB usable memory per node), the container resource requests were strategically scaled up to form a volatile footprint.
+
+The application layer simulates a multi-tier e-commerce microservice architecture broken down into two distinct categories:
+
+\begin{enumerate}
+    \item \textbf{Network Dependent Pods:} A tightly coupled microservice chain consisting of 5 replicas across three application architectures:
+    
+    \begin{itemize}
+        \item \textbf{Payment Deployment:} Each requesting 250m vCPU and 64 MiB of memory.
+        
+        \item \textbf{Transaction Deployment:} Each requesting 200m vCPU and 48 MiB of memory.
+        
+        \item \textbf{Database Deployment:} Each requesting 250m vCPU and 96 MiB of memory.
+    \end{itemize}
+
+    Every pod within these deployments is stamped with an explicit metadata label/network-group: \textit{checkout-flow} to inform our descheduler that these components are latency-sensitive and share cross-service dependencies.
+
+    \item \textbf{Filler Pods:} A decoupled background workload, each requesting 150m vCPU and 48 MiB of memory. These pods do not possess a \textit{network-group} label. They act as network-agnostic, generic balancing targets designed to absorb raw node capacity.
+\end{enumerate}
+
+The combined workload table for each scenario is defined below:
+
+\begin{table}[H]
+    \centering
+    \resizebox{\textwidth}{!}{%
+        \begin{tabular}{lcccc}
+            \toprule
+            \textbf{Deployment} & \textbf{Replicas} & \textbf{CPU/Mem per Pod} & \textbf{Total CPU/Mem Req.} & \textbf{network-group Label} \\ 
+            \midrule
+            Payment             & 2                 & 250m/64 MiB              & 500m/128 MiB                & checkout-flow \\
+            Transaction         & 2                 & 200m/48 MiB              & 400m/96 MiB                 & checkout-flow \\
+            Database (DB)       & 1                 & 250m/96 MiB              & 250m/96 MiB                 & checkout-flow \\
+            Filler Pods         & 4                 & 150m/48 MiB              & 600m/192 MiB                & None          \\ 
+            \midrule
+            \textbf{Total Workload} & \textbf{9}     & ---                  & \textbf{1750m/512 MiB}         & ---           \\
+            \bottomrule
+        \end{tabular}%
+    }
+    \caption{LowNodeUtilization/HighNodeUtilization Resource allocation for Latency and Defragmentation Trade-off Test}
+    \label{tab:netaware4_workloadprofiling1}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Deployment} & \textbf{Replicas} & \textbf{CPU/Mem per Pod} & \textbf{Total CPU/Mem Req.} & \textbf{network-group Label} \\ 
+        \midrule
+        Payment             & 2                 & 100m / 100 MiB           & 200m / 200 MiB              & checkout-flow \\
+        Transaction         & 1                 & 50m / 500 MiB            & 50m / 500 MiB               & checkout-flow \\
+        Database (DB)       & 1                 & 1000m / 50 MiB           & 1000m / 50 MiB              & checkout-flow \\
+        Filler Pods         & 0                 & ---                      & ---                         & None          \\ 
+        \midrule
+        \textbf{Total Workload} & \textbf{4}    & ---                      & \textbf{1250m / 750 MiB}    & ---           \\
+        \bottomrule
+    \end{tabular}
+    \caption{ImbalanceIndexUtilization Resource Allocation for Latency and Defragmentation Trade-off Test}
+    \label{tab:netaware4_workloadprofiling2}
+\end{table}
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Workload Initial State Distribution}
+\label{subsubsec:netaware4_workloaddistribution}
+%-----------------------------------------------------------------------------%
+After doing workload profiling, we initialize two automated initial distribution designed to create controlled load imbalance scenarios:
+\begin{itemize}
+    \item \textbf{LowNodeUtilization Initial State:} The nodes worker-3, worker-4, and worker-5 are temporarily cordoned before workload deployment. As a result, the default Kubernetes scheduler is forced to pack all 9 pods onto the remaining high-performance nodes, worker-1 and worker-2. After the workloads stabilize, the previously cordoned nodes are uncordoned. This creates a strongly imbalanced cluster state where the active nodes reach approximately 44\%--53\% CPU utilization, while the remaining nodes stay at 0\%, exceeding the configured 30\% target and 10\% low-utilization thresholds.
+
+    \item \textbf{HighNodeUtilization Initial State:} Additional filler pods will be scheduled to worker-1 and worker-2 and the other pods are uniformly distributed over all 5 nodes resulting in fragmented cluster state where node utilization for worker-1 and worker-2 are above defined threshold of 20\% and the other workers are below approximately 14\%.
+
+     \item \textbf{ImbalanceIndexUtilization Initial State:} Workloads are intentionally pinned to create asymmetric resource utilization across the cluster nodes. The CPU-intensive Database pod together with the localized Payment pods are concentrated on worker-2, producing a CPU-dominant utilization profile with approximately 60\% CPU allocation and 30\% memory allocation. At the same time, the memory-intensive Transaction pod is placed on the network-degraded worker-5, creating a memory-dominant profile with approximately 2.5\% CPU allocation and 61\% memory allocation. This configuration establishes a scenario where exchanging pods between nodes would mathematically improve the cluster’s multi-dimensional resource balance, but at the cost of degrading application network locality.
+\end{itemize}
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Experimental Matrix and Group Testing}
+\label{subsubsec:netaware4_experimentalmatrix}
+%-----------------------------------------------------------------------------%
+The evaluation is split into three experimental testing groups, LowNodeUtilization and HighNodeUtilization has 7 unique scenarios, while custom ImbalanceIndexUtilization has 3 unique scenarios. To ensure statistical validity and eliminate variations from container runtime cold starts or scheduling race conditions, we also run each scenario 3 times, culminating in 51 independent experimental runs. The experimental matrix are defined below:
+
+\begin{table}[H]
+    \centering
+    \resizebox{\textwidth}{!}{%
+       \begin{tabular}{lccc}
+            \toprule
+            \textbf{Strategy / Scenario} & \textbf{Low Node Util.} & \textbf{High Node Util.} & \textbf{Imbalance Index Util.} \\ 
+            \midrule
+            Baseline                     & \checkmark              & \checkmark               & \checkmark                     \\
+            Topology L1                  & \checkmark              & \checkmark               & \checkmark                     \\
+            Topology L2                  & \checkmark              & \checkmark               & ---                            \\
+            Topology L1 \& L2            & \checkmark              & \checkmark               & ---                            \\
+            Latency L1                   & \checkmark              & \checkmark               & \checkmark                     \\
+            Latency L2                   & \checkmark              & \checkmark               & ---                            \\
+            Latency L1 \& L2             & \checkmark              & \checkmark               & ---                            \\
+            \midrule
+        \end{tabular}
+    }
+    \caption{Experimental Matrix Mapping for Latency and Defragmentation Trade-off Test}
+    \label{tab:netaware4_experimentalmatrix}
+\end{table}
+
+We also configure specific operational parameters for each experimental group as follows:
+
+\begin{itemize}
+    \item \textbf{Low Node Utilization:} This group utilizes a strict resource boundary constraint where any node under 10\% utilization is marked as underutilized, while any node exceeding 30\% is classified as overutilized.
+
+    \item \textbf{High Node Utilization:} This group performs the inverse scheduling optimization by identifying nodes with less than 20\% resource utilization as consolidation candidates to support physical host downscaling.
+
+    \item \textbf{Imbalance Index Utilization:} This group utilizes 0.15\% Imbalance Index Threshold and limit eviction to 50 pods as consolidation candidates to support physical host downscaling.
+\end{itemize}
+
+%-----------------------------------------------------------------------------%
+\subsection{Evaluation Metrics}
+\label{subsec:netaware4_evaluationmetrics}
+%-----------------------------------------------------------------------------%
+To quantitatively measure and compare performance trade-offs, and systemic impact of the developed Network-Aware Descheduler against the standard upstream baseline, we establish a multi-dimensional evaluation framework. The success of the various descheduling configurations is assessed using four core metric categories that systematically capture algorithmic behavior, cluster resource redistribution efficiency, network infrastructure locality, and structural topology alignment.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{M1: Eviction Count}
+\label{subsubsec:netaware4_evaluationmetrics1}
+%-----------------------------------------------------------------------------%
+The Eviction Count serves as a direct indicator of algorithmic activity and work consolidation aggressiveness within a single execution sweep. It counts evicted pods from their original host nodes. Information for this metric is extracted straight from the single-shot job log by quantifying the total occurrence of specific target eviction notification strings:
+
+\[
+E_{count} = \sum_{j \in J} e_j
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(E_{count}\) is the total number of pods evicted during a specific descheduling sweep.
+    
+    \item \(J\) represents the set of log entries recorded during the execution job lifecycle.
+    
+    \item \(e_j\) is a binary flag equal to \(1\) if log entry \(j\) matches the string \textit{"Evicted pod"}, and \(0\) otherwise.
+\end{itemize}
+
+From an architectural standpoint, network-aware configurations are structurally expected to show a decreased eviction profile compared to the unrestricted baseline. This contraction representatively isolates the "cost of network-awareness," where the integrated cost filters purposely block rebalancing movements that would otherwise degrade inter-service network latency bounds.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{M2: Defragmentation Standard Deviation and Active Node Count}
+\label{subsubsec:netaware4_evaluationmetrics2}
+%-----------------------------------------------------------------------------%
+To properly evaluate and distinguish between the opposing structural goals of load defragmentation and bin-packing, we create a standard framework to measure cluster resource standard deviation. The evaluation is performed independently across both CPU and memory resource dimensions, where the utilization coefficient \(U_{n,R}\) for each worker node \(n\) and resource dimension \(R \in \{\text{cpu}, \text{memory}\}\) is defined as follows:
+
+\[
+U_{n,R}
+=
+\left(
+\frac{R_{\text{req}}(n)}
+{R_{\text{alloc}}(n)}
+\right)
+\times 100\%
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(U_{n,R}\) represents the request-based utilization percentage of node \(n\) for resource \(R\).
+
+    \item \(R_{\text{req}}(n)\) denotes the total requested amount of resource \(R\) from all pods assigned to node \(n\).
+
+    \item \(R_{\text{alloc}}(n)\) denotes the allocatable capacity of node \(n\) for resource \(R\), as reported by the Kubelet API.
+\end{itemize}
+
+Using these utilization coefficients, the workload distribution variance across the cluster is modeled using the population standard deviation \(\sigma_R\):
+
+\[
+\sigma_R
+=
+\sqrt{
+\frac{1}{N}
+\sum_{n=1}^{N}
+(U_{n,R} - \mu_R)^2
+}
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(\sigma_R\) is the population standard deviation of resource utilization for resource \(R\).
+
+    \item \(N\) represents the total number of worker nodes in the cluster (\(N=5\)).
+
+    \item \(\mu_R\) is the mean utilization percentage for resource \(R\) computed across all nodes.
+\end{itemize}
+
+Simultaneously, we also track the Active Node Count (\(N_{\text{active}}\)). A node is classified as active only if it hosts non-DaemonSet application workloads, excluding immutable infrastructure services such as Goldpinger, kube-proxy, and Flannel that cannot be redistributed by the descheduler.
+
+\[
+N_{\text{active}}
+=
+\sum_{n=1}^{N} a_n
+\]
+
+\[
+a_n =
+\begin{cases}
+1, & \text{if } \sum R_{\text{workload}}(n) > 0 \\
+0, & \text{otherwise}
+\end{cases}
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(N_{\text{active}}\) is the total number of worker nodes running application workloads.
+
+    \item \(a_n\) is the binary activity indicator for node \(n\).
+
+    \item \(R_{\text{workload}}(n)\) represents the compute requests generated by non-DaemonSet workloads assigned to node \(n\).
+\end{itemize}
+
+By combining \(\sigma_R\) and \(N_{\text{active}}\), the framework evaluates whether the descheduling policy achieves its intended infrastructure objective. A low \(\sigma_R\) together with a high \(N_{\text{active}}\) indicates successful defragmentation, where workloads are distributed evenly across the cluster infrastructure. Contrary, a high \(\sigma_R\) combined with a low \(N_{\text{active}}\) indicates successful bin-packing, where workloads are consolidated onto a smaller subset of nodes while leaving other nodes idle and available for scale-down. An inefficient cluster state is characterized by both high \(\sigma_R\) and high \(N_{\text{active}}\), indicating that workloads remain unevenly distributed while still occupying most of the infrastructure footprint.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{M3: Average Cross-Service Latency}
+\label{subsubsec:netaware4_evaluationmetrics3}
+%-----------------------------------------------------------------------------%
+To assess the operational impact of descheduling decisions on microservice communication pathways, the Average Cross-Service Latency is measured. This metric evaluates the communication cost between interacting components that belong to the same labeled network group. To avoid bias from intra-deployment communication, the framework excludes pods managed by the same deployment owner, ensuring that only true cross-service dependencies are evaluated.
+
+\[
+P_{\text{pairs}}
+=
+\{
+(p_1, p_2)
+\mid
+p_1 \in S_x,\;
+p_2 \in S_y,\;
+S_x \neq S_y
+\}
+\]
+
+\[
+C_{\text{total}}
+=
+\sum_{(p_1, p_2) \in P_{\text{pairs}}}
+L\left(
+N(p_1),
+N(p_2)
+\right)
+\]
+
+\[
+L_{\text{avg}}
+=
+\frac{C_{\text{total}}}
+{|P_{\text{pairs}}|}
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(P_{\text{pairs}}\) represents the set of all unique cross-service pod pairs belonging to the same network group.
+
+    \item \(p_1\) and \(p_2\) are running pods belonging to different services (\(S_x\) and \(S_y\)) within the \emph{checkout-flow} application group.
+
+    \item \(C_{\text{total}}\) is the accumulated communication cost across all evaluated service-to-service connections.
+
+    \item \(L(a,b)\) represents the network latency between node \(a\) and node \(b\), derived from a 5-minute rolling average collected through Goldpinger telemetry.
+
+    \item \(N(p)\) is a mapping function that returns the worker node hosting pod \(p\).
+
+    \item \(L_{\text{avg}}\) represents the average cross-service latency across the evaluated application mesh.
+\end{itemize}
+
+%-----------------------------------------------------------------------------%
+\subsubsection{M4: Cross-Region Pod Spill Count}
+\label{subsubsec:netaware4_evaluationmetrics4}
+%-----------------------------------------------------------------------------%
+The final validation metric for this test is the Cross-Region Pod Count, which tracks the logical isolation boundaries of the cluster. This metric acts as an indicator of structural policy leakage by measuring how many latency-sensitive pods are placed onto the network-degraded node tier.
+
+\[
+S_{\text{spill}}
+=
+\sum_{p \in G_{\text{checkout}}} f(p)
+\]
+
+\[
+f(p)
+=
+\begin{cases}
+1, & \text{if } N(p) \in D_{\text{tier}} \\
+0, & \text{otherwise}
+\end{cases}
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(S_{\text{spill}}\) is the total number of cross-region pod placements observed during a descheduling sweep.
+
+    \item \(G_{\text{checkout}}\) represents the set of active pods with netwok-group label \textit{checkout-flow} identifier.
+
+    \item \(f(p)\) is a binary placement evaluation function for pod \(p\).
+
+    \item \(N(p)\) returns the worker node hosting pod \(p\).
+
+    \item \(D_{\text{tier}}\) represents the set of simulated network-degraded nodes (worker-4 and worker-5).
+\end{itemize}
+
+An un-aware baseline policy may produce an \(S_{\text{spill}}\) value greater than zero if relocating a \emph{checkout-flow} pod to an underutilized \emph{eu-west-1} node and will improves the overall utilization balance \((\sigma_R)\). In contrast, a successful network-aware policy should maintain \(S_{\text{spill}} = 0\), demonstrating that latency-sensitive workloads remain confined to the high-performance region while only generic filler workloads are allowed to migrate to the degraded node tier.
+
+%-----------------------------------------------------------------------------%
+\subsection{Result and Analysis for LowNodeUtilization Group}
+\label{subsec:netaware4_resultanalysis1}
+%-----------------------------------------------------------------------------%
+\begin{table}[H]
+    \centering
+    \resizebox{\textwidth}{!}{
+        \begin{tabular}{cllcccccc}
+            \toprule
+            \textbf{Scenario ID} & \textbf{Strategy Configuration} & \textbf{Metrics Provider} & \textbf{Eviction Count} (\(E_{count}\)) &\(\sigma_{cpu}\) & \(\sigma_{mem}\) &\(N_{\text{active}}\) & \(L_{\text{avg}}\) & \(S_{\text{spill}}\) \\
+            \midrule
+                a1 & Upstream Baseline & None & 6 & 13.4\% & 14.1\% & 5 & 82.590ms & 2 pods \\
+                a2 & Layer 1 Only & Topology & 6 & 14.3\% & 14.3\% & 5 & 5.260ms & 0 pods \\
+                a3 & Layer 2 Only & Topology & 6 & 14.3\% & 14.3\% & 5 & 4.767ms & 0 pods \\
+                a4 & Dual Layer (L1+L2) & Topology & 6 & 14.3\% & 14.3\% & 5 & 6.096ms & 0 pods \\
+                a5 & Layer 1 Only & Latency & 6 & 14.3\% & 14.3\% & 5 & 3.251ms & 0 pods \\
+                a6 & Layer 2 Only & Latency & 6 & 14.3\% & 14.3\% & 5 & 1.969ms & 0 pods \\
+                a7 & Dual Layer (L1+L2) & Latency & 6 & 14.3\% & 14.3\% & 5 & 1.216ms & 0 pods \\
+            \midrule
+            \end{tabular}
+    }
+    \caption{Latency and Defragmentation Tradeoff: LowNodeUtilization Scenario Results}
+    \label{tab:low_util_results}
+\end{table}
+
+
+The data illustrated in Table~\ref{tab:low_util_results} shows an architectural trade-off between aggressive resource balancing and application network locality preservation. Across all seven scenarios that run three times, the descheduler executed exactly 6 pod evictions, indicating that the integration of network-aware policies did not reduce the balancing throughput of the descheduling engine.
+
+In the upstream baseline scenario (a1), we see that the descheduler operates without awareness of the underlying network topology and focuses entirely on minimizing resource utilization variance. This unrestricted behavior enables the algorithm to achieve the lowest post-balancing variance, with a CPU standard deviation of 13.4\% and a memory standard deviation of 14.1\%. However, because placement decisions are driven purely by compute balancing metrics, the descheduler relocated 2 pods belonging to the latency-sensitive \emph{checkout-flow} group onto the simulated degraded \emph{eu-west-1} node tier. As a consequence, the cross-region spill count increased to 2 pods, fragmenting application locality and increasing the average cross-service communication latency to 82.590ms due to the imposed 80ms network emulation delay.
+
+When we enabled the network-aware mechanisms (a2-a7), a distinct optimization pattern emerges. In these scenarios, the cost-provider layers prevent latency-sensitive workloads from being relocated across degraded regional boundaries. Instead, the descheduler migrates only generic filler workloads toward underutilized nodes in the degraded logical region. Since these filler pods do not contain the \textit{checkout-flow} network-group label, the balancing objectives can still be satisfied without disrupting critical service communication paths. As a result, all network-aware scenarios successfully maintain a cross-region spill count of 0 pods for the application-critical workloads. Although the constrained placement decisions produce a slightly higher post-balancing variance of 14.3\%, the approach completely isolates the application mesh from high-latency communication degradation.
+
+A deeper analysis reveals a behavioral difference between the static topology-based model and the dynamic latency-based model. Although both approaches successfully prevent cross-region pod spill, their resulting communication locality differs considerably.
+
+\begin{itemize}
+    \item \textbf{Topology-Based Cost Model (a2-a4):}  
+    In this model, we estimate network costs using static infrastructure hierarchy labels provided by the cloud provider, which are \textit{topology.kubernetes.io/zone} and \textit{topology.kubernetes.io/region}. Using these labels, we can identify cross-zone/region communication paths, such as transitions involving worker-3, worker-4, worker-5, and apply predefined penalty costs to them. This allows us to prevent workloads from being moved into clearly distant network regions. However, because the model depends entirely on static topology metadata, it still blind from real-time network conditions. As a result, we cannot detect temporary congestion, degraded network links, or asymmetric routing behavior that may occur within or across zones/regions. This limitation causes the resulting average cross-service latency to remain between 4.767ms and 6.096ms.
+
+    \item \textbf{Latency-Based Cost Model (a5-a7):}  
+    In this model, we integrate real-time network telemetry collected through Goldpinger and Prometheus directly into the descheduling process. By using live latency measurements, we can distinguish highly localized intra-zone communication paths (approximately 0.3ms) from more expensive cross-zone network paths. This allows the descheduler to make eviction decisions with millisecond-level precision instead of relying solely on static infrastructure metadata. As a result, the latency-aware approach produces significantly better workload locality, ultimately achieving the lowest observed average cross-service latency of 1.216ms in the dual-layer configuration (a7).
+\end{itemize}
+
+These results demonstrate that while static topology metadata is sufficient for enforcing coarse regional boundaries, dynamic telemetry-driven cost evaluation is more accurate to achieve high-precision workload locality optimization in multi-zone Kubernetes environments.
+
+%-----------------------------------------------------------------------------%
+\subsection{Result and Analysis for HighNodeUtilization Group}
+\label{subsec:netaware4_resultanalysis2}
+%-----------------------------------------------------------------------------%
+\begin{table}[H]
+    \centering
+    \resizebox{\textwidth}{!}{
+        \begin{tabular}{cllcccccc}
+            \toprule
+            \textbf{Scenario ID} & \textbf{Strategy Configuration} & \textbf{Metrics Provider} & \textbf{Eviction Count} (\(E_{count}\)) &\(\sigma_{cpu}\) & \(\sigma_{mem}\) &\(N_{\text{active}}\) & \(L_{\text{avg}}\) & \(S_{\text{spill}}\) \\
+            \midrule
+                b1 & Upstream Baseline & None & 6 & 32.4\% & 35.0\% & 2 & 116.310ms & 3 pods \\
+                b2 & Layer 1 Only & Topology & 4 & 29.4\% & 33.8\% & 3 & 82.055ms & 2 pods \\
+                b3 & Layer 2 Only & Topology & 6 & 32.4\% & 35.0\% & 2 & 115.268ms & 3 pods \\
+                b4 & Dual Layer (L1+L2) & Topology & 4 & 29.4\% & 33.8\% & 3 & 84.232ms & 2 pods \\
+                b5 & Layer 1 Only & Latency & 4 & 29.4\% & 33.8\% & 3 & 86.119ms & 2 pods \\
+                b6 & Layer 2 Only & Latency & 6 & 32.4\% & 35.0\% & 2 & 113.755ms & 3 pods \\
+                b7 & Dual Layer (L1+L2) & Latency & 4 & 29.4\% & 33.8\% & 3 & 81.982ms & 2 pods \\
+            \midrule
+            \end{tabular}
+    }
+    \caption{Latency and Defragmentation Tradeoff: HighNodeUtilization Scenario Results (50\% \textit{MinBetterCandidatesPercent})}
+    \label{tab:high_util_results1}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \resizebox{\textwidth}{!}{
+        \begin{tabular}{cllcccccc}
+            \toprule
+            \textbf{Scenario ID} & \textbf{Strategy Configuration} & \textbf{Metrics Provider} & \textbf{Eviction Count} (\(E_{count}\)) &\(\sigma_{cpu}\) & \(\sigma_{mem}\) &\(N_{\text{active}}\) & \(L_{\text{avg}}\) & \(S_{\text{spill}}\) \\
+            \midrule
+                b1 & Upstream Baseline & None & 6 & 32.4\% & 35.0\% & 2 & 114.919ms & 3 pods \\
+                b2 & Layer 1 Only & Topology & 2 & 27.2\% & 32.9\% & 4 & 54.908ms & 1 pod \\
+                b3 & Layer 2 Only & Topology & 6 & 32.4\% & 35.0\% & 2 & 117.951ms & 3 pods \\
+                b4 & Dual Layer (L1+L2) & Topology & 2 & 27.2\% & 32.9\% & 4 & 51.184ms & 1 pod \\
+                b5 & Layer 1 Only & Latency & 2 & 27.2\% & 32.9\% & 4 & 54.199ms & 1 pod \\
+                b6 & Layer 2 Only & Latency & 6 & 32.4\% & 35.0\% & 2 & 119.465ms & 3 pods \\
+                b7 & Dual Layer (L1+L2) & Latency & 2 & 27.2\% & 32.9\% & 4 & 52.910ms & 1 pod \\
+            \midrule
+            \end{tabular}
+    }
+    \caption{Latency and Defragmentation Tradeoff: HighNodeUtilization Scenario Results (75\% \textit{MinBetterCandidatesPercent})}
+    \label{tab:high_util_results2}
+\end{table}
+
+The results across both threshold configurations reveal an important architectural trade-off between aggressive workload compaction and network locality preservation. In the un-aware baseline scenario (b1), the descheduler performs 6 pod evictions and successfully consolidates the workloads onto only 2 active nodes (\(N_{\text{active}}=2\)). This produces the highest resource density in the experiment, with 32.4\% and 35.0\%. However, because the balancing process has no visibility into network costs, the scheduler places 3 latency-sensitive \emph{checkout-flow} pods onto the logically degraded regional tier. As a result, the average cross-service latency increases dramatically to more than 114ms.
+
+When we increase the \textit{MinBetterCandidatesPercent} threshold from 50\% to 75\ on Layer 1 pre-eviction filter, itrespond more conservatively. Under the 50\% threshold, the descheduler performs 4 evictions, whereas under the stricter 75\% threshold it reduces the number of evictions to only 2. This happens because the stronger filtering rules prevent the descheduler from evicting \emph{checkout-flow} pods unless it can verify that at least 75\% of the available destinations satisfy the network locality requirements. As a consequence, cross-region spill is reduced from 2 pods to only 1 pod, lowering the average cross-service latency from approximately 82ms to around 51ms. The trade-off is a slightly less compact cluster state, where 4 active nodes remain in use instead of 3.
+
+A major anomaly appears in the Layer 2 target-selection configurations (b3 and b6). In both threshold configurations, these scenarios fail to preserve network locality and instead behave almost identically to the un-aware baseline. Both scenarios perform 6 evictions, reduce the infrastructure footprint to 2 active nodes, spill 3 latency-sensitive pods across regions, and produce severe latency penalties between approximately 115ms and 119ms.
+
+From the scheduling logs, we observe that this behavior is caused by a desynchronization loop between the descheduler’s target-selection logic and the default Kubernetes scheduler.
+
+\begin{itemize}
+    \item \textbf{Initial Cluster State:}  
+    During the initial workload placement, the most heavily utilized nodes are worker-2 (high-performance tier) and worker-5 (network-degraded tier), while others three worker remains relatively underutilized.
+
+    \item \textbf{Descheduler Evaluation Phase:}  
+    The Layer 2 strategy identifies worker-3 as underutilized and selects its \emph{checkout-flow} pods as eviction candidates. During destination filtering, the network cost provider evaluates the available nodes and correctly identifies worker-2 as low-latency, high-performance targets. Since acceptable destinations exist within the same region, the Layer 2 policy which only expect one better candidates approves the eviction with the expectation that the pods will relocate to those nodes.
+
+    \item \textbf{Scheduler Execution Phase:}  
+    After the descheduler issues the eviction request, the pods return to the default Kubernetes scheduler queue. At this stage, the upstream scheduler still operates using a network-unaware \emph{MostAllocated} scoring strategy that prioritizes packing density over communication locality.
+
+    \item \textbf{Scheduling Race Condition:}  
+    Because earlier evictions in the same cycle have already moved additional workloads onto worker-2, its allocatable resources become saturated before the next pod is scheduled. When the scheduler evaluates the newly evicted pod, worker-2 is no longer available. The scheduler then selects worker-5 because it is the next most heavily utilized node that still satisfies the resource constraints.
+\end{itemize}
+
+Since the default Kubernetes scheduler has no understanding of network costs, we found it unintentionally overrides the descheduler’s locality-aware placement intentions and relocates the pod onto the degraded regional tier. This demonstrates a fundamental limitation of descheduling only approaches as for some scenario the descheduler target-awareness alone is insufficient if the underlying scheduler does not enforce the same network-aware constraints. Without a network-aware scheduler controlling the final landing decisions, the descheduler and scheduler can become desynchronized, consequently leading to unintended pods reschedule.
+
+%-----------------------------------------------------------------------------%
+\subsection{Result and Analysis for ImbalanceIndexUtilization Group}
+\label{subsec:netaware4_resultanalysis3}
+%-----------------------------------------------------------------------------%
+\begin{table}[H]
+    \centering
+    \resizebox{\textwidth}{!}{
+        \begin{tabular}{cllcccccc}
+            \toprule
+            \textbf{Scenario ID} & \textbf{Strategy Configuration} & \textbf{Metrics Provider} & \textbf{Eviction Count} (\(E_{count}\)) &\(\sigma_{cpu}\) & \(\sigma_{mem}\) &\(N_{\text{active}}\) & \(L_{\text{avg}}\) & \(S_{\text{spill}}\) \\
+            \midrule
+                c1 & Upstream Baseline & None & 2 & 19.1\% & 26.4\% & 3 & 98.370ms & 1 pod \\
+                c2 & Layer 1 Only & Topology & 1 & 25.8\% & 28.6\% & 2 & 6.138ms & 0 pods \\
+                c3 & Layer 1 Only & Latency & 1 & 25.8\% & 28.6\% & 2 & 6.138ms & 0 pods \\
+            \midrule
+            \end{tabular}
+    }
+    \caption{Latency and Defragmentation Tradeoff: ImbalanceIndexUtilization Scenario Results (75\% \textit{MinBetterCandidatesPercent})}
+    \label{tab:imbalance_results}
+\end{table}
+
+The empirical results from Session 3 highlight how volatile multi-dimensional resource optimization can become when network locality constraints are introduced into the balancing process. In the initial cluster state generated by \textit{reset-imbalance.sh}, worker-585 is intentionally configured to be CPU-heavy, carrying approximately 60\% CPU allocation and 30\% memory allocation, while the simulated degraded node worker-930 becomes memory-heavy with only 2.5\% CPU allocation but 61\% memory allocation. This creates a highly asymmetric workload distribution where exchanging pods between nodes would mathematically improve the overall balancing profile of the cluster.
+
+In the un-aware baseline scenario (c1), the TOPSIS-based balancing strategy performs 2 pod evictions in an attempt to reduce this imbalance. Since the plugin evaluates nodes purely from a resource optimization perspective, it identifies that redistributing the skewed workloads would improve the cluster's multi-dimensional utilization score. However, because the strategy has no understanding of network locality, one latency-sensitive \emph{checkout-flow} pod is relocated across the degraded logical network boundary onto worker-930. This immediately creates a cross-region spill condition (\(S_{\text{spill}} = 1\)) and causes the average cross-service latency to rise sharply to 98.370ms.
+
+When we enable the network-aware Layer 1 pre-eviction filtering mechanism (c2 and c3), we observe a much more controlled balancing behavior. Before the descheduler finalizes an eviction, the \textit{NetworkCostEvictor} evaluates the communication penalty that would occur if the targeted \emph{checkout-flow} pod were separated from its related service dependencies across the degraded network path.
+
+Once the calculated network penalty exceeds the configured policy threshold, the filter blocks the migration. As a result, the total eviction count decreases from 2 to 1, successfully preventing the latency-sensitive workload from being moved into the degraded region. This keeps the cross-region spill count at exactly 0 pods and preserves a low average cross-service latency of only 6.138ms.
+
+Although this protection mechanism slightly reduces the efficiency of the resource optimizer’s balancing behavior, it helps preserve the bin-packing principle of scheduling pods onto nodes. As a result, the system maintains a controlled distribution, with variance reaching 25.8\% for CPU and 28.6\% for memory while operating with only two active nodes.
