@@ -212,27 +212,7 @@ Table~\ref{tab:topsis_decision_b} shows the TOPSIS decision matrix at Node \(B\)
 
 The interpretation is direct. Removing a \(C\)-type Pod from a memory-heavy Node would push \(B\) further into the negative \(RII\) range, so its target-improvement criterion \(C_2\) collapses to the no-feasible-target sentinel value used by the implementation. Removing an \(M\)-type Pod aligns with the dominant imbalance: \(C_1\) becomes positive, \(C_2\) reports a projected combined improvement of \(+0.30\) (Node \(B\) drops from \(|RII|=0.30\) to \(0.15\) and either \(A\) or \(C\) absorbs the move within the feasibility guard), and \(C_3\) is larger because the freed CPU--memory rectangle is bigger. After vector normalization, weighting, and the closeness step, \(M\)-type candidates dominate with \(CC_j = 1.000\). The first such candidate, \(M\text{-}1\), is selected and submitted to the evictor.
 
-After the first eviction, Node \(B\) enters \(RII = -0.15\) and drops out of the fragmented list. The loop advances to Node \(A\). Because all four \(C\) Pods on \(A\) are identical, every row of the TOPSIS matrix has the same values \((C_1, C_2, C_3, C_4) = (+0.018, +0.300, 0.180, 0)\). The normalized rows are also identical, so the ideal best and ideal worst per criterion coincide, every separation distance becomes zero, and \(CC_j\) defaults to \(0.5\) for all candidates. The implementation breaks the tie by selecting the first Pod in the framework's listing order, in this case \(C\text{-}1\). The pre-eviction feasibility guard confirms that \(B\) is the strictly improving target (projected combined improvement \(+0.30\) versus \(0.0\) for \(C\)) and the second eviction is performed.
-
-Table~\ref{tab:topsis_final_state} reports the cluster state immediately after the descheduler deletions, before the default scheduler attempts to place any replacement Pods. Node \(A\) is still above the imbalance threshold, but the eviction budget is consumed and the policy stops, which is the intended budget-respecting behavior.
-
-\begin{table}[htbp]
-    \centering
-    \caption{Cluster State After ResourceDefragmentation Deletions}
-    \label{tab:topsis_final_state}
-    \renewcommand{\arraystretch}{1.25}
-    \begin{tabular}{l l c c c c}
-        \hline
-        \textbf{Node} & \textbf{Pods} & \textbf{Free CPU} & \textbf{Free Mem.} & \textbf{\(RII\)} & \textbf{Notes} \\
-        \hline
-        \(A\) & \(3C\)    & \(800\,m\) & \(1700\,Mi\) & \(+0.45\) & still fragmented, budget exhausted \\
-        \(B\) & \(2C+3M\) & \(900\,m\) & \(600\,Mi\)  & \(-0.15\) & exited fragmented list \\
-        \(C\) & \(3C+2M\) & \(600\,m\) & \(900\,Mi\)  & \(+0.15\) & unchanged \\
-        \hline
-    \end{tabular}
-\end{table}
-
-The schedulability witness is preserved by this state. Before defragmentation no Node fits the \(900\,m / 300\,Mi\) probe, so it remains Pending despite \(1800\,m\) of aggregate free CPU. After the two evictions, Node \(B\) has exactly \(900\,m\) free CPU and \(600\,Mi\) free memory, which is sufficient for the probe under request-based admission. Chapter~\ref{bab:4} extends this walk-through with a sweep over \(MaxEvictions\) and a default-scheduler placement stage to confirm that the policy outcome remains valid when the evicted Pods' replacements are also placed.
+After the first eviction, Node \(B\) enters \(RII = -0.15\) and drops out of the fragmented list. The loop advances to Node \(A\). Because all four \(C\) Pods on \(A\) are identical, every row of the TOPSIS matrix has the same values \((C_1, C_2, C_3, C_4) = (+0.018, +0.300, 0.180, 0)\). The normalized rows are also identical, so the ideal best and ideal worst per criterion coincide, every separation distance becomes zero, and \(CC_j\) defaults to \(0.5\) for all candidates. The implementation breaks the tie by selecting the first Pod in the framework's listing order, in this case \(C\text{-}1\). The pre-eviction feasibility guard confirms that \(B\) is the strictly improving target (projected combined improvement \(+0.30\) versus \(0.0\) for \(C\)) and the second eviction is performed. The full post-eviction cluster state and its schedulability impact are reported in Section~\ref{sec:synthetic_walkthrough_validation}.
 
 %----------------------------------------------------------------------------- %%
 \subsection{Real-Usage and EWMA Extension}
@@ -390,7 +370,37 @@ At Node \(A\) the candidate list contains the three CPU-bursting Pods and the th
     \end{tabular}
 \end{table}
 
-Evicting one CPU-bursting Pod from \(A\) reduces its actual-usage \(RII\) from \(+0.45\) to \(+0.30\), so \(A\) remains in the fragmented list. The loop advances to \(B\), which is the symmetric case: the memory-bursting profile dominates and one \(M^{\star}\) Pod is selected. After two evictions the cluster has reduced both imbalances by one third while leaving every Node feasible by requests; with a budget of four evictions the loop continues alternating between \(A\) and \(B\) until both Nodes drop below the threshold. The detailed sweep over the eviction budget under this scenario is reported in Section~\ref{sec:actual_usage_walkthrough}.
+Evicting one CPU-bursting Pod from \(A\) is the design illustration of how TOPSIS picks an eviction candidate under the actual-usage signal. The full eviction sequence over the eviction budget, including the symmetric step at Node \(B\) and the resulting per-mode totals, is reported in Section~\ref{sec:actual_usage_walkthrough}.
+
+%----------------------------------------------------------------------------- %%
+\subsection{EWMA Walk-Through Example}
+\label{sec:ewma_walkthrough_example}
+%----------------------------------------------------------------------------- %%
+The actual-raw walk-through above assumes that every observed sample is a faithful representation of a Pod's runtime behavior. In practice, runtime metrics fluctuate, and a single elevated reading can promote a Node into the fragmented set even when its longer-term resource shape is balanced. The EWMA variant of the policy uses the smoothed estimate from Equation~\ref{eq:ewma_usage} as the imbalance signal so that a single transient spike does not change the eviction decision.
+
+The smoothed estimate is dominated by past samples whenever \(\alpha\) is small. The production metrics agent in this work uses \(\beta = 0.9\) for the recurrence \(\hat{u}_t = \beta \hat{u}_{t-1} + (1 - \beta) u_t\), which is equivalent to \(\alpha = 1 - \beta = 0.1\) in the form of Equation~\ref{eq:ewma_usage}. A new observation therefore contributes only ten percent of its value to the next EWMA estimate, and one transient sample is heavily damped before it influences the eviction decision.
+
+To illustrate, three worker Nodes \(A\), \(B\), \(C\) of \(2000\,m / 2000\,Mi\) each are configured as follows. Node \(A\) holds four Pods with a sustained CPU-heavy runtime profile (\(350\,m / 200\,Mi\) actual usage) and two balanced fillers; the EWMA estimate equals the current snapshot because the profile has been stable across previous cycles. Node \(C\) is the symmetric memory-heavy counterpart with sustained \(200\,m / 350\,Mi\) usage on four Pods. Node \(B\) holds five balanced Pods plus one Pod whose CPU usage is currently spiking to \(700\,m\); the EWMA estimate for that Pod, however, is still balanced because the previous samples dominate the smoothed value. Every Pod declares the same request of \(250\,m / 250\,Mi\). Table~\ref{tab:ewma_walkthrough_initial} reports the per-Node \(RII\) under all three signals.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Initial Per-Node \(RII\) Under Request, Actual-Raw, and EWMA Signals}
+    \label{tab:ewma_walkthrough_initial}
+    \renewcommand{\arraystretch}{1.25}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l l c c c l}
+        \hline
+        \textbf{Node} & \textbf{Profile} & \textbf{\(RII\) request} & \textbf{\(RII\) raw} & \textbf{\(RII\) EWMA} & \textbf{Fragmented under} \\
+        \hline
+        \(A\) & sustained CPU-heavy        & \(0.000\) & \(+0.300\) & \(+0.300\) & raw, EWMA \\
+        \(B\) & balanced with one spike    & \(0.000\) & \(+0.225\) & \(0.000\)  & raw only \\
+        \(C\) & sustained memory-heavy     & \(0.000\) & \(-0.300\) & \(-0.300\) & raw, EWMA \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+The fragmented set therefore differs between modes before TOPSIS is even invoked. Under the actual-raw signal, all three Nodes enter the priority queue: \(A\) and \(C\) reflect genuine sustained imbalance, while \(B\)'s membership is the result of a single transient observation. Under the EWMA signal, only \(A\) and \(C\) are flagged. TOPSIS itself behaves identically in both modes; the difference is upstream, in which Nodes the eviction loop actually visits. The eviction sweep that follows from this difference is reported in Section~\ref{sec:ewma_walkthrough}.
 
 %----------------------------------------------------------------------------- %%
 \subsection{Plugin Configuration}

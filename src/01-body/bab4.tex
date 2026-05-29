@@ -28,7 +28,27 @@ Thus, RII and TOPSIS are used as decision signals, while the final claim is grou
 
 The first stage of the evaluation is a synthetic cluster walk-through whose every state can be derived analytically. The walk-through has two purposes: it traces the descheduler decisions on inputs that can be checked by hand, and it exposes the schedulability lifecycle of the probe Pod under a small range of \(MaxEvictions\) values together with the default-scheduler placement of the evicted Pods' replacements.
 
-The scenario, RII, FSI, priority, and TOPSIS calculations are described in Section~\ref{sec:topsis_example}. The same script\footnote{Available in the custom descheduler repository under \texttt{experiments/synthetic-simulation/simulate.py}.} is reused here to extend the analysis. After each defragmentation pass, the script feeds the post-eviction Node states and the queue of replacement Pods plus the probe Pod to a default-kube-scheduler-style placement stage. That stage applies the \texttt{NodeResourcesFit} filter and a \texttt{LeastAllocated} score equal to the mean of the per-resource fractions \((C - (R + r))/C\), with lexicographic tiebreak between equally scored Nodes. Two scheduling orders are evaluated to expose order sensitivity: \emph{probe-first}, where the previously Pending probe is admitted before any replacement, and \emph{replacement-first}, where the ReplicaSet replacements are admitted before the probe.
+The scenario, RII, FSI, priority, and TOPSIS calculations are described in Section~\ref{sec:topsis_example}. The same script\footnote{Available in the custom descheduler repository under \texttt{experiments/synthetic-simulation/simulate.py}.} is reused here to extend the analysis. With the budget \(MaxEvictions = 2\), the eviction loop produces the sequence \(M\text{-}1\) from \(B\) followed by \(C\text{-}1\) from \(A\). Table~\ref{tab:topsis_final_state} reports the resulting cluster state immediately after the descheduler deletions, before the default scheduler attempts to place any replacement Pods. Node \(A\) is still above the imbalance threshold, but the eviction budget is consumed and the policy stops, which is the intended budget-respecting behavior.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Cluster State After ResourceDefragmentation Deletions}
+    \label{tab:topsis_final_state}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l l c c c c}
+        \hline
+        \textbf{Node} & \textbf{Pods} & \textbf{Free CPU} & \textbf{Free Mem.} & \textbf{\(RII\)} & \textbf{Notes} \\
+        \hline
+        \(A\) & \(3C\)    & \(800\,m\) & \(1700\,Mi\) & \(+0.45\) & still fragmented, budget exhausted \\
+        \(B\) & \(2C+3M\) & \(900\,m\) & \(600\,Mi\)  & \(-0.15\) & exited fragmented list \\
+        \(C\) & \(3C+2M\) & \(600\,m\) & \(900\,Mi\)  & \(+0.15\) & unchanged \\
+        \hline
+    \end{tabular}
+\end{table}
+
+The schedulability witness is preserved by this state. Before defragmentation no Node fits the \(900\,m / 300\,Mi\) probe, so it remains Pending despite \(1800\,m\) of aggregate free CPU. After the two evictions, Node \(B\) has exactly \(900\,m\) free CPU and \(600\,Mi\) free memory, which is sufficient for the probe under request-based admission.
+
+To expose the schedulability lifecycle of both the probe and the evicted Pods' replacements, the script feeds the post-eviction Node states and the queue of replacement Pods plus the probe Pod to a default-kube-scheduler-style placement stage. That stage applies the \texttt{NodeResourcesFit} filter and a \texttt{LeastAllocated} score equal to the mean of the per-resource fractions \((C - (R + r))/C\), with lexicographic tiebreak between equally scored Nodes. Two scheduling orders are evaluated to expose order sensitivity: \emph{probe-first}, where the previously Pending probe is admitted before any replacement, and \emph{replacement-first}, where the ReplicaSet replacements are admitted before the probe.
 
 Table~\ref{tab:synthetic_maxev_sweep} reports the result of sweeping \(MaxEvictions\) from \(1\) to \(5\) at the fixed threshold \(0.2\). The eviction list is the sequence emitted by the policy. The probe-first and replacement-first columns report the placement of the probe Pod under each scheduling order.
 
@@ -87,6 +107,38 @@ Table~\ref{tab:actual_walkthrough_sweep} reports the descheduler outcome under b
 Three observations follow from this sweep. First, the request-based mode emits no evictions even with a generous budget because the per-Node sums of declared requests are identical and therefore \(RII_n = 0\) on every Node. The fragmented set is empty before the eviction loop runs, which means a request-only signal cannot detect the runtime contention present in this cluster. Second, the actual-raw mode targets the imbalance directly. The eviction sequence alternates between the CPU-skewed and memory-skewed Nodes, removing one bursting Pod from each before revisiting the other. After two evictions the absolute \(RII\) on \(A\) and \(B\) drops from \(0.45\) to \(0.30\); after four evictions it drops to \(0.15\), at which point both Nodes leave the fragmented list. Third, the row \(MaxEv = 5\) only produces four evictions, because once both fragmented Nodes fall below the threshold the loop exits regardless of any remaining budget; \(MaxEvictions\) remains an upper bound rather than a target.
 
 The descheduler does not change Pod requests, so the request view of the cluster is identical before and after each pass: every Node retains \(750\,m / 750\,Mi\) of free CPU and memory by request after two evictions, and \(1000\,m / 1000\,Mi\) after four evictions. The evictions therefore do not reduce the cluster's request-based capacity for incoming workloads; they shift runtime load away from the skewed dimension while leaving scheduling feasibility intact. This is the regime where actual-usage scoring contributes information that request-based scoring cannot derive on its own.
+
+\subsection{EWMA Walk-Through}
+\label{sec:ewma_walkthrough}
+
+The actual-raw walk-through above demonstrates that runtime usage exposes fragmentation that request-based scoring cannot detect. However, the same actual-raw signal is sensitive to short-term spikes: a single elevated reading promotes a Node into the fragmented set even when its longer-term resource shape is balanced. The EWMA variant of the policy uses the smoothed estimate from Equation~\ref{eq:ewma_usage} as the imbalance signal, and is therefore expected to ignore transient spikes while still detecting sustained imbalance. The scenario, the per-signal initial \(RII\), and the resulting fragmented set are described in Section~\ref{sec:ewma_walkthrough_example}; this section reports the eviction sweep under both the actual-raw and EWMA signals on the same cluster.
+
+Table~\ref{tab:ewma_walkthrough_sweep} reports the descheduler outcome as the eviction budget grows. The cluster has a sustained CPU-heavy Node \(A\) and a sustained memory-heavy Node \(C\) that are visible to both signals, and a transient CPU spike on Node \(B\) that is visible only to the actual-raw signal.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Eviction Sweep on the Transient-Spike Scenario (Threshold \(=0.2\))}
+    \label{tab:ewma_walkthrough_sweep}
+    \renewcommand{\arraystretch}{1.25}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c c l}
+        \hline
+        \textbf{Mode} & \textbf{\(MaxEv\)} & \textbf{Evictions} & \textbf{Eviction Sequence} \\
+        \hline
+        actual-raw  & \(2\) & \(2\) & \(B\text{-}6/B\), \(A\text{-}1/A\) \\
+        actual-raw  & \(3\) & \(3\) & \(B\text{-}6/B\), \(A\text{-}1/A\), \(C\text{-}1/C\) \\
+        actual-raw  & \(5\) & \(5\) & \(B\text{-}6/B\), \(A\text{-}1/A\), \(C\text{-}1/C\), \(A\text{-}2/A\), \(C\text{-}2/C\) \\
+        actual-ewma & \(2\) & \(2\) & \(A\text{-}1/A\), \(C\text{-}1/C\) \\
+        actual-ewma & \(3\) & \(3\) & \(A\text{-}1/A\), \(C\text{-}1/C\), \(A\text{-}2/A\) \\
+        actual-ewma & \(5\) & \(4\) & \(A\text{-}1/A\), \(C\text{-}1/C\), \(A\text{-}2/A\), \(C\text{-}2/C\) \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+Two points stand out. First, the actual-raw mode begins by evicting \(B\text{-}6\) before reaching the genuinely fragmented Nodes \(A\) and \(C\). Node \(B\) has the highest priority in the request view because the spike concentrates almost all of its free space at zero on one resource dimension, which produces a very small \(FSI\) and a large priority value. The descheduler therefore spends the first eviction on a Pod whose imbalance is transient, and only the remaining budget is available for the sustained skews on \(A\) and \(C\). With a budget of two, both Nodes \(A\) and \(C\) still appear in the final fragmented set. Second, the actual-ewma mode skips Node \(B\) entirely because the smoothed estimate is dominated by past samples, with \(\beta = 0.9\) in the production agent which corresponds to \(\alpha = 1 - \beta = 0.1\) in the form of Equation~\ref{eq:ewma_usage}. Each eviction in the actual-ewma row contributes directly to reducing \(|RII|\) on a sustainably fragmented Node, and a budget of two already removes the leading Pod from each of \(A\) and \(C\). With a budget of five, the loop terminates after four evictions because both \(A\) and \(C\) have dropped below the threshold; \(MaxEvictions\) remains an upper bound rather than a target.
+
+This behavior is the intended trade-off of the smoothed signal. The EWMA mode requires runtime imbalance to persist across several samples before it shifts the eviction decision, so it ignores spikes whose duration is short relative to the smoothing horizon. The same property also slows down the response to genuine workload shifts; that limitation is acknowledged here and revisited as a tuning consideration in the simulator-based evaluation.
 
 \section{Simulator-Based Scale-Out}
 \label{sec:simulator_topsis_rdg_evaluation}
