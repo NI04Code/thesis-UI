@@ -409,10 +409,10 @@ An un-aware baseline policy may produce an \(S_{\text{spill}}\) value greater th
 \begin{table}[H]
     \centering
     \resizebox{\textwidth}{!}{
-        \begin{tabular}{|c|l|l|c|c|c|c|c|c|}
-            \hline
+        \begin{tabular}{cllcccccc}
+            \toprule
             \textbf{Scenario ID} & \textbf{Strategy Configuration} & \textbf{Metrics Provider} & \textbf{Eviction Count} (\(E_{count}\)) &\(\sigma_{cpu}\) & \(\sigma_{mem}\) &\(N_{\text{active}}\) & \(L_{\text{avg}}\) & \(S_{\text{spill}}\) \\
-            \hline
+            \midrule
                 a1 & Upstream Baseline & None & 6 & 13.4\% & 14.1\% & 5 & 82.590ms & 2 pods \\
                 a2 & Layer 1 Only & Topology & 6 & 14.3\% & 14.3\% & 5 & 5.260ms & 0 pods \\
                 a3 & Layer 2 Only & Topology & 6 & 14.3\% & 14.3\% & 5 & 4.767ms & 0 pods \\
@@ -420,7 +420,7 @@ An un-aware baseline policy may produce an \(S_{\text{spill}}\) value greater th
                 a5 & Layer 1 Only & Latency & 6 & 14.3\% & 14.3\% & 5 & 3.251ms & 0 pods \\
                 a6 & Layer 2 Only & Latency & 6 & 14.3\% & 14.3\% & 5 & 1.969ms & 0 pods \\
                 a7 & Dual Layer (L1+L2) & Latency & 6 & 14.3\% & 14.3\% & 5 & 1.216ms & 0 pods \\
-            \hline
+            \midrule
             \end{tabular}
     }
     \caption{Latency and Defragmentation Tradeoff: LowNodeUtilization Scenario Results}
@@ -453,10 +453,10 @@ These results demonstrate that while static topology metadata is sufficient for 
 \begin{table}[H]
     \centering
     \resizebox{\textwidth}{!}{
-        \begin{tabular}{|c|l|l|c|c|c|c|c|c|}
-            \hline
+        \begin{tabular}{cllcccccc}
+            \toprule
             \textbf{Scenario ID} & \textbf{Strategy Configuration} & \textbf{Metrics Provider} & \textbf{Eviction Count} (\(E_{count}\)) &\(\sigma_{cpu}\) & \(\sigma_{mem}\) &\(N_{\text{active}}\) & \(L_{\text{avg}}\) & \(S_{\text{spill}}\) \\
-            \hline
+            \midrule
                 b1 & Upstream Baseline & None & 6 & 32.4\% & 35.0\% & 2 & 116.310ms & 3 pods \\
                 b2 & Layer 1 Only & Topology & 4 & 29.4\% & 33.8\% & 3 & 82.055ms & 2 pods \\
                 b3 & Layer 2 Only & Topology & 6 & 32.4\% & 35.0\% & 2 & 115.268ms & 3 pods \\
@@ -464,7 +464,7 @@ These results demonstrate that while static topology metadata is sufficient for 
                 b5 & Layer 1 Only & Latency & 4 & 29.4\% & 33.8\% & 3 & 86.119ms & 2 pods \\
                 b6 & Layer 2 Only & Latency & 6 & 32.4\% & 35.0\% & 2 & 113.755ms & 3 pods \\
                 b7 & Dual Layer (L1+L2) & Latency & 4 & 29.4\% & 33.8\% & 3 & 81.982ms & 2 pods \\
-            \hline
+            \midrule
             \end{tabular}
     }
     \caption{Latency and Defragmentation Tradeoff: HighNodeUtilization Scenario Results (50\% \textit{MinBetterCandidatesPercent})}
@@ -474,10 +474,10 @@ These results demonstrate that while static topology metadata is sufficient for 
 \begin{table}[H]
     \centering
     \resizebox{\textwidth}{!}{
-        \begin{tabular}{|c|l|l|c|c|c|c|c|c|}
-            \hline
+        \begin{tabular}{cllcccccc}
+            \toprule
             \textbf{Scenario ID} & \textbf{Strategy Configuration} & \textbf{Metrics Provider} & \textbf{Eviction Count} (\(E_{count}\)) &\(\sigma_{cpu}\) & \(\sigma_{mem}\) &\(N_{\text{active}}\) & \(L_{\text{avg}}\) & \(S_{\text{spill}}\) \\
-            \hline
+            \midrule
                 b1 & Upstream Baseline & None & 6 & 32.4\% & 35.0\% & 2 & 114.919ms & 3 pods \\
                 b2 & Layer 1 Only & Topology & 2 & 27.2\% & 32.9\% & 4 & 54.908ms & 1 pod \\
                 b3 & Layer 2 Only & Topology & 6 & 32.4\% & 35.0\% & 2 & 117.951ms & 3 pods \\
@@ -485,7 +485,7 @@ These results demonstrate that while static topology metadata is sufficient for 
                 b5 & Layer 1 Only & Latency & 2 & 27.2\% & 32.9\% & 4 & 54.199ms & 1 pod \\
                 b6 & Layer 2 Only & Latency & 6 & 32.4\% & 35.0\% & 2 & 119.465ms & 3 pods \\
                 b7 & Dual Layer (L1+L2) & Latency & 2 & 27.2\% & 32.9\% & 4 & 52.910ms & 1 pod \\
-            \hline
+            \midrule
             \end{tabular}
     }
     \caption{Latency and Defragmentation Tradeoff: HighNodeUtilization Scenario Results (75\% \textit{MinBetterCandidatesPercent})}
@@ -523,14 +523,14 @@ Since the default Kubernetes scheduler has no understanding of network costs, we
 \begin{table}[H]
     \centering
     \resizebox{\textwidth}{!}{
-        \begin{tabular}{|c|l|l|c|c|c|c|c|c|}
-            \hline
+        \begin{tabular}{cllcccccc}
+            \toprule
             \textbf{Scenario ID} & \textbf{Strategy Configuration} & \textbf{Metrics Provider} & \textbf{Eviction Count} (\(E_{count}\)) &\(\sigma_{cpu}\) & \(\sigma_{mem}\) &\(N_{\text{active}}\) & \(L_{\text{avg}}\) & \(S_{\text{spill}}\) \\
-            \hline
+            \midrule
                 c1 & Upstream Baseline & None & 2 & 19.1\% & 26.4\% & 3 & 98.370ms & 1 pod \\
                 c2 & Layer 1 Only & Topology & 1 & 25.8\% & 28.6\% & 2 & 6.138ms & 0 pods \\
                 c3 & Layer 1 Only & Latency & 1 & 25.8\% & 28.6\% & 2 & 6.138ms & 0 pods \\
-            \hline
+            \midrule
             \end{tabular}
     }
     \caption{Latency and Defragmentation Tradeoff: ImbalanceIndexUtilization Scenario Results (75\% \textit{MinBetterCandidatesPercent})}
