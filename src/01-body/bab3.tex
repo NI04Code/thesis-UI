@@ -380,7 +380,7 @@ Listing~\ref{lst:resource_defrag_config_ewma} shows the actual-usage variant wit
     label={lst:resource_defrag_config_ewma},
 ]{assets/codes/pseudos/resource-defrag-config-ewma.psu}
 
-The choice of \textit{usageMode} is a deployment-time trade-off rather than a correctness setting. The request-based mode keeps the imbalance signal aligned with Kubernetes scheduling feasibility, which makes it predictable in environments where Pod requests are calibrated. The actual-raw mode reflects the current runtime state but inherits the noise of the underlying metrics source, so a single CPU or memory spike can affect the eviction ranking. The actual-ewma mode reduces this noise by maintaining a smoothed estimate at the cost of additional state management; this trade-off is evaluated in Chapter~\ref{bab:4} through the E3, E4, and E5 experiment groups, where E4 keeps EWMA state on the descheduler side and E5 publishes EWMA from a separate monitoring agent.
+The choice of \textit{usageMode} is a deployment-time trade-off rather than a correctness setting. The request-based mode keeps the imbalance signal aligned with Kubernetes scheduling feasibility, which makes it predictable in environments where Pod requests are calibrated. The actual-raw mode reflects the current runtime state but inherits the noise of the underlying metrics source, so a single CPU or memory spike can affect the eviction ranking. The actual-ewma mode reduces this noise by maintaining a smoothed estimate at the cost of additional state management; this trade-off is evaluated in Chapter~\ref{bab:4} through the E3 and E4 experiment groups.
 
 %----------------------------------------------------------------------------- %%
 \section{Network-Aware Evictor Policy Design}
