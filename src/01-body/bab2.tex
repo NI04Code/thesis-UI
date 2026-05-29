@@ -34,7 +34,7 @@ Cluster consolidation can be viewed as a multi-resource bin-packing problem. Nod
 
 In Kubernetes descheduling, the challenge is slightly different from initial scheduling. The system must decide which already-running Pods should be evicted so that the subsequent scheduling process can improve the overall cluster state. A naive eviction strategy may remove Pods randomly or based on simple thresholds, but this may not target the Pods that contribute most to imbalance or stranded capacity.
 
-Multi-Criteria Decision Analysis (MCDA) provides a structured way to rank alternatives using multiple criteria. TOPSIS is one MCDA method that ranks alternatives based on their distance from an ideal solution and a negative ideal solution~\citep{topsis_1981}. In this research, TOPSIS is used as a candidate approach for ranking Pods according to criteria such as resource usage, imbalance contribution, consolidation benefit, and network-aware considerations. This allows eviction to be treated as a strategic selection problem rather than a threshold-only decision.
+Multi-Criteria Decision Analysis (MCDA) provides a structured way to rank alternatives using multiple criteria. TOPSIS is one MCDA method that ranks alternatives based on their distance from an ideal solution and a negative ideal solution~\citep{topsis_1981}. In this research, TOPSIS is used as a candidate approach for ranking Pods according to criteria such as resource usage, imbalance contribution, consolidation benefit, and Pod priority disruption. This allows eviction to be treated as a strategic selection problem rather than a threshold-only decision.
 
 %----------------------------------------------------------------------------- %%
 \section{Kubernetes Descheduler and Its Limitations}

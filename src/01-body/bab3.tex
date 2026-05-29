@@ -35,7 +35,7 @@ where \(r_{j,cpu}\) and \(r_{j,mem}\) are the CPU and memory requests of Pod \(j
 
 A Node with \(RII_n\) close to zero has balanced CPU-memory usage. A large positive value indicates relatively high CPU usage compared with memory usage, while a large negative value indicates the opposite. The policy uses \(|RII_n|\) as an indicator of stranded capacity. Because RII alone does not prove that a fragmentation problem has affected scheduling, the experiments also measure probe Pod schedulability, Pending state, and post-eviction relocation outcome.
 
-TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~\citep{topsis_1981}. Candidate Pods can be evaluated using criteria such as contribution to the origin Node imbalance, projected score improvement after removal, request feasibility on target Nodes, expected disruption, and optional network-locality risk. The preferred candidate is the Pod that is closest to the ideal solution and farthest from the negative ideal solution.
+TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~\citep{topsis_1981}. Candidate Pods can be evaluated using criteria such as contribution to the origin Node imbalance, projected score improvement after removal, request feasibility on target Nodes, and expected disruption. The preferred candidate is the Pod that is closest to the ideal solution and farthest from the negative ideal solution.
 
 \begin{figure}[H]
     \centering
