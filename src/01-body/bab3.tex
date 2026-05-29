@@ -166,28 +166,73 @@ For each Pod \(j\), TOPSIS computes the distance to the ideal best solution \(D_
 
 The Pod with the highest \(CC_j\) is selected as the preferred eviction candidate, subject to the feasibility guard described in Section~\ref{sec:real_usage_eviction_algorithm}.
 
-\subsection{Illustrative TOPSIS Scenario}
+\subsection{Synthetic Walk-Through Example}
 \label{sec:topsis_example}
 
-Table~\ref{tab:topsis_example} illustrates a simplified candidate comparison on a CPU-skewed Node. Pod 1 is CPU-heavy and low priority, so it directly addresses the Node bottleneck. Pod 2 is memory-heavy and therefore does not align with the origin Node imbalance. Pod 3 has a strong resource profile but is system-critical, so the priority penalty prevents unnecessary disruption.
+This subsection traces the policy on a small synthetic cluster so that every numerical value can be reproduced from the implementation. The same calculations can be re-executed with the deterministic reference script \texttt{experiments/synthetic-simulation/simulate.py} provided with the custom descheduler. The script mirrors the Go implementation function-for-function (\(RII\), \(FSI\), priority, \(C_1\)--\(C_4\), feasibility guard, TOPSIS, and the eviction-loop cache update), so the figures below match the production code rather than illustrative estimates.
+
+The scenario uses three worker Nodes \(A\), \(B\), \(C\), each with allocatable capacity \(2000\,m\) CPU and \(2000\,Mi\) memory. Two Pod templates are used: a CPU-heavy template \(C\) requesting \(400\,m / 100\,Mi\), and a memory-heavy template \(M\) requesting \(100\,m / 400\,Mi\). The initial layout is \(A\!=\!4C\), \(B\!=\!2C\!+\!4M\), \(C\!=\!3C\!+\!2M\). The imbalance threshold is \(0.2\) and the eviction budget is \(MaxEvictions = 2\). A probe Pod requesting \(900\,m / 300\,Mi\) is later used as the schedulability witness.
+
+Table~\ref{tab:topsis_initial_state} reports the initial cluster state in request-based mode. Aggregate free CPU is \(1800\,m\), but no individual Node fits the probe's \(900\,m\) request, so the probe is initially Pending.
 
 \begin{table}[htbp]
     \centering
-    \caption{Illustrative TOPSIS Decision Matrix for Candidate Pods}
-    \label{tab:topsis_example}
+    \caption{Initial Cluster State in the Synthetic Walk-Through}
+    \label{tab:topsis_initial_state}
     \renewcommand{\arraystretch}{1.25}
-    \begin{tabular}{l c c c c c}
+    \begin{tabular}{l l c c c c c}
         \hline
-        \textbf{Candidate Pod} & \textbf{\(C_1\)} & \textbf{\(C_2\)} & \textbf{\(C_3\)} & \textbf{\(C_4\)} & \textbf{\(CC_j\)} \\
+        \textbf{Node} & \textbf{Pods} & \textbf{Req. CPU} & \textbf{Req. Mem.} & \textbf{\(RII\)} & \textbf{\(FSI\)} & \textbf{Status} \\
         \hline
-        Pod 1 (CPU-heavy, low priority) & 0.45 & 0.20 & 0.35 & 100 & \textbf{0.88} \\
-        Pod 2 (memory-heavy, low priority) & -0.10 & 0.05 & 0.15 & 100 & 0.22 \\
-        Pod 3 (CPU-heavy, critical) & 0.50 & 0.20 & 0.40 & 10000 & 0.05 \\
+        \(A\) & \(4C\)        & \(1600\,m\) & \(400\,Mi\)  & \(+0.60\) & \(0.160\) & fragmented \\
+        \(B\) & \(2C+4M\)     & \(1200\,m\) & \(1800\,Mi\) & \(-0.30\) & \(0.040\) & fragmented \\
+        \(C\) & \(3C+2M\)     & \(1400\,m\) & \(1100\,Mi\) & \(+0.15\) & \(0.135\) & not fragmented \\
         \hline
     \end{tabular}
 \end{table}
 
-This example shows why the policy needs a multi-criteria ranking stage. A candidate can be resource-aligned but too disruptive, or low priority but ineffective for reducing fragmentation. TOPSIS makes these trade-offs explicit before the descheduler attempts eviction.
+Applying Equation~\ref{eq:priority_index} with \(w_p = 0.5\) yields \(\mathrm{Priority}_A = 0.5 \cdot 0.60 + 0.5 \cdot (1/0.160) = 3.4250\) and \(\mathrm{Priority}_B = 0.5 \cdot 0.30 + 0.5 \cdot (1/0.040) = 12.6500\). Node \(B\) is processed first even though Node \(A\) has the larger \(|RII|\), because the second priority term penalizes the much smaller free-space index of \(B\). The policy therefore favors the Node where free capacity is most skewed in shape.
+
+Table~\ref{tab:topsis_decision_b} shows the TOPSIS decision matrix at Node \(B\) in the request-based variant. The two CPU-heavy candidates and the four memory-heavy candidates are identical within their group, so they are summarized as type rows for readability while the production implementation evaluates each Pod individually.
+
+\begin{table}[htbp]
+    \centering
+    \caption{TOPSIS Decision Matrix and Closeness Coefficients on Node \(B\)}
+    \label{tab:topsis_decision_b}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l c c c c c}
+        \hline
+        \textbf{Candidate} & \textbf{\(C_1\)} & \textbf{\(C_2\)} & \textbf{\(C_3\)} & \textbf{\(C_4\)} & \textbf{\(CC_j\)} \\
+        \hline
+        CPU-heavy Pod (\(C\)-type, \(\times 2\)) & \(-0.0090\) & \(-999.9\) & \(0.0500\) & \(0\) & \(0.000\) \\
+        Memory-heavy Pod (\(M\)-type, \(\times 4\)) & \(+0.0090\) & \(+0.300\) & \(0.0950\) & \(0\) & \(\mathbf{1.000}\) \\
+        \hline
+    \end{tabular}
+\end{table}
+
+The interpretation is direct. Removing a \(C\)-type Pod from a memory-heavy Node would push \(B\) further into the negative \(RII\) range, so its target-improvement criterion \(C_2\) collapses to the no-feasible-target sentinel value used by the implementation. Removing an \(M\)-type Pod aligns with the dominant imbalance: \(C_1\) becomes positive, \(C_2\) reports a projected combined improvement of \(+0.30\) (Node \(B\) drops from \(|RII|=0.30\) to \(0.15\) and either \(A\) or \(C\) absorbs the move within the feasibility guard), and \(C_3\) is larger because the freed CPU--memory rectangle is bigger. After vector normalization, weighting, and the closeness step, \(M\)-type candidates dominate with \(CC_j = 1.000\). The first such candidate, \(M\text{-}1\), is selected and submitted to the evictor.
+
+After the first eviction, Node \(B\) enters \(RII = -0.15\) and drops out of the fragmented list. The loop advances to Node \(A\). Because all four \(C\) Pods on \(A\) are identical, every row of the TOPSIS matrix has the same values \((C_1, C_2, C_3, C_4) = (+0.018, +0.300, 0.180, 0)\). The normalized rows are also identical, so the ideal best and ideal worst per criterion coincide, every separation distance becomes zero, and \(CC_j\) defaults to \(0.5\) for all candidates. The implementation breaks the tie by selecting the first Pod in the framework's listing order, in this case \(C\text{-}1\). The pre-eviction feasibility guard confirms that \(B\) is the strictly improving target (projected combined improvement \(+0.30\) versus \(0.0\) for \(C\)) and the second eviction is performed.
+
+Table~\ref{tab:topsis_final_state} reports the cluster state immediately after the descheduler deletions, before the default scheduler attempts to place any replacement Pods. Node \(A\) is still above the imbalance threshold, but the eviction budget is consumed and the policy stops, which is the intended budget-respecting behavior.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Cluster State After ResourceDefragmentation Deletions}
+    \label{tab:topsis_final_state}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l l c c c c}
+        \hline
+        \textbf{Node} & \textbf{Pods} & \textbf{Free CPU} & \textbf{Free Mem.} & \textbf{\(RII\)} & \textbf{Notes} \\
+        \hline
+        \(A\) & \(3C\)    & \(800\,m\) & \(1700\,Mi\) & \(+0.45\) & still fragmented, budget exhausted \\
+        \(B\) & \(2C+3M\) & \(900\,m\) & \(600\,Mi\)  & \(-0.15\) & exited fragmented list \\
+        \(C\) & \(3C+2M\) & \(600\,m\) & \(900\,Mi\)  & \(+0.15\) & unchanged \\
+        \hline
+    \end{tabular}
+\end{table}
+
+The schedulability witness is preserved by this state. Before defragmentation no Node fits the \(900\,m / 300\,Mi\) probe, so it remains Pending despite \(1800\,m\) of aggregate free CPU. After the two evictions, Node \(B\) has exactly \(900\,m\) free CPU and \(600\,Mi\) free memory, which is sufficient for the probe under request-based admission. Chapter~\ref{bab:4} extends this walk-through with a sweep over \(MaxEvictions\) and a default-scheduler placement stage to confirm that the policy outcome remains valid when the evicted Pods' replacements are also placed.
 
 %----------------------------------------------------------------------------- %%
 \subsection{Real-Usage and EWMA Extension}
