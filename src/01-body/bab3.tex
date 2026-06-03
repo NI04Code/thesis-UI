@@ -1,21 +1,455 @@
+%----------------------------------------------------------------------------- %%
 \chapter{\babTiga}
 \label{bab:3}
+%----------------------------------------------------------------------------- %%
+This chapter presents the design and methodology for the custom Kubernetes Descheduler policies developed in this research. The design has three related parts. First, the Resource Defragmentation policy uses Resource Imbalance Index (RII) and TOPSIS to select eviction candidates that can reduce fragmented CPU-memory capacity. Second, the real-usage extension replaces request-only scoring with runtime usage signals and evaluates EWMA smoothing for noisy workload metrics. Third, the Network-Aware Evictor acts as a guardrail so that consolidation decisions do not unnecessarily worsen communication locality.
 
-This chapter presents the system design and methodology for the development of custom descheduler plugin policies. It provides a high-level overview of the system architecture and illustrates the operational flow of the proposed policies. Section 3.1 and its subsections describe the design of the Imbalance Index balancing policy, including its mathematical formulation for computing cluster imbalance, execution workflow, and the expected YAML configuration. Section 3.2 and its subsections discuss the design and architecture of the Network-Aware Evictor policy, focusing on the tools used to obtain latency data, its operational workflow, and the corresponding YAML configuration.
+The proposed system keeps the default \texttt{kube-scheduler} unchanged. The descheduler decides which Pods are worth evicting, while the scheduler remains responsible for final placement after eviction. This separation is important because Kubernetes scheduling feasibility is still based mainly on declared resource requests. Therefore, every eviction decision must consider both the expected improvement in RII/TOPSIS score and the probability that the evicted Pod can be scheduled safely on a useful non-origin Node.
 
 %----------------------------------------------------------------------------- %%
-\section{Imbalance Index Design}
+\section{Resource Defragmentation Policy Design}
 \label{sec:imbalanceindex_design}
 %----------------------------------------------------------------------------- %%
-lorem ipsum
+The Resource Defragmentation policy targets multi-resource fragmentation in which a cluster still has enough aggregate CPU and memory, but the free capacity is scattered across Nodes in combinations that cannot fit an incoming workload. The policy periodically observes the current cluster state, computes an imbalance score for each Node, ranks eligible Pods, and evicts a limited number of candidates so that the scheduler can repack the workload.
+
+The implementation adapts the Resource Defragmentation Greedy (RDG) strategy from Guo et al.~\citep{guo2025joint}, but replaces the single greedy candidate rule with a TOPSIS multi-criteria ranking stage. The RDG reference is used as the conceptual baseline for detecting dimensional resource imbalance, while TOPSIS is used to compare eviction candidates across local imbalance reduction, target-node improvement, contiguous free-space expansion, and disruption cost.
+
+For each Node \(n\), let \(U_{n,cpu}\) and \(U_{n,mem}\) denote CPU and memory utilization ratios. In the request-based variant, these ratios are computed from Kubernetes resource requests. In the actual-usage variants, they are computed from runtime metrics. The Resource Imbalance Index for Node \(n\) is defined as:
+
+\begin{equation}
+    RII_n = U_{n,cpu} - U_{n,mem}
+    \label{eq:rii_node}
+\end{equation}
+
+For request-based evaluation, the utilization ratios can be expanded as:
+
+\begin{equation}
+    RII_i =
+    \frac{\sum_{j=1}^{m} r_{j,cpu}}{C_{i,cpu}}
+    -
+    \frac{\sum_{j=1}^{m} r_{j,mem}}{C_{i,mem}}
+    \label{eq:rii_request_expanded}
+\end{equation}
+
+where \(r_{j,cpu}\) and \(r_{j,mem}\) are the CPU and memory requests of Pod \(j\), and \(C_{i,cpu}\) and \(C_{i,mem}\) are the allocatable CPU and memory capacities of Node \(i\).
+
+A Node with \(RII_n\) close to zero has balanced CPU-memory usage. A large positive value indicates relatively high CPU usage compared with memory usage, while a large negative value indicates the opposite. The policy uses \(|RII_n|\) as an indicator of stranded capacity. Because RII alone does not prove that a fragmentation problem has affected scheduling, the experiments also measure probe Pod schedulability, Pending state, and post-eviction relocation outcome.
+
+TOPSIS is used to rank eviction candidates as a multi-criteria decision problem~\citep{topsis_1981}. Candidate Pods can be evaluated using criteria such as contribution to the origin Node imbalance, projected score improvement after removal, request feasibility on target Nodes, and expected disruption. The preferred candidate is the Pod that is closest to the ideal solution and farthest from the negative ideal solution.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.88\textwidth}{!}{%
+    \begin{tikzpicture}[
+        x=1cm,y=1cm,>=stealth,
+        box/.style={draw, line width=0.5pt, fill=white, align=center, inner sep=2.0pt},
+        line/.style={draw, line width=0.5pt, -stealth},
+        plain/.style={draw, line width=0.5pt},
+        start/.style={draw, line width=0.5pt, rounded corners=8pt, fill=white, align=center, inner sep=2.5pt}
+    ]
+        \node[start, minimum width=1.25cm, minimum height=0.5cm] (start) at (-0.2,3.35)
+        {\textbf{\sffamily\tiny Start}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.74cm] (state) at (2.0,3.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize State}\\[-2pt]
+        {\sffamily\tiny Pods and}\\[-2pt]
+        {\sffamily\tiny Nodes}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.74cm] (input) at (4.85,3.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Input}\\[-2pt]
+        {\sffamily\tiny requests}\\[-2pt]
+        {\sffamily\tiny or usage}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.74cm] (rii) at (7.7,3.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize RII}\\[-2pt]
+        {\sffamily\tiny CPU-memory}\\[-2pt]
+        {\sffamily\tiny gap}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.74cm] (topsis) at (10.55,3.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize TOPSIS}\\[-2pt]
+        {\sffamily\tiny rank}\\[-2pt]
+        {\sffamily\tiny candidates}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.52cm] (guard) at (10.55,1.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Guard}\\[-2pt]
+        {\sffamily\tiny non-origin fit}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.52cm] (evict) at (7.7,1.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Evict}\\[-2pt]
+        {\sffamily\tiny best safe Pod}}};
+
+        \node[box, minimum width=1.95cm, minimum height=0.52cm] (sched) at (4.85,1.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Scheduler}\\[-2pt]
+        {\sffamily\tiny default place}}};
+
+        \node[box, minimum width=1.7cm, minimum height=0.52cm] (observe) at (2.0,1.35)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Observe}\\[-2pt]
+        {\sffamily\tiny outcome}}};
+
+        \draw[line] (start.east) -- (state.west);
+        \draw[line] (state.east) -- (input.west);
+        \draw[line] (input.east) -- (rii.west);
+        \draw[line] (rii.east) -- (topsis.west);
+        \draw[line] (topsis.south) -- (guard.north);
+        \draw[line] (guard.west) -- (evict.east);
+        \draw[line] (evict.west) -- (sched.east);
+        \draw[line] (sched.west) -- (observe.east);
+        \draw[plain] (observe.west) -- ++(-2.30,0) -- ++(0,2.0);
+        \draw[line] (-1.15,3.35) -- (start.west);
+    \end{tikzpicture}%
+	    }
+	    \caption{Resource Defragmentation flow using RII, TOPSIS, and a target feasibility guard.}
+	    \label{fig:rii_topsis_flow}
+	\end{figure}
+
+Figure~\ref{fig:rii_topsis_flow} summarizes the policy flow. The feasibility guard is deliberately placed after candidate ranking because a high-scoring Pod is not useful if it cannot be rescheduled safely. A candidate Pod \(p\) from origin Node \(n_o\) is considered useful only if at least one non-origin target Node \(n_t\) satisfies the Pod request and is projected to reduce the resource imbalance score after placement.
+
+\subsection{Execution Flow}
+\label{sec:resource_defrag_execution_flow}
+
+The Resource Defragmentation execution flow is divided into two phases: fragmentation detection and eviction-loop execution.
+
+In the fragmentation detection phase, the plugin builds a local snapshot of Nodes and Pods through the descheduler \texttt{Balance} extension point. Non-evictable workloads, such as DaemonSets, static Pods, and Pods excluded by namespace or policy, are filtered out before scoring. For each Node, the plugin computes requested or observed CPU-memory utilization, derives \(RII_i\), and marks the Node as fragmented when \(|RII_i|\) exceeds the configured imbalance threshold.
+
+Fragmented Nodes are processed in priority order. The priority combines dimensional imbalance and available free-space pressure:
+
+\begin{equation}
+    Priority_i = w_p \cdot |RII_i| + (1 - w_p) \cdot \frac{1}{FSI_i + \epsilon}
+    \label{eq:priority_index}
+\end{equation}
+
+where \(FSI_i\) is the Node free-space index, \(w_p\) controls the balance between imbalance severity and free-space pressure, and \(\epsilon\) prevents division by zero. In this design, \(w_p = 0.5\) gives equal importance to skewed resource dimensions and low usable capacity. This avoids chasing Nodes that are skewed but mostly empty, while also avoiding policies that only target high utilization without considering CPU-memory shape.
+
+In the eviction-loop phase, each fragmented Node contributes its eligible Pods to a TOPSIS decision matrix. The best-scoring Pod is submitted to the framework evictor API. If eviction succeeds, the local Node snapshot is updated immediately by subtracting the evicted Pod resources, and \(RII_i\) is recalculated. The Node is removed from the fragmented queue once it falls below the threshold; otherwise, the remaining Pod candidates continue to be evaluated until the queue or eviction budget is exhausted. Listing~\ref{lst:resource_defrag_rii_topsis} summarizes the Resource Defragmentation execution loop implemented in the custom descheduler. The algorithm first identifies fragmented nodes using RII, ranks candidate Pods using TOPSIS, and applies a request-feasibility guard before submitting an eviction.
+
+\lstinputlisting[
+    caption={Resource Defragmentation eviction loop with RII and TOPSIS.},
+    label={lst:resource_defrag_rii_topsis},
+]{assets/codes/pseudos/resource-defrag-rii-topsis.psu}
+
+\subsection{TOPSIS Candidate Criteria}
+\label{sec:topsis_candidate_criteria}
+
+For each candidate Pod \(j\) on a fragmented origin Node \(i\), the TOPSIS decision matrix uses four criteria:
+
+\begin{itemize}
+    \item \textbf{\(C_1\): Imbalance alignment.} This benefit criterion measures whether the Pod's resource profile aligns with the origin Node's dominant imbalance. A CPU-heavy Pod on a CPU-skewed Node, or a memory-heavy Pod on a memory-skewed Node, is a stronger candidate because removing it directly reduces the skew.
+    \begin{equation}
+        C_1 = RII_i \cdot RII_j \cdot \max\left(\frac{r_{j,cpu}}{C_{i,cpu}}, \frac{r_{j,mem}}{C_{i,mem}}\right)
+        \label{eq:topsis_c1}
+    \end{equation}
+
+    \item \textbf{\(C_2\): Target Node improvement.} This benefit criterion estimates the best reduction in resource imbalance if the Pod is placed on another feasible Node.
+    \begin{equation}
+        C_2 = \max_{k \neq i}\left(|RII_k| - |RII_k'|\right)
+        \label{eq:topsis_c2}
+    \end{equation}
+    where \(RII_k'\) is the simulated imbalance of target Node \(k\) after receiving Pod \(j\). Candidates that cannot fit on any non-origin Node are rejected by the feasibility guard.
+
+    \item \textbf{\(C_3\): Free-space expansion.} This benefit criterion estimates the normalized contiguous CPU-memory space recovered on the origin Node. Let \(c\) and \(m\) be the current available CPU and memory ratios on Node \(i\), and let \(p_c\) and \(p_m\) be the Pod's CPU and memory request ratios. The free-space increase is:
+    \begin{equation}
+        C_3 = (c + p_c)(m + p_m) - cm = c \cdot p_m + m \cdot p_c + p_c \cdot p_m
+        \label{eq:topsis_c3}
+    \end{equation}
+
+    \item \textbf{\(C_4\): Pod priority penalty.} This cost criterion represents Kubernetes Pod priority. Higher-priority Pods are penalized so that critical workloads are avoided unless they are the only viable candidate.
+\end{itemize}
+
+The decision matrix is vector-normalized and weighted using \(W = [0.30, 0.30, 0.25, 0.15]\). \(C_1\) and \(C_2\) receive the largest weights because correcting the origin Node and improving the target Node are the core defragmentation objectives. \(C_3\) is slightly lower because raw free-space expansion should support, not dominate, dimensional alignment. \(C_4\) remains a cost guardrail that protects higher-priority workloads while still allowing TOPSIS to choose a strong candidate when priority values are comparable.
+
+For each Pod \(j\), TOPSIS computes the distance to the ideal best solution \(D_j^+\), the distance to the ideal worst solution \(D_j^-\), and the closeness coefficient:
+
+\begin{equation}
+    CC_j = \frac{D_j^-}{D_j^+ + D_j^-}
+    \label{eq:closeness_coefficient}
+\end{equation}
+
+The Pod with the highest \(CC_j\) is selected as the preferred eviction candidate, subject to the feasibility guard described in Section~\ref{sec:real_usage_eviction_algorithm}.
+
+\subsection{Synthetic Walk-Through Example}
+\label{sec:topsis_example}
+
+This subsection traces the policy on a small synthetic cluster so that every numerical value can be reproduced from the implementation. The same calculations can be re-executed with the deterministic reference script \texttt{experiments/synthetic-simulation/simulate.py} provided with the custom descheduler. The script mirrors the Go implementation function-for-function (\(RII\), \(FSI\), priority, \(C_1\)--\(C_4\), feasibility guard, TOPSIS, and the eviction-loop cache update), so the figures below match the production code rather than illustrative estimates.
+
+The scenario uses three worker Nodes \(A\), \(B\), \(C\), each with allocatable capacity \(2000\,m\) CPU and \(2000\,Mi\) memory. Two Pod templates are used: a CPU-heavy template \(C\) requesting \(400\,m / 100\,Mi\), and a memory-heavy template \(M\) requesting \(100\,m / 400\,Mi\). The initial layout is \(A\!=\!4C\), \(B\!=\!2C\!+\!4M\), \(C\!=\!3C\!+\!2M\). The imbalance threshold is \(0.2\) and the eviction budget is \(MaxEvictions = 2\). A probe Pod requesting \(900\,m / 300\,Mi\) is later used as the schedulability witness.
+
+Table~\ref{tab:topsis_initial_state} reports the initial cluster state in request-based mode. Aggregate free CPU is \(1800\,m\), but no individual Node fits the probe's \(900\,m\) request, so the probe is initially Pending.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Initial Cluster State in the Synthetic Walk-Through}
+    \label{tab:topsis_initial_state}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l l c c c c c}
+        \hline
+        \textbf{Node} & \textbf{Pods} & \textbf{Req. CPU} & \textbf{Req. Mem.} & \textbf{\(RII\)} & \textbf{\(FSI\)} & \textbf{Status} \\
+        \hline
+        \(A\) & \(4C\)        & \(1600\,m\) & \(400\,Mi\)  & \(+0.60\) & \(0.160\) & fragmented \\
+        \(B\) & \(2C+4M\)     & \(1200\,m\) & \(1800\,Mi\) & \(-0.30\) & \(0.040\) & fragmented \\
+        \(C\) & \(3C+2M\)     & \(1400\,m\) & \(1100\,Mi\) & \(+0.15\) & \(0.135\) & not fragmented \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Applying Equation~\ref{eq:priority_index} with \(w_p = 0.5\) yields \(\mathrm{Priority}_A = 0.5 \cdot 0.60 + 0.5 \cdot (1/0.160) = 3.4250\) and \(\mathrm{Priority}_B = 0.5 \cdot 0.30 + 0.5 \cdot (1/0.040) = 12.6500\). Node \(B\) is processed first even though Node \(A\) has the larger \(|RII|\), because the second priority term penalizes the much smaller free-space index of \(B\). The policy therefore favors the Node where free capacity is most skewed in shape.
+
+Table~\ref{tab:topsis_decision_b} shows the TOPSIS decision matrix at Node \(B\) in the request-based variant. The two CPU-heavy candidates and the four memory-heavy candidates are identical within their group, so they are summarized as type rows for readability while the production implementation evaluates each Pod individually.
+
+\begin{table}[htbp]
+    \centering
+    \caption{TOPSIS Decision Matrix and Closeness Coefficients on Node \(B\)}
+    \label{tab:topsis_decision_b}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l c c c c c}
+        \hline
+        \textbf{Candidate} & \textbf{\(C_1\)} & \textbf{\(C_2\)} & \textbf{\(C_3\)} & \textbf{\(C_4\)} & \textbf{\(CC_j\)} \\
+        \hline
+        CPU-heavy Pod (\(C\)-type, \(\times 2\)) & \(-0.0090\) & \(-999.9\) & \(0.0500\) & \(0\) & \(0.000\) \\
+        Memory-heavy Pod (\(M\)-type, \(\times 4\)) & \(+0.0090\) & \(+0.300\) & \(0.0950\) & \(0\) & \(\mathbf{1.000}\) \\
+        \hline
+    \end{tabular}
+\end{table}
+
+The interpretation is direct. Removing a \(C\)-type Pod from a memory-heavy Node would push \(B\) further into the negative \(RII\) range, so its target-improvement criterion \(C_2\) collapses to the no-feasible-target sentinel value used by the implementation. Removing an \(M\)-type Pod aligns with the dominant imbalance: \(C_1\) becomes positive, \(C_2\) reports a projected combined improvement of \(+0.30\) (Node \(B\) drops from \(|RII|=0.30\) to \(0.15\) and either \(A\) or \(C\) absorbs the move within the feasibility guard), and \(C_3\) is larger because the freed CPU--memory rectangle is bigger. After vector normalization, weighting, and the closeness step, \(M\)-type candidates dominate with \(CC_j = 1.000\). The first such candidate, \(M\text{-}1\), is selected and submitted to the evictor.
+
+After the first eviction, Node \(B\) enters \(RII = -0.15\) and drops out of the fragmented list. The loop advances to Node \(A\). Because all four \(C\) Pods on \(A\) are identical, every row of the TOPSIS matrix has the same values \((C_1, C_2, C_3, C_4) = (+0.018, +0.300, 0.180, 0)\). The normalized rows are also identical, so the ideal best and ideal worst per criterion coincide, every separation distance becomes zero, and \(CC_j\) defaults to \(0.5\) for all candidates. The implementation breaks the tie by selecting the first Pod in the framework's listing order, in this case \(C\text{-}1\). The pre-eviction feasibility guard confirms that \(B\) is the strictly improving target (projected combined improvement \(+0.30\) versus \(0.0\) for \(C\)) and the second eviction is performed. The full post-eviction cluster state and its schedulability impact are reported in Section~\ref{sec:synthetic_walkthrough_validation}.
+
+%----------------------------------------------------------------------------- %%
+\subsection{Real-Usage and EWMA Extension}
+\label{sec:real_usage_design}
+%----------------------------------------------------------------------------- %%
+The request-based Resource Defragmentation policy follows the same input model used by the default scheduler. This is safe for scheduling feasibility, but it can misrepresent the actual runtime state when a Pod requests more resources than it currently uses or when bursty workloads change rapidly. Prior load-aware Kubernetes orchestration work motivates the use of runtime CPU, memory, network, and disk telemetry for scheduling or descheduling decisions~\citep{marchese2024loadaware,marchese2025enhancing}.
+
+The real-usage extension introduces a metrics path that can read current usage from \texttt{metrics-server}, Prometheus, kubelet statistics, or another runtime telemetry source. For each resource \(r\), the real-usage utilization of Node \(n\) is defined as:
+
+\begin{equation}
+    U_{n,r}^{actual} = \frac{\sum_{p \in P_n} u_{p,r}}{C_{n,r}}
+    \label{eq:actual_usage_utilization}
+\end{equation}
+
+where \(u_{p,r}\) is the observed usage of Pod \(p\) for resource \(r\), \(P_n\) is the set of Pods on Node \(n\), and \(C_{n,r}\) is Node capacity. This value can replace request-based utilization inside the RII and TOPSIS scoring path. However, actual usage can be noisy. A single CPU or memory spike should not automatically trigger eviction, because eviction disrupts a running workload and may not improve the final scheduler outcome.
+
+To reduce short-term noise, the EWMA variant computes a smoothed estimate:
+
+\begin{equation}
+    \hat{u}_{p,r}^{(t)} = \alpha u_{p,r}^{(t)} + (1 - \alpha)\hat{u}_{p,r}^{(t-1)}
+    \label{eq:ewma_usage}
+\end{equation}
+
+where \(\alpha\) controls responsiveness to the latest observation. A higher \(\alpha\) reacts faster but is more sensitive to spikes, while a lower \(\alpha\) produces a steadier signal. Prior cloud and container resource-management studies use exponential smoothing or related time-series smoothing methods to improve resource prediction and reduce noisy autoscaling or placement decisions~\citep{wang2021predicting,hassan2020integrated,zhang2015service,xie2020realtime}.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.95\textwidth}{!}{%
+    \begin{tikzpicture}[
+        x=1cm,y=1cm,>=stealth,
+        box/.style={draw, line width=0.5pt, fill=white, align=center, inner sep=3pt},
+        smallbox/.style={draw, line width=0.5pt, fill=white, align=center, inner sep=2.5pt},
+        line/.style={draw, line width=0.5pt, -stealth},
+        plain/.style={draw, line width=0.5pt},
+        dottedline/.style={draw, line width=0.5pt, dotted},
+        note/.style={font=\sffamily\tiny\itshape, align=center}
+    ]
+        \node[box, minimum width=2.35cm, minimum height=0.85cm] (metrics) at (1.3,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Runtime Metrics}\\[-2pt]
+        {\sffamily\tiny CPU and memory}\\[-2pt]
+        {\sffamily\tiny observed usage}}};
+
+        \node[box, minimum width=2.35cm, minimum height=0.85cm] (snapshot) at (4.15,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Usage Snapshot}\\[-2pt]
+        {\sffamily\tiny per-Pod usage}\\[-2pt]
+        {\sffamily\tiny aggregated by Node}}};
+
+        \node[box, minimum width=2.45cm, minimum height=0.85cm] (ewma) at (7.0,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Optional EWMA}\\[-2pt]
+        {\sffamily\tiny smooth noisy}\\[-2pt]
+        {\sffamily\tiny usage samples}}};
+
+        \node[box, minimum width=2.6cm, minimum height=0.85cm] (util) at (9.95,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Actual Utilization}\\[-2pt]
+        {\sffamily\tiny raw or smoothed}\\[-2pt]
+        {\sffamily\tiny CPU-memory ratios}}};
+
+        \node[box, minimum width=2.55cm, minimum height=0.85cm] (score) at (12.9,3.2)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize RII + TOPSIS}\\[-2pt]
+        {\sffamily\tiny score imbalance}\\[-2pt]
+        {\sffamily\tiny rank candidates}}};
+
+        \node[box, minimum width=2.35cm, minimum height=0.7cm] (guard) at (12.9,1.65)
+        {\shortstack[c]{\textbf{\sffamily\scriptsize Feasibility Guard}\\[-2pt]
+        {\sffamily\tiny target can fit Pod}}};
+
+        \node[smallbox, minimum width=1.55cm, minimum height=0.5cm] (evict) at (11.8,0.55)
+        {\sffamily\scriptsize Evict Pod};
+        \node[smallbox, minimum width=1.55cm, minimum height=0.5cm] (skip) at (14.0,0.55)
+        {\sffamily\scriptsize Skip Pod};
+
+        \draw[line] (metrics.east) -- (snapshot.west);
+        \draw[line] (snapshot.east) -- (ewma.west);
+        \draw[line] (ewma.east) -- (util.west);
+        \draw[line] (util.east) -- (score.west);
+        \draw[line] (score.south) -- (guard.north);
+        \draw[line] (guard.south) -- ++(0,-0.32) -| (evict.north);
+        \draw[line] (guard.south) -- ++(0,-0.32) -| (skip.north);
+        \draw[dottedline] (snapshot.south) -- ++(0,-0.55) -| (util.south);
+        \node[note] at (6.95,2.1) {raw usage path when smoothing is disabled};
+    \end{tikzpicture}%
+    }
+    \caption{Actual-usage-aware Resource Defragmentation pipeline with optional EWMA smoothing.}
+    \label{fig:ewma_architecture}
+\end{figure}
+
+Figure~\ref{fig:ewma_architecture} shows how smoothing is added to the real-usage extension. Runtime telemetry is first converted into a per-Node usage snapshot. The policy can use this snapshot directly, or pass the samples through EWMA before computing CPU-memory utilization ratios. The resulting raw or smoothed actual-usage signal then replaces request-based utilization in the RII and TOPSIS scoring path. The feasibility guard remains request-aware because the default Kubernetes scheduler still admits evicted Pods based on requested resources rather than observed usage. Listing~\ref{lst:resource_defrag_actual_ewma} summarizes how the policy selects the resource signal used by RII and TOPSIS. Request-based mode uses declared Pod requests, actual-raw mode reads current metrics, and actual-ewma mode uses smoothed metrics maintained by the metrics collector.
+
+\lstinputlisting[
+    caption={Actual-usage and EWMA resource signal selection.},
+    label={lst:resource_defrag_actual_ewma},
+]{assets/codes/pseudos/resource-defrag-actual-ewma.psu}
+
+%----------------------------------------------------------------------------- %%
+\subsubsection{Eviction Feasibility Guard}
+\label{sec:real_usage_eviction_algorithm}
+%----------------------------------------------------------------------------- %%
+The descheduler cannot assume that the default scheduler will place an evicted Pod on the best projected target. Therefore, the policy applies a feasibility guard before eviction. The guard evaluates only non-origin target Nodes because returning the Pod to the same Node does not improve fragmentation and only adds disruption.
+
+For a candidate Pod \(p\) currently running on Node \(n_o\), a target Node \(n_t\) is considered useful if it satisfies two conditions:
+
+\begin{enumerate}
+    \item \textbf{Request feasibility.} The target Node has enough allocatable requested capacity for the Pod according to Kubernetes scheduling constraints.
+    \item \textbf{Projected improvement.} Moving the Pod from \(n_o\) to \(n_t\) is expected to reduce \(|RII|\), improve the TOPSIS objective, or meet a configured minimum improvement threshold.
+\end{enumerate}
+
+This guard can reduce the number of evictions, but that behavior is intentional. The policy should prefer no action over an eviction that is likely to leave the Pod Pending, return it to the origin Node, or produce no measurable fragmentation improvement. As shown in Listing~\ref{lst:resource_defrag_rii_topsis}, this guard is evaluated after TOPSIS candidate selection and before the framework evictor is called.
+
+%----------------------------------------------------------------------------- %%
+\subsection{Actual-Usage Walk-Through Example}
+\label{sec:actual_usage_walkthrough_example}
+%----------------------------------------------------------------------------- %%
+The walk-through in Section~\ref{sec:topsis_example} keeps Pod requests as the imbalance signal because that variant is well aligned with Kubernetes scheduling feasibility. The actual-usage extension uses the same machinery but reads runtime CPU and memory ratios instead. To make the difference visible, this subsection traces the policy on a synthetic cluster where every Pod declares the same request shape, so request-based RII reports a perfectly balanced cluster while runtime usage exposes a clear CPU--memory imbalance on two of three Nodes.
+
+The scenario uses three worker Nodes \(A\), \(B\), \(C\), each with allocatable capacity \(2000\,m\) CPU and \(2000\,Mi\) memory. Every Pod declares an identical request of \(250\,m / 250\,Mi\), but the runtime usage profile differs: a CPU-bursting profile \(C^{\star}\) reports \(400\,m / 100\,Mi\), a memory-bursting profile \(M^{\star}\) reports \(100\,m / 400\,Mi\), and a balanced profile \(B^{\star}\) reports \(250\,m / 250\,Mi\). The initial layout is \(A = 3C^{\star} + 3B^{\star}\), \(B = 3M^{\star} + 3B^{\star}\), and \(C = 6B^{\star}\). The imbalance threshold is \(0.2\). The same reference script used in Section~\ref{sec:topsis_example} reproduces the calculations through its \texttt{hidden-imbalance} scenario and \texttt{actual-raw} usage mode.
+
+Table~\ref{tab:actual_walkthrough_initial} reports the initial state under both signals. Sums of declared requests are identical across all three Nodes, so the request-based variant flags none of them as fragmented. Switching to the actual-usage signal exposes a CPU-skew on \(A\) and a memory-skew on \(B\); only Node \(C\), where every Pod actually consumes its declared shape, remains balanced.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Initial Cluster State Under Request and Actual-Usage Signals}
+    \label{tab:actual_walkthrough_initial}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l l c c c c}
+        \hline
+        \textbf{Node} & \textbf{Pods} & \textbf{Sum} & \textbf{Sum} & \textbf{\(RII\)} & \textbf{Status} \\
+         & & \textbf{requests} & \textbf{actual} & & \\
+        \hline
+        \(A\) & \(3C^{\star}\!+\!3B^{\star}\) & \(1500/1500\) & \(1950/1050\) & req: \(0.000\) & req: balanced \\
+         & & & & actual: \(+0.450\) & actual: fragmented \\
+        \(B\) & \(3M^{\star}\!+\!3B^{\star}\) & \(1500/1500\) & \(1050/1950\) & req: \(0.000\) & req: balanced \\
+         & & & & actual: \(-0.450\) & actual: fragmented \\
+        \(C\) & \(6B^{\star}\)               & \(1500/1500\) & \(1500/1500\) & req: \(0.000\) & req: balanced \\
+         & & & & actual: \(0.000\) & actual: balanced \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Under the request-based mode the eviction loop has nothing to do: the fragmented set is empty, no Node enters the priority queue, and the policy emits zero evictions. Under the actual-raw mode, Nodes \(A\) and \(B\) join the queue with mirror-image \(RII\) values. Their free-space indices are also mirror images (\(FSI = 0.025 \cdot 0.475 = 0.011875\) on each), which produces identical priorities. The tie is broken by the listing order, so \(A\) is processed first.
+
+At Node \(A\) the candidate list contains the three CPU-bursting Pods and the three balanced Pods. Table~\ref{tab:actual_walkthrough_topsis_a} reports the TOPSIS criteria computed in actual-usage mode, summarized by Pod profile. The decisive criterion is \(C_2\): a balanced Pod removes equal CPU and memory from \(A\), so it does not lower \(|RII_A|\), and the feasibility guard reports the no-feasible-target sentinel. A CPU-bursting Pod, in contrast, removes proportionally more CPU than memory and is also feasible to place on \(B\) by request, so its projected combined improvement is positive. After normalization and weighting, \(C^{\star}\) candidates dominate with closeness coefficient \(1.000\); the implementation selects the first such Pod in the listing order.
+
+\begin{table}[htbp]
+    \centering
+    \caption{TOPSIS Decision Matrix at Node \(A\) in Actual-Usage Mode}
+    \label{tab:actual_walkthrough_topsis_a}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{l c c c c c}
+        \hline
+        \textbf{Candidate} & \textbf{\(C_1\)} & \textbf{\(C_2\)} & \textbf{\(C_3\)} & \textbf{\(C_4\)} & \textbf{\(CC_j\)} \\
+        \hline
+        CPU-bursting Pod (\(C^{\star}\)-type, \(\times 3\)) & \(+0.0135\) & \(+0.300\) & \(0.10625\) & \(0\) & \(\mathbf{1.000}\) \\
+        Balanced Pod (\(B^{\star}\)-type, \(\times 3\))   & \(0.0000\) & \(-999.9\) & \(0.07813\) & \(0\) & \(0.000\) \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Evicting one CPU-bursting Pod from \(A\) is the design illustration of how TOPSIS picks an eviction candidate under the actual-usage signal. The full eviction sequence over the eviction budget, including the symmetric step at Node \(B\) and the resulting per-mode totals, is reported in Section~\ref{sec:actual_usage_walkthrough}.
+
+%----------------------------------------------------------------------------- %%
+\subsection{EWMA Walk-Through Example}
+\label{sec:ewma_walkthrough_example}
+%----------------------------------------------------------------------------- %%
+The actual-raw walk-through above assumes that every observed sample is a faithful representation of a Pod's runtime behavior. In practice, runtime metrics fluctuate, and a single elevated reading can promote a Node into the fragmented set even when its longer-term resource shape is balanced. The EWMA variant of the policy uses the smoothed estimate from Equation~\ref{eq:ewma_usage} as the imbalance signal so that a single transient spike does not change the eviction decision.
+
+The smoothed estimate is dominated by past samples whenever \(\alpha\) is small. The production metrics agent in this work uses \(\beta = 0.9\) for the recurrence \(\hat{u}_t = \beta \hat{u}_{t-1} + (1 - \beta) u_t\), which is equivalent to \(\alpha = 1 - \beta = 0.1\) in the form of Equation~\ref{eq:ewma_usage}. A new observation therefore contributes only ten percent of its value to the next EWMA estimate, and one transient sample is heavily damped before it influences the eviction decision.
+
+To illustrate, three worker Nodes \(A\), \(B\), \(C\) of \(2000\,m / 2000\,Mi\) each are configured as follows. Node \(A\) holds four Pods with a sustained CPU-heavy runtime profile (\(350\,m / 200\,Mi\) actual usage) and two balanced fillers; the EWMA estimate equals the current snapshot because the profile has been stable across previous cycles. Node \(C\) is the symmetric memory-heavy counterpart with sustained \(200\,m / 350\,Mi\) usage on four Pods. Node \(B\) holds five balanced Pods plus one Pod whose CPU usage is currently spiking to \(700\,m\); the EWMA estimate for that Pod, however, is still balanced because the previous samples dominate the smoothed value. Every Pod declares the same request of \(250\,m / 250\,Mi\). Table~\ref{tab:ewma_walkthrough_initial} reports the per-Node \(RII\) under all three signals.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Initial Per-Node \(RII\) Under Request, Actual-Raw, and EWMA Signals}
+    \label{tab:ewma_walkthrough_initial}
+    \renewcommand{\arraystretch}{1.25}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l l c c c l}
+        \hline
+        \textbf{Node} & \textbf{Profile} & \textbf{\(RII\) request} & \textbf{\(RII\) raw} & \textbf{\(RII\) EWMA} & \textbf{Fragmented under} \\
+        \hline
+        \(A\) & sustained CPU-heavy        & \(0.000\) & \(+0.300\) & \(+0.300\) & raw, EWMA \\
+        \(B\) & balanced with one spike    & \(0.000\) & \(+0.225\) & \(0.000\)  & raw only \\
+        \(C\) & sustained memory-heavy     & \(0.000\) & \(-0.300\) & \(-0.300\) & raw, EWMA \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+The fragmented set therefore differs between modes before TOPSIS is even invoked. Under the actual-raw signal, all three Nodes enter the priority queue: \(A\) and \(C\) reflect genuine sustained imbalance, while \(B\)'s membership is the result of a single transient observation. Under the EWMA signal, only \(A\) and \(C\) are flagged. TOPSIS itself behaves identically in both modes; the difference is upstream, in which Nodes the eviction loop actually visits. The eviction sweep that follows from this difference is reported in Section~\ref{sec:ewma_walkthrough}.
+
+%----------------------------------------------------------------------------- %%
+\subsection{Plugin Configuration}
+\label{sec:resource_defrag_config}
+%----------------------------------------------------------------------------- %%
+The Resource Defragmentation policy is enabled through the standard Kubernetes Descheduler configuration model. It is registered as a plugin in the \textit{balance} extension point and exposes a small set of arguments that control fragmentation detection, the eviction budget, and the resource signal used for RII and TOPSIS scoring. Table~\ref{tab:resource_defrag_args} summarizes these parameters.
+
+\begin{table}[htbp]
+    \centering
+    \caption{ResourceDefragmentation Plugin Arguments}
+    \label{tab:resource_defrag_args}
+    \renewcommand{\arraystretch}{1.25}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l l l p{6.5cm}}
+        \hline
+        \textbf{Parameter} & \textbf{Type} & \textbf{Default} & \textbf{Purpose} \\
+        \hline
+        \textit{imbalanceThreshold} & float    & \(0.0\) & A Node is marked fragmented when \(|RII| >\) this value. The default of \(0.0\) is permissive; in this research, \(0.20\) is used so that small numerical noise does not trigger eviction. \\
+        \textit{maxEvictions}       & int      & \(0\)   & Upper bound on the number of evictions per pass. The Go zero value of \(0\) makes the loop guard \(iteration < maxEvictions\) immediately false, so an unset budget produces a no-op pass. An explicit positive value is required to enable evictions. \\
+        \textit{usageMode}          & string   & empty   & Selects the resource signal: \textit{requests} uses declared Pod requests, \textit{actual-raw} reads current metrics from the metrics path, \textit{actual-ewma} uses the EWMA-smoothed signal from Section~\ref{sec:real_usage_design}. An empty value falls back to \textit{actual-ewma} when a metrics collector is available, and to \textit{requests} otherwise. Validation rejects any value outside this set. \\
+        \textit{namespaces}         & object   & nil     & Optional include or exclude list that restricts which Pods are considered for eviction. \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+Listing~\ref{lst:resource_defrag_config_requests} shows a request-based configuration. This variant is the request-space baseline used in the live-cluster experiments and matches the input model used by the default Kubernetes scheduler, so any Pod that the descheduler would prefer to evict is also a Pod the scheduler will admit elsewhere if a feasible Node exists.
+
+\lstinputlisting[
+    caption={Request-based ResourceDefragmentation configuration.},
+    label={lst:resource_defrag_config_requests},
+]{assets/codes/pseudos/resource-defrag-config-requests.psu}
+
+Listing~\ref{lst:resource_defrag_config_ewma} shows the actual-usage variant with EWMA smoothing. The only difference from the request-based listing is the \textit{usageMode} field. This variant requires a metrics collector to be available; otherwise, the implementation falls back to \textit{requests} as described above. The actual-raw variant uses the same shape with \textit{usageMode: actual-raw}.
+
+\lstinputlisting[
+    caption={Actual-usage with EWMA-smoothed signal configuration.},
+    label={lst:resource_defrag_config_ewma},
+]{assets/codes/pseudos/resource-defrag-config-ewma.psu}
+
+The choice of \textit{usageMode} is a deployment-time trade-off rather than a correctness setting. The request-based mode keeps the imbalance signal aligned with Kubernetes scheduling feasibility, which makes it predictable in environments where Pod requests are calibrated. The actual-raw mode reflects the current runtime state but inherits the noise of the underlying metrics source, so a single CPU or memory spike can affect the eviction ranking. The actual-ewma mode reduces this noise by maintaining a smoothed estimate at the cost of additional state management; this trade-off is evaluated in Chapter~\ref{bab:4} through the E3 and E4 experiment groups.
 
 %----------------------------------------------------------------------------- %%
 \section{Network-Aware Evictor Policy Design}
 \label{sec:netaware_policydesign}
 %----------------------------------------------------------------------------- %%
-We also propose the Network-Aware Descheduler policy to improve the pod eviction decisions in Kubernetes by considering the network cost factors. Different from the default descheduler that mainly considers the resource consumption, this policy considers the communication efficiency between the pods to avoid the performance deterioration caused by poor network locality. 
+We also propose the Network-Aware Descheduler policy to improve the pod eviction decisions in Kubernetes by considering the network cost factors. Different from the default descheduler that mainly considers the resource consumption, this policy considers the communication efficiency between the pods to avoid the performance deterioration caused by poor network locality.
 
-The system has a two-layers plugin architecture. The first layer is a global PreEvictionFilter which is a safety device to prevent evictions that would increase the total network cost across all candidate nodes. The second layer is incorporated in node utilization strategies, offering a more accurate filtering mechanism by only analyzing the destination nodes selected by the strategy. 
+The system has a two-layers plugin architecture. The first layer is a global PreEvictionFilter which is a safety device to prevent evictions that would increase the total network cost across all candidate nodes. The second layer is incorporated in node utilization strategies, offering a more accurate filtering mechanism by only analyzing the destination nodes selected by the strategy.
 
 %----------------------------------------------------------------------------- %%
 \subsection{System Overview}
@@ -28,11 +462,11 @@ The system has a two-layers plugin architecture. The first layer is a global Pre
 	\label{fig:netaware_sysoverview}
 \end{figure}
 
-The overall design of the Network-Aware Descheduler plugin is presented in Figure \ref{fig:netaware_sysoverview}. The system has two distinct independent components that can be deployed optionally as descheduler policy. 
+The overall design of the Network-Aware Descheduler plugin is presented in Figure \ref{fig:netaware_sysoverview}. The system has two distinct independent components that can be deployed optionally as descheduler policy.
 
 The first component is a global PreEvictionFilter plugin, which is the \textit{NetworkCostEvictor}. To avoid descheduler process resulting higher network costs, it compares eviction candidates current node with all scheduleable nodes in the cluster. This ensures that the communication efficiency at the cluster level is not degraded due to pod migration. 
 
-The second plugin is integrated into node utilization based approaches, such as \textit{LowNodeUtilization} and \textit{HighNodeUtilization}. This plugin performs network-aware filtering by assessing only the selected subset of nodes that are recognized as potential destinations (e.g. overutilize/underutilize node). This enables a more specific evaluation better aligned with the resource balancing goals of the descheduler. 
+The second plugin is integrated into node utilization based approaches, such as \textit{LowNodeUtilization} and \textit{HighNodeUtilization}. This plugin performs network-aware filtering by assessing only the selected subset of nodes that are recognized as potential destinations (e.g. overutilize/underutilize node). This enables a more specific evaluation better aligned with the resource balancing goals of the descheduler.
 
 Both components use a network cost model \ref{sec:netaware_costmodel} to estimate communication costs between pods. During the eviction process, the algorithm evaluates the cost of the pod's current placement in comparison to alternative placements. If the eviction does not maintain or improve the performance of the network, it is blocked. Otherwise, the eviction is permitted.
 
@@ -49,15 +483,15 @@ Both components use a network cost model \ref{sec:netaware_costmodel} to estimat
 
 The detailed architecture of the Network-Aware Descheduler plugin is shown in Figure \ref{fig:netaware_arcdesign} based on the system overview described in Section \ref{sec:netaware_sysoverview}. This architecture enhances the descheduler eviction process with a common network-aware assessment scheme that is uniformly applied to the architectural levels. 
 
-To support this design, the system is structured around three core components. The first component is the Network Cost Model abstracted into Cost Provider, which describes the calculation of the network distance between nodes. The abstraction enables topology-aware estimation based on node locality like region and zone, and latency-aware estimation based on real-time data collected via Prometheus. 
+To support this design, the system is structured around three core components. The first component is the Network Cost Model abstracted into Cost Provider, which describes the calculation of the network distance between nodes. The abstraction enables topology-aware estimation based on node locality like region and zone, and latency-aware estimation based on real-time data collected via Prometheus.
 
-The second component is the Pod Dependency Model, which enables the system to estimate the cost of communication considering interdependent workloads. This is done by a labeling method, where pods with the same configuration label (by default \textit{network-group}) value are grouped together and regarded as a close dependency in the cost calculation. 
+The second component is the Pod Dependency Model, which enables the system to estimate the cost of communication considering interdependent workloads. This is done by a labeling method, where pods with the same configuration label (by default \textit{network-group}) value are grouped together and regarded as a close dependency in the cost calculation.
 
-The third component is Shared Network Cost Library, the centralized implementation for cost computation and the eviction decision maker. Both architectural layers use this library to ensure that the same logic is used to analyze network cost, regardless of the scope of evaluation. 
+The third component is Shared Network Cost Library, the centralized implementation for cost computation and the eviction decision maker. Both architectural layers use this library to ensure that the same logic is used to analyze network cost, regardless of the scope of evaluation.
 
 The eviction decision itself is based on a common evaluation mechanism. The candidate nodes set is different between layers (from all scheduleable nodes to strategy selected subsets), but the same decision mechanism is utilized. 
 
-To balance between network latency and resource defragmentation goals, an eviction is allowed only if a given ratio of candidate nodes, which is specified by a configurable threshold, have a network cost lower or equal to ($\leq$) the current placement, otherwise the eviction is blocked. This threshold-based solution improves the likelihood of the following scheduling decisions to reschedule pods on nodes that do not degrade the network efficiency and still allow for appropriate workload redistribution. 
+To balance between network latency and resource defragmentation goals, an eviction is allowed only if a given ratio of candidate nodes, which is specified by a configurable threshold, have a network cost lower or equal to ($\leq$) the current placement, otherwise the eviction is blocked. This threshold-based solution improves the likelihood of the following scheduling decisions to reschedule pods on nodes that do not degrade the network efficiency and still allow for appropriate workload redistribution.
 
 \subsection{Network Cost Model}
 \label{sec:netaware_costmodel}
@@ -66,11 +500,11 @@ To accommodate various deployment situations and accuracy levels, we design our 
 \subsubsection{Topology Base Cost Model}
 \label{sec:netaware_topologycostmodel}
 %----------------------------------------------------------------------------- %%
-The topology-based cost model calculates the network cost based on the node locality information, e.g., zone and region information. This is based on the assumption that the network latency rises with the physical or logical distance of nodes. Thus, the connection between nodes of the same zone is considered cheaper than the communication across zones or regions. 
+The topology-based cost model calculates the network cost based on the node locality information, e.g., zone and region information. This is based on the assumption that the network latency rises with the physical or logical distance of nodes. Thus, the connection between nodes of the same zone is considered cheaper than the communication across zones or regions.
 
-The model assigns specified costs based on relative position of nodes. A typical arrangement defines three tiers of cost: same-zone, same-region, and cross-region connectivity. For example, the cost of communication between nodes in the same zone is the lowest while the cost of communication across areas is the largest. The model sets defaults cost numbers to reflect this hierarchy: 1 for same-zone, 5 for same-region, 10 for cross-region. These values can be customized through configuration. 
+The model assigns specified costs based on relative position of nodes. A typical arrangement defines three tiers of cost: same-zone, same-region, and cross-region connectivity. For example, the cost of communication between nodes in the same zone is the lowest while the cost of communication across areas is the largest. The model sets defaults cost numbers to reflect this hierarchy: 1 for same-zone, 5 for same-region, 10 for cross-region. These values can be customized through configuration.
 
-The advantage of this methods is its low processing overhead and independence from external monitoring systems. However, it is based on the simplistic assumption that the network performance is directly proportional to the physical proximity. In practice, this assumption may not always hold, as network latency might be altered by dynamic factors such as node load, congestion, or infrastructure variations.  Nodes within the same zone can sometimes have higher latency than nodes in separate regions. 
+The advantage of this methods is its low processing overhead and independence from external monitoring systems. However, it is based on the simplistic assumption that the network performance is directly proportional to the physical proximity. In practice, this assumption may not always hold, as network latency might be altered by dynamic factors such as node load, congestion, or infrastructure variations. Nodes within the same zone can sometimes have higher latency than nodes in separate regions.
 
 However, the topology-based model is a useful baseline for network-aware scheduling when real-time latency information is not accessible or not needed.
 
@@ -88,7 +522,7 @@ To support this capability the system is integrated with a Prometheus based moni
 	\label{fig:netaware_prometheusscrape}
 \end{figure}
 
-As seen in Figure \ref{fig:netaware_prometheusscrape}. In this architecture, Goldenpinger is employed as the probing tool to test the node-to-node latency across the cluster. Each node runs an instance of Goldenpinger, which actively probes other nodes and exposes the resulting latency measurements. Prometheus then scrapes these parameters on a regular basis and stores them as time-series data. This version uses Goldenpinger but any other tool that is able to collect latency data and expose it in a Prometheus compatible format can be used.
+As shown in Figure \ref{fig:netaware_prometheusscrape}, Goldenpinger is employed as the probing tool to test the node-to-node latency across the cluster. Each node runs an instance of Goldenpinger, which actively probes other nodes and exposes the resulting latency measurements. Prometheus then scrapes these parameters on a regular basis and stores them as time-series data. This version uses Goldenpinger, but any other tool that is able to collect latency data and expose it in a Prometheus-compatible format can be used.
 
 Besides the query description, the configuration has to define the mapping between metric labels and cluster nodes. In particular, the latency measurements are associated with the respective source and target node labels. This enables the system to create a delay matrix that specifies the communication cost between the nodes.
 
@@ -119,7 +553,7 @@ If any inconsistency is detected in the cost model configuration, the system per
 
 The network-aware eviction decision workflow is implemented within the chaining of descheduler pre-eviction plugins. As shown in Figure \ref{fig:netaware_preevictchaining}, each candidate pod for eviction undergoes a chain of filtering processes before the actual eviction.
 
-The first stage is the built-in \textit{DefaultEvictor} plugin provided by the Kubernetes descheduler framework. This component evaluates several default eviction constraints such as pod state validation, scheduling constraints and node fit requirements to ensure that the pod is eligible for eviction \citep{k8s_descheduler_docs}. If any of these constraints is violated the eviction procedure is cancelled and the pod is skipped. Otherwise the eviction candidate continues to the next phase. 
+The first stage is the built-in \textit{DefaultEvictor} plugin provided by the Kubernetes descheduler framework. This component evaluates several default eviction constraints such as pod state validation, scheduling constraints and node fit requirements to ensure that the pod is eligible for eviction \citep{k8s_descheduler_docs}. If any of these constraints is violated the eviction procedure is cancelled and the pod is skipped. Otherwise the eviction candidate continues to the next phase.
 
 After passing the default pre-eviction filtering stage, our proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Listing \ref{lst:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster. 
 
@@ -202,7 +636,6 @@ The \textit{networkAware} section defines the network cost evaluation behavior u
 
 The configuration supports two mutually exclusive cost evaluation modes: \textit{topologyBase} and \textit{latencyBase}. The topology-based mode uses predefined locality weights without the need for any external monitoring infrastructure, whereas the latency-based mode derives communication cost from real-time Prometheus metrics. When latency-based evaluation is enabled, the configuration must additionally provide the Prometheus query and node label mappings required to retrieve node-to-node latency measurements.
 
-As discussed in Section \ref{sec:netaware_costmodelconsistency}, several configuration parameters must remain consistent when both architectural layers are enabled at the same time within the same descheduler profile. In particular, the dependency label configuration, the selected cost evaluation model, the Prometheus query definition, and the source and destination node label mappings must be identical across both layers. This ensures that both components evaluate network cost using the same communication model and underlying latency data. 
+As discussed in Section \ref{sec:netaware_costmodelconsistency}, several configuration parameters must remain consistent when both architectural layers are enabled at the same time within the same descheduler profile. In particular, the dependency label configuration, the selected cost evaluation model, the Prometheus query definition, and the source and destination node label mappings must be identical across both layers. This ensures that both components evaluate network cost using the same communication model and underlying latency data.
 
 The only exception to this consistency requirement is the \textit{minBetterCandidatesPercent} parameter, which may be configured differently for each layer. This enables the global filtering stage and the strategy-level filtering stage to apply different levels of strictness during eviction evaluation. The system validates these configuration constraints during profile initialization and rejects invalid configurations that could result in inconsistent network cost evaluation behaviour between architectural layers.
-

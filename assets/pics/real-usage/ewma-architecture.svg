@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111111"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #111111; stroke-width: 2; }
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 26px; font-weight: 700; fill: #000000; text-anchor: middle; }
+      .body { font-family: Arial, Helvetica, sans-serif; font-size: 20px; fill: #000000; text-anchor: middle; }
+      .line { stroke: #111111; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .plain { stroke: #111111; stroke-width: 4; fill: none; }
+    </style>
+  </defs>
+  <rect x="0" y="0" width="1200" height="560" fill="#ffffff"/>
+
+  <path class="plain" d="M 600 130 L 600 165 L 245 165 L 245 205"/>
+  <path class="line" d="M 245 165 L 245 205"/>
+  <path class="plain" d="M 600 130 L 600 165 L 955 165 L 955 205"/>
+  <path class="line" d="M 955 165 L 955 205"/>
+  <path class="line" d="M 955 320 L 955 385"/>
+  <path class="plain" d="M 245 320 L 245 442.5 L 425 442.5"/>
+  <path class="line" d="M 245 442.5 L 425 442.5"/>
+  <path class="line" d="M 785 442.5 L 775 442.5"/>
+  <path class="line" d="M 600 495 L 600 515"/>
+
+  <rect class="box" x="425" y="35" width="350" height="95"/>
+  <text class="title" x="600" y="74">Metrics Backend</text>
+  <text class="body" x="600" y="106">metrics-server / Prometheus</text>
+
+  <rect class="box" x="75" y="210" width="340" height="110"/>
+  <text class="title" x="245" y="250">E4: Tight EWMA</text>
+  <text class="body" x="245" y="283">descheduler computes state</text>
+
+  <rect class="box" x="785" y="210" width="340" height="110"/>
+  <text class="title" x="955" y="250">E5: Loose Agent</text>
+  <text class="body" x="955" y="283">monitoring agent keeps state</text>
+
+  <rect class="box" x="785" y="390" width="340" height="105"/>
+  <text class="title" x="955" y="430">Published Usage</text>
+  <text class="body" x="955" y="463">annotation / ConfigMap / CRD</text>
+
+  <rect class="box" x="430" y="390" width="340" height="105"/>
+  <text class="title" x="600" y="430">RII + TOPSIS</text>
+  <text class="body" x="600" y="463">uses smoothed usage</text>
+
+  <rect class="box" x="505" y="515" width="190" height="40"/>
+  <text class="title" x="600" y="543">Eviction</text>
+</svg>
