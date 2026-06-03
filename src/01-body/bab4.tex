@@ -395,20 +395,22 @@ To model real-world high-availability environments, the underlying physical clus
 \begin{itemize}
     \item \textit{us-east-1d}: worker-1, worker-2, worker-4, worker-5
     \item \textit{us-east-1b}: worker-3
+    \item \textit{us-east-1a}: worker-4, worker-5
 \end{itemize}
 
 %-----------------------------------------------------------------------------%
 \subsubsection{Network Profile and Topology Modeling}
 \label{subsubsec:netaware4_networksetup}
 %-----------------------------------------------------------------------------%
-To bypass the single-region limitation of the sandbox environment, a hybrid logical topology was engineered using Linux kernel traffic shaping. A two-tier infrastructure matrix was established by dividing the cluster into two logical regions:
+To evaluate the impact of network locality on scheduling and descheduling decisions, the cluster topology was configured to include nodes with heterogeneous network characteristics distributed across multiple logical availability zones:
 
 \begin{itemize}
-    \item \textbf{Logical Region \textit{us-east-1} (Tier 1 - High Performance):} Consists of worker-1, worker-2 (in \textit{us-east-1d}), and worker-3 (in \textit{us-east-1b}). These nodes maintain their native high-speed cloud provider data paths. Communication between worker-1 and worker-2 incurs a localized intra-zone latency of approximately 0.3 ms. Communication crossing over to worker-3 experiences a natural cross-zone physical network transition averaging approximately 1 - 2 ms.
-    \item \textbf{Logical Region \textit{eu-west-1} (Tier 2 - Network Degraded):} Consists of worker-4 and worker-5. Although physically anchored inside \textit{us-east-1d}, these nodes are systematically degraded on a logical layer to emulate a distant edge zone or an independent geographical continent.
+    \item \textbf{Normal Network Conditions:} Consists of worker-1, worker-2, and worker-3. These nodes retain their native cloud-provider network performance. Communication within the same availability zone experiences approximately 0.3 ms latency, while communication across availability zones incurs a natural latency of approximately 1-2 ms.
+
+    \item \textbf{Degraded Network Conditions:} Consists of worker-4 and worker-5, which are assigned to a separate logical availability zone and configured to emulate constrained network conditions. These nodes experience significantly higher communication latency than the rest of the cluster, representing a lower-quality network domain within the topology.
 \end{itemize}
 
-To achieve this network degradation, the primary operating system network interface (\emph{ens5}) on both worker-4 and worker-5 was targeted. A deterministic outbound network emulation queue discipline (\emph{qdisc}) rule was applied directly to the root interface using the Linux Traffic Control (\emph{tc}) framework:
+To achieve the network degradation, the primary operating system network interface (\emph{ens5}) on both worker-4 and worker-5 was targeted. A deterministic outbound network emulation queue discipline (\emph{qdisc}) rule was applied directly to the root interface using the Linux Traffic Control (\emph{tc}) framework:
 
 \begin{lstlisting}[language=bash, numbers=none, xleftmargin=0.5em, framexleftmargin=0em]
 sudo tc qdisc add dev ens5 root netem delay 80ms 5ms distribution normal
@@ -420,14 +422,7 @@ Crucially, because this traffic shaping rule acts as a uniform egress filter, it
 RTT_{\text{Tier2}\leftrightarrow\text{Tier2}} = Delay_{\text{Node4 (Egress)}} + Delay_{\text{Node5 (Egress)}} \approx 160\,\text{ms}
 \]
 
-To align this logical simulation with the Kubernetes descheduler framework, the native cloud provider topology metadata labels were manually overridden on worker-4 and worker-5 via the control plane API:
 
-\begin{lstlisting}[language=bash, numbers=none, xleftmargin=0.5em, framexleftmargin=0em]
-kubectl label node worker-4 topology.kubernetes.io/region=eu-west-1
-kubectl label node worker-5 topology.kubernetes.io/region=eu-west-1
-\end{lstlisting}
-
-This creates a split-horizon configuration where the nodes are physically local but logically segregated into distinct regional tiers.
 %-----------------------------------------------------------------------------%
 \subsubsection{Telemetry and Monitoring Architecture}
 \label{subsubsec:netaware4_monitoringsetup}
@@ -733,10 +728,10 @@ Where:
 \end{itemize}
 
 %-----------------------------------------------------------------------------%
-\subsubsection{M4: Cross-Region Pod Spill Count}
+\subsubsection{M4: Network Degraded Pod Count}
 \label{subsubsec:netaware4_evaluationmetrics4}
 %-----------------------------------------------------------------------------%
-The final validation metric for this test is the Cross-Region Pod Count, which tracks the logical isolation boundaries of the cluster. This metric acts as an indicator of structural policy leakage by measuring how many latency-sensitive pods are placed onto the network-degraded node tier.
+The final validation metric for this test is the Network Degraded Pod Count, which tracks the logical isolation boundaries of the cluster. This metric measure how many latency-sensitive pods are placed onto the network-degraded nodes.
 
 \[
 S_{\text{spill}}
@@ -756,9 +751,9 @@ f(p)
 Where:
 
 \begin{itemize}
-    \item \(S_{\text{spill}}\) is the total number of cross-region pod placements observed during a descheduling sweep.
+    \item \(S_{\text{spill}}\) is the total number of pod placed on degraded nodes, observed during a descheduling sweep.
 
-    \item \(G_{\text{checkout}}\) represents the set of active pods with netwok-group label \textit{checkout-flow} identifier.
+    \item \(G_{\text{checkout}}\) represents the set of active pods with network-group label \textit{checkout-flow} identifier.
 
     \item \(f(p)\) is a binary placement evaluation function for pod \(p\).
 
@@ -767,7 +762,7 @@ Where:
     \item \(D_{\text{tier}}\) represents the set of simulated network-degraded nodes (worker-4 and worker-5).
 \end{itemize}
 
-An un-aware baseline policy may produce an \(S_{\text{spill}}\) value greater than zero if relocating a \emph{checkout-flow} pod to an underutilized \emph{eu-west-1} node and will improves the overall utilization balance \((\sigma_R)\). In contrast, a successful network-aware policy should maintain \(S_{\text{spill}} = 0\), demonstrating that latency-sensitive workloads remain confined to the high-performance region while only generic filler workloads are allowed to migrate to the degraded node tier.
+An un-aware baseline policy may produce an \(S_{\text{spill}}\) value greater than zero if relocating a \emph{checkout-flow} pod to an network degraded node (worker-4 and worker-5) and will improves the overall utilization balance \((\sigma_R)\). In contrast, a successful network-aware policy should maintain \(S_{\text{spill}} = 0\), demonstrating that latency-sensitive workloads remain confined to the high-performance region while only generic filler workloads are allowed to migrate to the degraded node tier.
 
 %-----------------------------------------------------------------------------%
 \subsection{Result and Analysis for LowNodeUtilization Group}
