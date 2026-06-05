@@ -796,9 +796,10 @@ Table \ref{tab:low_node_results} presents the raw results of the evaluation usin
 
 As demonstrated in Table \ref{tab:low_node_results}, all evaluated strategies successfully reduced the CPU and Memory Standard Deviation across the cluster. This indicates that the core balancing objective of the descheduler was achieved, regardless of the filtering strategy applied.
 
+%-----------------------------------------------------------------------------%
 \subsubsection{Resource Balance vs. Network Performance}
 \label{subsubsec:netaware4_resultanalysis1_tradeoff}
-
+%-----------------------------------------------------------------------------%
 While all strategies achieved equivalent resource balancing, their impact on network performance varied drastically. Figure \ref{fig:balance_vs_latency} illustrates this critical trade-off.
 \begin{figure}[H]
     \centering
@@ -886,8 +887,10 @@ The massive latency spikes observed in the topology-aware tests are primarily ca
     \label{fig:topology_flaw}
 \end{figure}
 
+%-----------------------------------------------------------------------------%
 \subsubsection{The Limitations of Pre-Eviction Filtering (L1)}
 \label{subsubsec:netaware4_resultanalysis1_limitation}
+%-----------------------------------------------------------------------------%
 
 During testing, we also discovered that the global Pre-Eviction filter (L1) is highly sensitive to configuration heuristics. Table \ref{tab:minbetter_impact} compares the performance of the L1 filter under different \texttt{MinBetterPercentage} thresholds against the strategy-embedded L2 filter.
 
@@ -910,6 +913,34 @@ During testing, we also discovered that the global Pre-Eviction filter (L1) is h
 When the L1 filter was configured with a loose threshold (50\%), it evaluated all schedulable nodes in the cluster and determined that 2 out of the 4 available candidate nodes offered equal or better latency. Because this satisfied the 50\% minimum threshold requirement, the L1 filter allowed the eviction. However, when the pod was rescheduled, the \textit{kube-scheduler} utilized its default \textit{LeastAllocated} strategy. Since the degraded node in the cluster was also completely empty, the scheduler simply placed the pod there to balance CPU and memory resources, completely destroying the workload's latency. 
 
 To mitigate this global-filtering flaw, the L1 threshold had to be strictly tuned to 75\%. In contrast, the L2 filter embeds network-awareness directly into the destination-scoring logic. By evaluating only the exact target nodes rather than the entire cluster, L2 successfully filters out irrelevant "decoy" nodes and provides a much tighter safety net in this scenario, protecting the workload without requiring manual heuristic tuning.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{The Hard Tradeoff: No Filler Pods}
+\label{subsubsec:netaware4_resultanalysis1_hardtradeoff}
+%-----------------------------------------------------------------------------%
+The previous scenario included generic "filler" pods, which provided the descheduler with a safe alternative to balance the node without touching the network sensitive workloads. To rigorously test the descheduler's logic, we executed a "Hard Tradeoff" variant where the overutilized nodes were populated exclusively only by network-sensitive pods. 
+
+Table \ref{tab:hard_tradeoff_results} presents the evaluation results when no filler pods were available to be sacrificed.
+\begin{table}[H]
+    \centering
+    \begin{tabular}{l c c r c}
+        \toprule
+        \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} &  \textbf{Avg Latency (ms)} & \textbf{Degraded Pods} \\
+        \midrule
+        a1: Baseline & 6 & 23.6 $\rightarrow$ 13.1 & 21.2 $\rightarrow$ 13.9 & 6.668 $\rightarrow$ 39.073 & 2 \\
+        a4: Topology L1+L2 & 6 & 23.6 $\rightarrow$ 13.1 & 21.2 $\rightarrow$ 13.9 & 10.401 $\rightarrow$ 51.249 & 2 \\
+        \midrule
+        a7: Latency L1+L2 & 0 & 23.6 $\rightarrow$ 23.6 & 21.2 $\rightarrow$ 21.2 & 23.140 $\rightarrow$ 21.102 & 0 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Descheduler Performance: The "Hard Tradeoff" Scenario (No Filler Pods)}
+    \label{tab:hard_tradeoff_results}
+\end{table}
+
+This scenario forces the descheduler to make a definitive choice between cluster symmetry and network performance. As shown in Table \ref{tab:hard_tradeoff_results}, the Baseline and Topology-Aware strategies blindly prioritized CPU balancing. They evicted 6 critical pods, successfully balancing the cluster by dropping the CPU Standard Deviation to 13.1\%. However, they placed 2 of those sensitive pods directly into the degraded zone, severely degrading the workload's performance (spiking average latency to $\sim$50ms).
+
+In contrast, the Latency-Aware strategies evaluated the critical pods, detected that evicting any of them would subject them to degraded network conditions, and strictly blocked all evictions (0 Evicted Pods). By intentionally refusing to evict, the Latency-Aware descheduler chose to leave the cluster CPU imbalanced (StdDev remained at 23.6\%) to guarantee the network integrity of the application. This conclusively proves that the proposed implementation strictly prioritizes application-level SLAs over infrastructure symmetry when forced into a hard tradeoff.
+
 
 %-----------------------------------------------------------------------------%
 \subsection{Experimental Results: HighNodeUtilization Scenario}
