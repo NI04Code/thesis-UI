@@ -451,10 +451,10 @@ The telemetry data is collected by evaluating two core histogram vectors: \texti
 The query utilizes host name as its source indicator and peer name as its target label mapping. This allows the descheduler to programmatically construct a real-time topology map of the cluster's network characteristics.
 
 
-\subsection{Testing Scenario and Methodology}
+\subsection{Testing Scenario}
 \label{subsec:netaware4_experimentalmatrix}
 %-----------------------------------------------------------------------------%
-The evaluation is split into three experimental testing scenario for LowNodeUtilization, HighNodeUtilization, and ImbalanceIndexUtilization. For each scenario we test combination of strategies as shown in the experimental matrix defined below:
+The evaluation is split into three experimental testing scenario: LowNodeUtilization, HighNodeUtilization, and ImbalanceIndexUtilization. For each scenario we test combination of strategies as shown in the experimental matrix defined below:
 
 \begin{table}[H]
     \centering
@@ -488,14 +488,88 @@ We also configure specific plugin configuration for each scenario as follows:
 \end{itemize}
 
 %-----------------------------------------------------------------------------%
-\subsubsection{Workload Profiling and Initial Distribution}
-\label{subsubsec:netaware4_workloadprofiling}
+\subsection{Workload Profiling and Initial Distribution}
+\label{subsec:netaware4_workloadprofiling}
 %-----------------------------------------------------------------------------%
 
+To evaluate the the network-aware descheduler, we constructed a standardized benchmarking workload. By establishing a consistent initial pod distribution across our test cluster, we isolate the descheduler's decision-making logic and mathematically compare the performance of different eviction strategies under identical starting conditions.
 
+The core of the evaluation revolves around a simulated e-commerce checkout flow containing network-sensitive microservices. The application is logically divided into three primary components:
 
+\begin{itemize}
+    \item \textbf{Database (\texttt{db}):} Pinned to a specific healthy node to serve as the geographical "anchor" for network cost calculations.
+    \item \textbf{Transaction Service (\texttt{transaction}):} A middle-tier service co-located with the database on the same physical node.
+    \item \textbf{Payment Service (\texttt{payment}):} The scalable frontend component. These pods represent the critical workload that the descheduler must manage. Their placement relative to the \texttt{transaction} service directly dictates the application's end-to-end latency.
+\end{itemize}
+
+All pods within this checkout flow are tagged with the \textbf{network-group: checkout-flow} label. To manipulate cluster utilization without increasing the footprint of the critical microservices, we also utilize generic "filler" pods that consume CPU and Memory resources but without any network-group label attached to it.
+
+By strategically deploying filler pods alongside our critical \texttt{payment} services, we force the cluster into specific initial imbalance states tailored for each scenario.
 
 %-----------------------------------------------------------------------------%
+\subsubsection{LowNodeUtilization Scenario}
+\label{subsubsec:netaware4_workload_lownode}
+%-----------------------------------------------------------------------------%
+The \textit{LowNodeUtilization} strategy resolves resource hotspots by spreading pods from overutilized nodes to underutilized ones. To evaluate this, we aggressively pack both critical \texttt{payment} pods and heavy filler workloads onto a small subset of nodes, pushing their utilization well above the target thresholds. The remainder of the cluster (including the degraded zone) is left completely empty.
+
+Table \ref{tab:lownode_initial_state} details the exact state of the cluster prior to descheduler intervention.
+
+\begin{table}[H]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c l l c c l}
+        \toprule
+        \textbf{Node} & \textbf{Zone} & \textbf{Pods} & \textbf{CPU Alloc.} & \textbf{Mem Alloc.} & \textbf{Status} \\
+        \midrule
+        worker-3 & 1b (Healthy) & 1 db + 2 txn & $\sim$650m (36\%) & $\sim$246Mi (30\%) & Normal (in bounds) \\
+        worker-1 & 1d (Healthy) & 1 pay + 5 filler & $\sim$1000m (55\%) & $\sim$304Mi (38\%) & \textbf{OVERUTILIZED} ($>$50\%) \\
+        worker-2 & 1d (Healthy) & 1 pay + 5 filler & $\sim$1000m (55\%) & $\sim$304Mi (38\%) & \textbf{OVERUTILIZED} ($>$50\%) \\
+        worker-4 & 1a (Degraded) & 0 pods & 0m (0\%) & 0Mi (0\%) & \textbf{UNDERUTILIZED} ($<$20\%) \\
+        worker-5 & 1a (Degraded) & 0 pods & 0m (0\%) & 0Mi (0\%) & \textbf{UNDERUTILIZED} ($<$20\%) \\
+        \bottomrule
+    \end{tabular}%
+    }
+    \caption{Resource Allocation: Initial State for LowNodeUtilization Strategy}
+    \label{tab:lownode_initial_state}
+\end{table}
+
+This starting state tasks the descheduler with safely distributing the critical \texttt{payment} pods to the empty healthy nodes while strictly avoiding the empty degraded zone.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{High Node Utilization Scenario}
+\label{subsubsec:netaware4_workload_highnode}
+%-----------------------------------------------------------------------------%
+Conversely, the \textit{HighNodeUtilization} strategy is designed to consolidate a fragmented cluster by evicting pods from underutilized nodes and packing them onto overutilized nodes. We place the critical \texttt{payment} pods sparsely across otherwise empty nodes. We then intentionally overload the remaining nodes exclusively with heavy filler workloads, creating the heaviest "gravity wells" within the network-degraded zone.
+
+Table \ref{tab:highnode_initial_state} details the exact state of the cluster prior to consolidation.
+
+\begin{table}[H]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c l l c c l}
+        \toprule
+        \textbf{Node} & \textbf{Zone} & \textbf{Pods} & \textbf{CPU Alloc.} & \textbf{Mem Alloc.} & \textbf{Status} \\
+        \midrule
+        worker-3 & 1b (Healthy)  & 1 db + 2 txn & $\sim$756m (37.8\%) & $\sim$366Mi (45.7\%) & \textbf{OVERUTILIZED} ($>$30\%) \\
+        worker-4 & 1a (Degraded) & 6 filler & $\sim$1006m (50.3\%) & $\sim$408Mi (51.0\%) & \textbf{OVERUTILIZED} ($>$30\%) \\
+        worker-5 & 1a (Degraded) & 5 filler & $\sim$856m (42.8\%) & $\sim$360Mi (45.0\%) & \textbf{OVERUTILIZED} ($>$30\%) \\
+        worker-1 & 1d (Healthy)  & 1 pay + 1 fill & $\sim$306m (15.3\%) & $\sim$152Mi (19.0\%) & \textbf{UNDERUTILIZED} ($<$30\%) \\
+        worker-2 & 1d (Healthy)  & 1 pay + 1 fill & $\sim$306m (15.3\%) & $\sim$152Mi (19.0\%) & \textbf{UNDERUTILIZED} ($<$30\%) \\
+        \bottomrule
+    \end{tabular}%
+    }
+    \caption{Resource Allocation: Initial State for HighNodeUtilization Strategy}
+    \label{tab:highnode_initial_state}
+\end{table}
+
+This starting state forces the descheduler to evict the \texttt{payment} pods to consolidate the cluster. The challenge is preventing the \textit{kube-scheduler}'s default \textit{MostAllocated} strategy from blindly bin-packing these critical workloads into the overloaded, but network-degraded, nodes.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Imbalance Index Utilization Scenario}
+\label{subsubsec:netaware4_workload_imbalance}
+%-----------------------------------------------------------------------------%
+The \textit{ImbalanceIndexUtilization} scenario also seeks to consolidate workloads to support node downscaling, but evaluates cluster fragmentation using a mathematical index rather than absolute thresholds. To provide a consistent comparison with the threshold-based consolidation approach, this scenario utilizes the exact same inverted initial distribution as the \textit{HighNodeUtilization} scenario (detailed in Table \ref{tab:highnode_initial_state}). By starting from the same fragmented state—where critical pods sit on underutilized nodes and degraded nodes act as heavy gravity wells—we can directly compare how the Imbalance Index heuristic triggers network-aware evictions compared to rigid threshold logic.%-----------------------------------------------------------------------------%
+
 \subsection{Evaluation Metrics}
 \label{subsec:netaware4_evaluationmetrics}
 %-----------------------------------------------------------------------------%
