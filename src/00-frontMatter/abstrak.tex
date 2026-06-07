@@ -34,11 +34,15 @@
 
 \vspace*{0.5cm}
 
-\noindent Isi abstrak. \\
+Klaster Kubernetes yang dinamis sering kali mengalami akumulasi fragmentasi sumber daya dan ketimpangan sumber daya multi-dimensi, yang menyebabkan kapasitas tidak terpakai (\textit{stranded capacity}) dan pemanfaatan infrastruktur yang tidak efisien. Meskipun Kubernetes Descheduler menyediakan mekanisme untuk optimalisasi pasca-penempatan, kebijakan tradisional hanya berfokus pada keseimbangan komputasi (\textit{compute symmetry}) menggunakan batasan (\textit{threshold}) yang kaku. Pada arsitektur layanan mikro (\textit{microservices}) modern, \textit{bin-packing} standar ini dapat merusak kedekatan jaringan (\textit{network locality}), memisahkan layanan yang saling bergantung di seluruh jaringan yang terdegradasi, dan meningkatkan latensi aplikasi.
+
+Tesis ini menyajikan implementasi dan evaluasi dari arsitektur \textit{descheduling} multi-tingkat yang dirancang untuk menyelesaikan masalah fragmentasi multi-dimensi dan degradasi kinerja jaringan. Pertama, kami mengusulkan kebijakan \textit{ResourceDefragmentation} kustom yang menggunakan \textit{Resource Imbalance Index} (RII) dan \textit{Multi-Criteria Decision Analysis} untuk menyelaraskan alokasi CPU dan memori secara geometris, guna membuka kapasitas yang tidak terpakai. Kedua, kami memperkenalkan mekanisme penyaringan \textit{Network-Aware} lapis ganda yang mengintegrasikan telemetri jaringan \textit{real-time} untuk mengevaluasi dan memblokir penggusuran (\textit{eviction}) yang dapat memperburuk latensi.
+
+Arsitektur gabungan ini dievaluasi pada penerapan \textit{multi-node} nyata (\textit{live deployment}) melalui skenario \textit{load-balancing}, konsolidasi, dan koreksi ketimpangan multi-dimensi. Hasil empiris menunjukkan bahwa meskipun algoritma \textit{ResourceDefragmentation} \textit{baseline} berhasil menyeimbangkan sumber daya komputasi klaster, algoritma ini mengorbankan kinerja aplikasi dengan menggusur beban kerja sensitif, menyebabkan lonjakan latensi hingga $\sim$167ms. Sebaliknya, filter \textit{Latency-Aware} yang diusulkan berhasil mencegat tindakan yang memperburuk jaringan tersebut, mempertahankan latensi jaringan dasar pada $\sim$8ms. Evaluasi ini juga menunjukkan bahwa perlindungan jaringan tersebut tidak mengorbankan efisiensi defragmentasi; dengan mengarahkan algoritma defragmentasi untuk menargetkan \textit{pod} non-kritis, arsitektur terintegrasi ini berhasil mencapai keseimbangan sumber daya geometris yang optimal (mengurangi ketimpangan klaster menjadi 17,9\% \textit{Mean Absolute} RII) sekaligus melindungi integritas jaringan.
 
 \vspace*{0.2cm}
 
-\noindent Kata kunci: \\ \f{Keyword} satu, kata kunci dua \\
+\noindent Kata kunci: \\ Kubernetes, Descheduler, Resource Defragmentation, Latensi Jaringan, Microservices \\
 
 \setstretch{1.4}
 \newpage
