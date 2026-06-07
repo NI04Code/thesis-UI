@@ -2,7 +2,7 @@
 \chapter{\babSatu}
 \label{bab:1}
 %----------------------------------------------------------------------------- %%
-This chapter introduces the motivation and scope of the thesis by framing resource fragmentation as a practical challenge in long-running Kubernetes clusters. It explains why post-scheduling correction through the Descheduler is relevant, how resource imbalance, runtime usage, and network locality shape the research problem, and what contribution this study aims to make. The chapter also defines the research boundaries and gives an overview of the methodology and thesis structure so that the proposed approach can be understood within its broader technical and academic context.
+This chapter provides the main background and challenges that drive this thesis. Section 1.1 outlines the research background, highlighting the motivation behind addressing resource fragmentation and network locality in Kubernetes clusters. Section 1.2 defines the problem statement, specifying the main research questions and limitations. Section 1.3 enumerates the objectives of the thesis, while Section 1.4 describes the anticipated research contributions. Section 1.5 positions this work within relevant academic domains. Section 1.6 summarizes the principal steps taken during the research. This chapter concludes with Section 1.7, which presents the thesis outline.
 
 %----------------------------------------------------------------------------- %%
 \section{Research Background}
@@ -42,8 +42,7 @@ Based on the problem statement, this study addresses the following research ques
     \item How can a multi-stage Descheduler-based pipeline be designed to transition a Kubernetes cluster from a fragmented state to a more consolidated and better packed state?
     \item How can MCDA, particularly TOPSIS-based ranking, be used to prioritize Pods that contribute most to node-level inefficiency, imbalance, or stranded capacity?
     \item How does actual runtime usage, with and without EWMA smoothing, affect RII/TOPSIS eviction decisions compared with request-based scoring?
-    \item How can a network-aware scoring or filtering mechanism be incorporated into the Kubernetes Descheduler framework so that eviction decisions do not unnecessarily worsen communication latency?
-    \item How does the trade-off between cluster fragmentation reduction and communication latency compare when using the proposed network-aware eviction strategy against a non-network-aware baseline?
+    \item How can a network-aware filtering mechanism implemented in Kubernetes Descheduler affect the trade-off between cluster fragmentation reduction and communication latency compared with a non-network-aware baseline?
 \end{itemize}
 
 \subsection{Research Limitation}

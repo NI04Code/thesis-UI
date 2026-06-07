@@ -2,9 +2,7 @@
 \chapter{\babTiga}
 \label{bab:3}
 %----------------------------------------------------------------------------- %%
-This chapter presents the design and methodology for the custom Kubernetes Descheduler policies developed in this research. The design has three related parts. First, the Resource Defragmentation policy uses Resource Imbalance Index (RII) and TOPSIS to select eviction candidates that can reduce fragmented CPU-memory capacity. Second, the real-usage extension replaces request-only scoring with runtime usage signals and evaluates EWMA smoothing for noisy workload metrics. Third, the Network-Aware Evictor acts as a guardrail so that consolidation decisions do not unnecessarily worsen communication locality.
-
-The proposed system keeps the default \texttt{kube-scheduler} unchanged. The descheduler decides which Pods are worth evicting, while the scheduler remains responsible for final placement after eviction. This separation is important because Kubernetes scheduling feasibility is still based mainly on declared resource requests. Therefore, every eviction decision must consider both the expected improvement in RII/TOPSIS score and the probability that the evicted Pod can be scheduled safely on a useful non-origin Node.
+This chapter presents the design and methodology for the custom Kubernetes Descheduler policies developed in this research. Section 3.1 outlines the Resource Defragmentation policy design, detailing the use of the Resource Imbalance Index and candidate ranking mechanisms. Section 3.2 describes the Network-Aware Evictor policy design, focusing on the dual-layer filtering architecture and cost models.
 
 %----------------------------------------------------------------------------- %%
 \section{Resource Defragmentation Policy Design}
