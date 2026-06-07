@@ -776,14 +776,15 @@ Table \ref{tab:low_node_results} presents the raw performances of the evaluation
         \toprule
         \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} & \textbf{Active Nodes} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
         \midrule
-        a1: Baseline & 6 & 23.6 $\rightarrow$ 15.7 & 23.5 $\rightarrow$ 13.9 & 5 & 61.717 ms & 1 \\
-        a2: Topology L1 & 6 & 23.6 $\rightarrow$ 15.7 & 23.5 $\rightarrow$ 13.9 & 5 & 61.271 ms & 1 \\
-        a3: Topology L2 & 6 & 23.6 $\rightarrow$ 15.7 & 23.5 $\rightarrow$ 13.9 & 5 & 59.477 ms & 1 \\
-        a4: Topology L1+L2 & 6 & 23.6 $\rightarrow$ 15.7 & 23.5 $\rightarrow$ 13.9 & 5 & 67.305 ms & 1 \\
+        Initial State & - & 23.6 & 23.5 & $\sim$4.0-20.0 ms & 0 \\
         \midrule
-        a5: Latency L1 & 6 & 23.6 $\rightarrow$ 15.4 & 23.5 $\rightarrow$ 14.3 & 5 & 4.195 ms & 0 \\
-        a6: Latency L2 & 6 & 23.6 $\rightarrow$ 15.4 & 23.5 $\rightarrow$ 14.3 & 5 & 3.017 ms & 0 \\
-        a7: Latency L1+L2 & 6 & 23.6 $\rightarrow$ 15.4 & 23.5 $\rightarrow$ 14.3 & 5 & 2.649 ms & 0 \\
+        a1: Baseline & 6 & 15.7 & 13.9 & 5 & 61.717 ms & 1 \\
+        a2: Topology L1 & 6 & 15.7 & 13.9 & 5 & 61.271 ms & 1 \\
+        a3: Topology L2 & 6 & 15.7 & 13.9 & 5 & 59.477 ms & 1 \\
+        a4: Topology L1+L2 & 6 & 15.7 & 13.9 & 5 & 67.305 ms & 1 \\
+        a5: Latency L1 & 6 & 15.4 & 14.3 & 5 & 4.195 ms & 0 \\
+        a6: Latency L2 & 6 & 15.4 & 14.3 & 5 & 3.017 ms & 0 \\
+        a7: Latency L1+L2 & 6 & 15.4 & 14.3 & 5 & 2.649 ms & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -933,10 +934,11 @@ Table \ref{tab:hard_tradeoff_results} presents the evaluation results when no fi
         \toprule
         \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} &  \textbf{Avg Latency (ms)} & \textbf{Degraded Pods} \\
         \midrule
-        a1: Baseline & 6 & 23.6 $\rightarrow$ 13.1 & 21.2 $\rightarrow$ 13.9 & 6.668 $\rightarrow$ 39.073 & 2 \\
-        a4: Topology L1+L2 & 6 & 23.6 $\rightarrow$ 13.1 & 21.2 $\rightarrow$ 13.9 & 10.401 $\rightarrow$ 51.249 & 2 \\
+        Initial State & - & 23.6 & 21.2 & $\sim$4.0-20.0 ms & 0 \\
         \midrule
-        a7: Latency L1+L2 & 0 & 23.6 $\rightarrow$ 23.6 & 21.2 $\rightarrow$ 21.2 & 23.140 $\rightarrow$ 21.102 & 0 \\
+        a1: Baseline & 6 & 13.1 & 13.9 & 6.668 $\rightarrow$ 39.073 & 2 \\
+        a4: Topology L1+L2 & 6 & 13.1 & 13.9 & 10.401 $\rightarrow$ 51.249 & 2 \\
+        a7: Latency L1+L2 & 0 & 23.6 & 21.2 & 23.140 $\rightarrow$ 21.102 & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -963,14 +965,15 @@ Table \ref{tab:highnode_results} presents the raw performance of the descheduler
         \toprule
         \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} & \textbf{Active Nodes} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
         \midrule
-        b1: Baseline (No Net-Aware) & 4 & 13.4 $\rightarrow$ 22.1 & 11.2 $\rightarrow$ 13.8 & 3 & 126.282 ms & 2 \\
-        b2: Topology L1 & 4 & 13.4 $\rightarrow$ 22.1 & 11.2 $\rightarrow$ 13.8 & 3 & 123.050 ms & 2 \\
-        b3: Topology L2 & 4 & 13.4 $\rightarrow$ 22.1 & 11.2 $\rightarrow$ 13.8 & 3 & 126.403 ms & 2 \\
-        b4: Topology L1+L2 & 4 & 13.4 $\rightarrow$ 22.1 & 11.2 $\rightarrow$ 13.8 & 3 & 129.800 ms & 2 \\
+        Initial State & - & 13.4 & 11.2 & 5 & $\sim$3.0 ms & 0 \\
         \midrule
-        b5: Latency L1 & 2 & 13.4 $\rightarrow$ 17.7 & 11.2 $\rightarrow$ 12.5 & 5 & 2.728 ms & 0 \\
-        b6: Latency L2 & 2 & 13.4 $\rightarrow$ 17.7 & 11.2 $\rightarrow$ 12.5 & 5 & 2.676 ms & 0 \\
-        b7: Latency L1+L2  & 2 & 13.4 $\rightarrow$ 17.7 & 11.2 $\rightarrow$ 12.5 & 5 & 3.061 ms & 0 \\
+        b1: Baseline (No Net-Aware) & 4 & 22.1 & 13.8 & 3 & 126.282 ms & 2 \\
+        b2: Topology L1 & 4 & 22.1 & 13.8 & 3 & 123.050 ms & 2 \\
+        b3: Topology L2 & 4 & 22.1 & 13.8 & 3 & 126.403 ms & 2 \\
+        b4: Topology L1+L2 & 4 & 22.1 & 13.8 & 3 & 129.800 ms & 2 \\
+        b5: Latency L1 & 2 & 17.7 & 12.5 & 5 & 2.728 ms & 0 \\
+        b6: Latency L2 & 2 & 17.7 & 12.5 & 5 & 2.676 ms & 0 \\
+        b7: Latency L1+L2  & 2 & 17.7 & 12.5 & 5 & 3.061 ms & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -1088,6 +1091,7 @@ Table \ref{tab:resourcedefrag_results} presents the raw performance of the desch
         \textbf{Scenario} & \textbf{Evictions} & \textbf{Mean Absolute RII (\%)} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
         \midrule
         Initial State & - & 50.7\% & $\sim$8.0 ms & 0 \\
+        \midrule
         c1: Baseline & 8 & 19.9\% & 167.216 ms & 2 \\
         c2: Topology L1 & 8 & 19.9\% & 165.783 ms & 2 \\
         c3: Latency L1 & 8 & 17.9\% & 8.762 ms & 0 \\
@@ -1115,7 +1119,7 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
     \begin{tikzpicture}
         \pgfplotsset{
             width=12cm,
-            height=8.5cm,
+            height=9.5cm,
             scale only axis,
             xmin=0.5, xmax=4.5,
             xtick={1,2,3,4},
@@ -1165,4 +1169,4 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
     \label{fig:resourcedefrag_latency}
 \end{figure}
 
-The results from the Resource Defragmentation scenario mathematically prove that our Latency-Aware plugin does not inherently compromise the core goal of the defragmentation algorithm. Instead of blindly moving critical workloads to satisfy a mathematical equation, the plugin intelligently evaluates network safety and blocks evictions that violate it. As demonstrated by the 17.9\% final RII, the presence of these expendable pods allowed the steered approach to achieve a slightly superior geometric resource balance compared to the baseline. However, as established in our earlier Hard Tradeoff experiments, if no such filler pods were available, the Latency-Aware plugin would actively choose to leave the cluster in a fragmented state (higher Mean RII) to guarantee network integrity, proving that network latency protection always takes precedence over multi-dimensional resource packing.
+The results from the Resource Defragmentation scenario mathematically prove that our Latency-Aware plugin does not inherently compromise the core goal of the defragmentation algorithm. Instead of blindly moving critical workloads to satisfy a mathematical equation, the plugin intelligently evaluates network safety and blocks evictions that violate it. As demonstrated by the 17.9\% final RII, the presence of these expendable pods allowed the steered approach to achieve a slightly superior geometric resource balance compared to the baseline. However, as established in our earlier Hard Tradeoff experiments, if no such filler pods were available, the Latency-Aware plugin would actively choose to leave the cluster in a fragmented state (higher Mean RII) to guarantee network integrity like showed in \ref{tab:hard_tradeoff_results}
