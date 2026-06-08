@@ -3,7 +3,7 @@
 \label{bab:2}
 %----------------------------------------------------------------------------- %%
 
-This chapter reviews the concepts that support defragmentation-focused descheduling. It covers Kubernetes resource management, multi-resource fragmentation, bin packing, the Descheduler, scheduler-target prediction, and network-aware placement.
+This chapter reviews the theoretical concepts and prior work that form the foundation of this study. Section 2.1 outlines the Kubernetes architecture and its resource management principles. Section 2.2 defines the resource fragmentation problem within dynamic clusters. Section 2.3 details the bin-packing problem and the application of Multi-Criteria Decision Analysis. Section 2.4 describes the Kubernetes Descheduler and its current limitations. Section 2.5 explains runtime metrics, actual usage, and smoothing techniques. Section 2.6 discusses communication-aware and network-aware scheduling approaches. Section 2.7 evaluates group eviction, atomic migration, and non-atomic scoring. This chapter concludes with Section 2.8, which identifies the current approaches and the resulting research gap.
 
 \section{Kubernetes Architecture and Resource Management}
 \label{sec:kubernetesArchitecture}
