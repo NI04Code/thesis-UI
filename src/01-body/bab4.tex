@@ -3,7 +3,7 @@
 \label{bab:4}
 %-----------------------------------------------------------------------------%
 
-This chapter presents the evaluation of the Resource Defragmentation policy. The methodology in Chapter~\ref{bab:3} defines how the policy detects fragmentation, ranks candidate Pods with TOPSIS, applies a feasibility guard, and supports request-based, actual-usage, and EWMA-smoothed signals. The evaluation here proceeds in two stages: a synthetic cluster walk-through that traces the algorithm end-to-end on a small Kubernetes-shaped scenario, followed by a discrete-event simulator-based scale-out that compares the policy against established baselines on a larger heterogeneous cluster.
+This chapter presents the comprehensive evaluation of the developed descheduler policies. Section 4.1 outlines the Resource Defragmentation descheduler evaluation, validating the algorithm's effectiveness through synthetic walk-throughs and simulator-based scaling. Section 4.2 gives details of latency and defragmentation trade-off test, evaluating the network-aware architecture on a live multi-node deployment.
 
 %-----------------------------------------------------------------------------%
 \section{Resource Defragmentation Descheduler Evaluation}
