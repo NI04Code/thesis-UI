@@ -24,7 +24,7 @@ The study addresses the following problems:
 
 \begin{enumerate}
     \item \textbf{Resource fragmentation:} CPU and memory may remain available in aggregate but become scattered across Nodes in incompatible shapes. CPU-heavy and memory-heavy placements can strand one resource dimension behind another, while scheduler bin-packing scores only act during initial placement and do not repair fragmentation that has accumulated in an already running cluster.
-    \item \textbf{Network-locality risk:} Compute-efficient movement can separate communicating services and degrade application latency.
+    \item \textbf{Network-locality risk:} Eviction decisions that focus only on cluster rebalance can separate network dependent services and increase communication overhead, especially in multi-node or multi-zone deployments~\citep{marchese2022network,chen2024trade}.
 \end{enumerate}
 
 \subsection{Research Question}
