@@ -2,153 +2,106 @@
 \chapter{\babSatu}
 \label{bab:1}
 %----------------------------------------------------------------------------- %%
-This chapter provides the main background and challenges that drive this thesis. Section 1.1 outlines the research background, highlighting the motivation behind addressing resource fragmentation and network locality in Kubernetes clusters. Section 1.2 defines the problem statement, specifying the main research questions and limitations. Section 1.3 enumerates the objectives of the thesis, while Section 1.4 describes the anticipated research contributions. Section 1.5 positions this work within relevant academic domains. Section 1.6 summarizes the principal steps taken during the research. This chapter concludes with Section 1.7, which presents the thesis outline.
+This chapter introduces the resource-fragmentation and network-locality problems addressed by this thesis. It defines the research questions, scope, objectives, contributions, research position, and research steps.
 
-%----------------------------------------------------------------------------- %%
 \section{Research Background}
 \label{sec:researchBackground}
-%----------------------------------------------------------------------------- %%
-Kubernetes has become the dominant orchestration platform for containerized workloads. However, dynamic Kubernetes clusters still face a persistent multi-resource packing problem commonly discussed as resource fragmentation or the ``Tetris problem''. As Pods are created, scaled, and terminated over time, available CPU and memory can become scattered into small residual gaps across different Nodes. Even when aggregate cluster capacity is still mathematically sufficient, that capacity may no longer be usable for incoming workloads with larger or more imbalanced requests~\citep{mishra_bellur_2016,grandl_tetris_2014}.
 
-This problem is important because fragmentation affects both utilization and operational cost. \citet{larsson_klein_elmroth_2023} show that Kubernetes clusters can enter fragmented states in which poor Pod-to-Node mappings strand resources, and that directed Pod eviction can reduce fragmentation enough to run the same workload using 16.7\% fewer Nodes than standard scheduling alone. Kubernetes itself also recognizes bin packing as a first-class scheduling concern through scoring strategies such as \texttt{MostAllocated} and \texttt{RequestedToCapacityRatio}; however, these strategies act during initial placement and do not automatically repair fragmentation that has already accumulated over time~\citep{k8s_resource_bin_packing}.
+Kubernetes schedules Pods by filtering feasible Nodes and scoring the remaining alternatives. This process is effective for initial placement, but running Pods normally remain bound to their Nodes until they terminate or are recreated. As workloads scale and change, free CPU and memory can become scattered into incompatible shapes. Aggregate capacity may be sufficient while no individual Node can accommodate a new Pod, a condition commonly described as resource fragmentation or the ``Tetris problem''~\citep{mishra_bellur_2016,grandl_tetris_2014}.
 
-Because Kubernetes binds a Pod to a Node for its lifetime unless the Pod is recreated, long-running clusters require a post-placement correction mechanism. The Kubernetes Descheduler provides that operational hook by evicting selected Pods so that they can be scheduled again under a newer cluster state~\citep{k8s_descheduler_docs}. This mechanism is relevant for consolidation because the Cluster Autoscaler can remove Nodes only after workloads have been packed tightly enough to empty them safely~\citep{cluster_autoscaler_faq}. Therefore, descheduling can be used not only for balancing, but also as a proactive consolidation step that improves the chance of reclaiming underutilized infrastructure.
+Fragmentation affects schedulability, utilization, and infrastructure cost. A Node may retain CPU without enough memory, while another retains memory without enough CPU. These asymmetric residuals strand capacity because the two dimensions cannot be allocated independently~\citep{xiao2013dynamic,guo2025joint}. Directed Pod eviction can repair such placement states and reduce the number of Nodes required by the same workload~\citep{larsson_klein_elmroth_2023}.
 
-At the same time, modern cloud-native systems are increasingly composed of communicating microservices. For these workloads, a consolidation decision should not be judged only by CPU and memory fit. If related services are moved farther apart, the cluster may become denser while application communication latency becomes worse. Prior work on communication-aware Kubernetes placement shows that default Kubernetes scheduling does not fully account for application communication requirements or network conditions~\citep{marchese2022network,marchese_tomarchio_2022}. Traffic-aware and edge-oriented scheduling studies similarly motivate the use of latency, traffic volume, or service dependency information when deciding placement~\citep{chen2024trade,pusztai_pogonip_2021}.
+The Kubernetes Descheduler provides a post-placement correction mechanism by evicting selected Pods and allowing the kube-scheduler to place their replacements~\citep{k8s_descheduler_docs}. For node reclamation, the important question is not merely whether a source Node is lightly utilized, but whether an evicted Pod has a feasible target that produces denser and better-shaped packing. This requires source-node assessment, target prediction, and an eviction budget that limits disruption.
 
-This research therefore studies a custom Descheduler-based approach that combines fragmentation-aware consolidation, actual-usage-aware resource analysis, and network-aware eviction considerations. The goal is not to replace the default Kubernetes scheduler, but to identify which Pods should be evicted so that the existing scheduler can repack workloads more effectively. The proposed direction uses resource imbalance analysis and Multi-Criteria Decision Analysis (MCDA), particularly TOPSIS-based ranking, to prioritize eviction candidates while incorporating runtime metrics and network-aware scoring or filtering to avoid unnecessary latency degradation~\citep{topsis_1981,marchese2024loadaware,marchese2025enhancing}.
+Resource packing can also affect application communication. Moving dependent microservices to distant or degraded Nodes may improve compute packing while increasing latency. Communication-aware placement studies show that network topology, observed latency, and service dependencies can materially affect placement quality~\citep{marchese2022network,marchese_tomarchio_2022,chen2024trade}. A practical node reclamation architecture therefore also needs a network-aware guardrail.
 
-%----------------------------------------------------------------------------- %%
+This research develops a defragmentation-focused Descheduler architecture with two complementary components. \textit{ResourceDefragmentation} identifies drain candidates using utilization and CPU-memory shape, predicts feasible scheduler targets, and chooses a Pod using the projected bin score of its predicted landing Node. A network-aware filtering layer blocks evictions whose feasible destinations would degrade communication locality.
+
 \section{Problem Statement}
 \label{sec:problemStatement}
-%----------------------------------------------------------------------------- %%
 
-The primary issue in modern Kubernetes clusters is the absence of a consolidation mechanism that can jointly consider resource fragmentation and communication locality after the initial scheduling phase. In this study, the problem is formulated as follows:
+The study addresses the following problems:
 
 \begin{enumerate}
-    \item \textbf{Resource fragmentation and scatter:} The kube-scheduler can place Pods efficiently at scheduling time, but it does not explicitly detect when available CPU and memory have become too scattered across Nodes to be practically useful.
-    \item \textbf{Resource imbalance and stranded capacity:} Nodes may experience asymmetric utilization, for example high CPU usage with low memory usage, causing one resource dimension to strand another and reducing effective capacity~\citep{xiao2013dynamic,guo2025joint}.
-    \item \textbf{Request and actual-usage mismatch:} Kubernetes scheduling feasibility is based on declared requests, while actual runtime usage may be lower, higher, or more bursty than those declarations. This mismatch can make a request-only imbalance score different from the real operating condition observed by the cluster.
-    \item \textbf{Reactive scale-out and autoscaling inefficiency:} Fragmented resources can prevent new Pods from fitting on existing Nodes, causing the cluster to retain or provision additional Nodes even when aggregate capacity is sufficient~\citep{larsson_klein_elmroth_2023,cluster_autoscaler_faq}.
-    \item \textbf{Network-locality and latency risk:} Eviction decisions that focus only on packing can separate dependent services and increase communication overhead, especially in multi-node or multi-zone deployments~\citep{marchese2022network,chen2024trade}.
+    \item \textbf{Scattered capacity:} CPU and memory remain available in aggregate but cannot satisfy workload requests on any single Node.
+    \item \textbf{Stranded resource dimensions:} CPU-heavy and memory-heavy placement states leave asymmetric capacity that is difficult to reuse.
+    \item \textbf{Missing post-placement node reclamation:} Scheduler bin-packing scores act when a Pod is placed and do not repair an already fragmented cluster.
+    \item \textbf{Uncertain rescheduling outcome:} An eviction is useful only if the Pod has a feasible non-origin target that improves packing without exceeding a utilization ceiling.
+    \item \textbf{Network-locality risk:} Compute-efficient movement can separate communicating services and degrade application latency.
 \end{enumerate}
 
 \subsection{Research Question}
 \label{sec:researchQuestion}
 
-Based on the problem statement, this study addresses the following research questions:
-
 \begin{itemize}
-    \item How can a multi-stage Descheduler-based pipeline be designed to transition a Kubernetes cluster from a fragmented state to a more consolidated and better packed state?
-    \item How can MCDA, particularly TOPSIS-based ranking, be used to prioritize Pods that contribute most to node-level inefficiency, imbalance, or stranded capacity?
-    \item How does actual runtime usage, with and without EWMA smoothing, affect RII/TOPSIS eviction decisions compared with request-based scoring?
-    \item How can a network-aware filtering mechanism implemented in Kubernetes Descheduler affect the trade-off between cluster fragmentation reduction and communication latency compared with a non-network-aware baseline?
+    \item How can a Descheduler policy identify Nodes whose low utilization or poor CPU-memory shape makes them suitable drain candidates?
+    \item How can predicted scheduler targets and a single target-bin-score criterion select effective and safe eviction victims?
+    \item How effectively does the proposed policy reclaim Nodes, reduce stranded capacity, preserve balanced headroom, and converge compared with \textit{HighNodeUtilization}?
+    \item How can network-aware filtering reduce latency risk without preventing useful resource improvement?
 \end{itemize}
 
 \subsection{Research Limitation}
 \label{sec:researchLimitation}
 
-To maintain focus and define the scope of this study, the research limitations are established as follows:
-
 \begin{itemize}
-    \item \textbf{Infrastructure:} Evaluation is conducted on a small-scale Kubernetes cluster of 3--5 AWS EC2 nodes in the us-east-1 region, with additional logical topology separation to emulate multi-region network conditions.
-    \item \textbf{Simulator:} Extended evaluation for large-scale cluster topologies is conducted using a custom Kubernetes cluster simulator.
-    \item \textbf{Metrics source:} Runtime resource usage is collected from lightweight Kubernetes metrics sources such as \texttt{metrics-server} or Prometheus-compatible exporters, depending on the experiment group.
-    \item \textbf{Network:} Experiments assume standard AWS networking without specialized hardware acceleration such as SR-IOV.
-    \item \textbf{Provisioning:} The cluster is provisioned using kubeadm to approximate production behavior, but excludes enterprise-grade storage features and complex service meshes unless specifically required for the evaluation scenario.
-    \item \textbf{Framework dependencies:} The solution is implemented within the Kubernetes Descheduler framework; it determines which Pods should be evicted, while final placement remains the responsibility of the kube-scheduler.
-    \item \textbf{Migration model:} The study uses standard Kubernetes eviction and restart behavior rather than live migration.
-    \item \textbf{Scope of network awareness:} Network-aware logic is treated as an eviction scoring or filtering consideration, not as a complete traffic-engineering or routing solution.
+    \item Evaluation uses a controlled multi-node Kubernetes deployment and synthetic workloads with declared CPU and memory requests.
+    \item Resource-policy experiments use request-based accounting because kube-scheduler feasibility is request-based.
+    \item Final placement remains the responsibility of the configured kube-scheduler; the Descheduler predicts but does not bind Pods.
+    \item Movement uses standard Kubernetes eviction and controller recreation rather than live migration.
+    \item The resource model focuses on CPU and memory; storage, accelerators, and additional extended resources are outside the main evaluation.
+    \item Network awareness is implemented as eviction filtering, not as a complete routing or traffic-engineering system.
 \end{itemize}
 
-%----------------------------------------------------------------------------- %%
 \section{Research Objectives}
 \label{sec:researchObjectives}
-%----------------------------------------------------------------------------- %%
-
-In alignment with the formulated research questions, the objectives of this study are as follows:
 
 \begin{itemize}
-    \item \textbf{Develop a fragmentation-aware consolidation strategy:} Design a multi-stage Descheduler-based pipeline that identifies resource scatter, selects source Nodes, and supports workload consolidation onto denser target Nodes.
-    \item \textbf{Create an imbalance-detection mechanism:} Develop a policy component that detects stranded resources and identifies Pods that contribute to node-level CPU-memory imbalance.
-    \item \textbf{Implement a strategic eviction engine:} Use MCDA, particularly TOPSIS-based ranking, to prioritize eviction candidates that provide the greatest benefit for restoring balance or emptying Nodes.
-    \item \textbf{Evaluate actual-usage and EWMA variants:} Compare request-based RII/TOPSIS with raw runtime usage and EWMA-smoothed runtime usage to determine whether the policy becomes more representative and stable.
-    \item \textbf{Incorporate network-aware eviction scoring:} Add latency-aware or dependency-aware considerations so consolidation actions can avoid unnecessary degradation in inter-service communication.
-    \item \textbf{Evaluate fragmentation and latency trade-offs:} Measure the effect of the proposed approach on packing efficiency, node reclaimability, and communication-related indicators under the experiment setup.
+    \item Design a defragmentation-focused Descheduler policy that combines utilization and resource-shape assessment.
+    \item Quantify dimensional skew and free-space pressure using RII, FSI, and a CPU-memory bin score.
+    \item Predict feasible landing Nodes before eviction and select victims using projected target balance.
+    \item Enforce an eviction budget, target-utilization ceiling, and pack-upward constraint to reduce unsafe or unproductive movement.
+    \item Evaluate node reclamation, stranding reduction, balanced headroom, eviction efficiency, convergence, and safety.
+    \item Integrate network-aware filtering that protects communication locality during workload movement.
 \end{itemize}
 
-%----------------------------------------------------------------------------- %%
 \section{Research Contributions}
 \label{sec:researchContributions}
-%----------------------------------------------------------------------------- %%
-
-This study is expected to provide the following contributions:
 
 \begin{itemize}
-    \item \textbf{A Descheduler-based consolidation pipeline:} A practical policy design for reducing resource fragmentation after the initial scheduling phase without replacing the kube-scheduler.
-    \item \textbf{A TOPSIS-based pod eviction ranking method:} A scoring mechanism that ranks eviction candidates based on their contribution to imbalance, stranded capacity, and consolidation potential.
-    \item \textbf{An actual-usage-aware descheduling comparison:} An evaluation of request-based, raw actual-usage, and EWMA-smoothed variants of RII/TOPSIS scoring.
-    \item \textbf{A network-aware eviction consideration:} A latency-aware or dependency-aware extension that reduces the risk of improving packing at the cost of worse service communication.
-    \item \textbf{A comparison of fragmentation and latency outcomes:} An evaluation that compares consolidation results with and without network-aware eviction logic.
+    \item \textbf{A defragmentation-focused Descheduler policy:} \textit{ResourceDefragmentation} repairs post-placement scatter without replacing the kube-scheduler.
+    \item \textbf{RII- and stranding-aware Node assessment:} Drain candidates are identified from average utilization and CPU-memory bin quality, then prioritized using RII and FSI.
+    \item \textbf{A predicted-target victim selector:} Candidate Pods are compared using the projected bin score of their predicted landing Nodes.
+    \item \textbf{Scheduler-target prediction and safety constraints:} Evictions require request feasibility, a target-utilization ceiling, and a target at least as packed as the source.
+    \item \textbf{Network-aware eviction filtering:} Topology- or latency-based costs protect dependent services from harmful movement.
+    \item \textbf{A scenario-based evaluation:} Five node reclamation and fragmentation scenarios quantify reclamation, stranding, headroom, efficiency, convergence, and safety.
 \end{itemize}
 
-%----------------------------------------------------------------------------- %%
 \section{Research Position}
 \label{sec:researchPosition}
-%----------------------------------------------------------------------------- %%
 
-Prior studies have addressed several parts of the problem targeted by this research. Early work on dynamic resource allocation, such as \citet{xiao2013dynamic}, shows that multi-dimensional resource skewness can reduce effective server utilization. However, these approaches were primarily designed for virtual-machine environments and often rely on static threshold-based heuristics. More recent work has studied container resource defragmentation and task scheduling using optimization or learning-based methods~\citep{guo2025joint,bagaa2024multiobjective}, but these studies are commonly oriented toward placement or scheduling decisions rather than long-term post-placement correction in Kubernetes clusters.
+Existing Kubernetes bin-packing strategies such as \texttt{MostAllocated} and \texttt{RequestedToCapacityRatio} improve initial placement but do not move running Pods~\citep{k8s_resource_bin_packing}. Upstream Descheduler utilization policies can pack workloads using thresholds, but a scalar utilization threshold does not directly represent CPU-memory shape. Research on directed eviction and multi-resource scheduling establishes that placement repair and dimensional balance can improve effective capacity~\citep{larsson_klein_elmroth_2023,grandl_tetris_2014,guo2025joint}.
 
-Kubernetes-specific research has also shown that resource fragmentation can emerge over time and that directed Pod eviction can improve utilization~\citep{mishra_bellur_2016,larsson_klein_elmroth_2023}. Nevertheless, fragmentation-aware consolidation by itself is not sufficient for microservice workloads because improving packing can accidentally worsen communication locality. Network-aware placement studies show that service communication patterns and network conditions can affect placement quality~\citep{marchese2022network,marchese_tomarchio_2022,chen2024trade}, but these works do not fully address how such considerations should be integrated into a Descheduler-based consolidation policy.
+This study positions \textit{ResourceDefragmentation} between threshold-only draining and a full scheduler replacement. The policy uses the Descheduler to choose limited, purposeful evictions while preserving kube-scheduler ownership of placement. Its defining choice is a single predicted-target criterion: among feasible Pods on a drain Node, prefer the Pod whose predicted destination has the strongest projected CPU-memory bin score. The accompanying network-aware layer treats communication cost as an eviction guardrail.
 
-Another related direction is group or gang-style movement, where dependent services are moved together to preserve affinity. While this approach can protect communication locality, it may increase the risk of resource deadlock or failed movement because the scheduler must find enough capacity for a larger combined group. For a fragmentation-oriented Descheduler policy, this can worsen the packing problem instead of solving it. Therefore, this research positions itself away from strictly atomic group migration and instead adopts a non-atomic, individual scoring paradigm.
-
-This study addresses the gap by developing a Descheduler-based framework that combines multi-dimensional resource imbalance analysis, actual-usage-aware scoring, and network-aware eviction considerations. The proposed direction uses a mathematical imbalance index ($RII_i$) and MCDA/TOPSIS-based ranking to target specific Pods that contribute to stranded capacity, while adding runtime metrics and network-aware scoring or filtering so that consolidation decisions are both more representative and less likely to degrade communication latency.
-
-The research position can be summarized as follows:
-\begin{itemize}
-    \item It broadens resource balancing beyond simple utilization thresholds by considering multi-dimensional imbalance and stranded capacity.
-    \item It compares request-based and actual-usage-based imbalance signals, including EWMA smoothing for bursty workloads.
-    \item It uses individual, score-based eviction rather than atomic group migration to reduce the risk of deadlock and excessive fragmentation.
-    \item It incorporates network-aware considerations as a guardrail for consolidation decisions, connecting fragmentation reduction with communication-locality preservation.
-\end{itemize}
-
-%----------------------------------------------------------------------------- %%
 \section{Research Steps}
 \label{sec:langkahPenelitian}
-%----------------------------------------------------------------------------- %%
-
-The research is conducted through the following steps:
 
 \begin{enumerate}
-	\item \textbf{Literature review and problem formulation} \\
-	The first stage identifies literature on Kubernetes scheduling, resource fragmentation, multi-dimensional bin packing, Descheduler mechanisms, MCDA/TOPSIS, and communication-aware scheduling to formalize the research gap.
-	\item \textbf{Descheduling policy design} \\
-	Based on the literature review, the study designs a consolidation pipeline that identifies source Nodes, ranks candidate Pods for eviction, and incorporates network-aware considerations as an additional scoring or filtering component.
-	\item \textbf{Prototype implementation} \\
-	The proposed policy is implemented within the Kubernetes Descheduler framework so it can be evaluated on an experimental cluster without modifying the core kube-scheduler.
-	\item \textbf{Experiment and evaluation} \\
-	The prototype is tested using workload scenarios that create resource fragmentation and service communication patterns. The evaluation measures packing efficiency, node reclaimability, and selected latency-related indicators.
-	\item \textbf{Result analysis and conclusion} \\
-	The experiment results are analyzed to determine whether the proposed method improves consolidation while maintaining acceptable communication performance.
+    \item Review Kubernetes scheduling, fragmentation, node reclamation, Descheduler policies, and communication-aware placement.
+    \item Define Node-state metrics, drain-candidate rules, target prediction, victim selection, and safety constraints.
+    \item Implement the resource and network-aware plugins in the Kubernetes Descheduler framework.
+    \item Evaluate the resource policy on five controlled scenarios and compare it with \textit{HighNodeUtilization}.
+    \item Evaluate network-aware filtering using topology- and latency-sensitive workloads.
+    \item Analyze reclamation, stranding, headroom, eviction efficiency, convergence, safety, and latency outcomes.
 \end{enumerate}
 
-%----------------------------------------------------------------------------- %%
 \section{Thesis Outline}
 \label{sec:sistematikaPenulisan}
-%----------------------------------------------------------------------------- %%
-
-The writing structure of this thesis is organized as follows:
 
 \begin{enumerate}
-	\item \textbf{Chapter 1: Introduction} \\
-	This chapter presents the research background, problem formulation, research questions, limitations, objectives, contributions, research position, research steps, and thesis outline.
-	\item \textbf{Chapter 2: Literature Review} \\
-	This chapter discusses Kubernetes scheduling, resource fragmentation, bin packing, MCDA/TOPSIS, Kubernetes Descheduler, communication-aware scheduling, and the research gap addressed by this study.
-	\item \textbf{Chapter 3: Policies Design and Implementation} \\
-	This chapter explains the design of the proposed Descheduler plugin policies, including the Resource Defragmentation policy with RII and TOPSIS scoring, the actual-usage and EWMA extension, the Network-Aware Evictor policy, and how each policy is implemented within the Kubernetes Descheduler framework.
-	\item \textbf{Chapter 4: Experiment and Evaluation} \\
-	This chapter presents the experimental setup, workload scenarios, evaluation metrics, the synthetic walk-through validation, the live-cluster experiment matrix, the simulator-based evaluation, and the analysis of fragmentation and latency trade-offs.
-	\item \textbf{Chapter 5: Conclusion and Future Work} \\
-	This chapter summarizes the findings, limitations, and future research directions.
+    \item \textbf{Chapter 1} introduces the problem, questions, objectives, and contributions.
+    \item \textbf{Chapter 2} reviews Kubernetes resource management, fragmentation, node reclamation, Descheduler mechanisms, and network-aware placement.
+    \item \textbf{Chapter 3} presents the \textit{ResourceDefragmentation} pipeline and the Network-Aware Evictor design.
+    \item \textbf{Chapter 4} evaluates node reclamation, defragmentation, safety, convergence, and network-latency trade-offs.
+    \item \textbf{Chapter 5} summarizes the findings and future work.
 \end{enumerate}

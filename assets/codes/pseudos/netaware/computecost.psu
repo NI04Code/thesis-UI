@@ -1,10 +1,10 @@
 Function: ComputePlacementCost
-─────────────────────────────────────────────────────────
+---------------------------------------------------------
 Input:
     candidateNode // the node being evaluated as a placement target
     D             // set of dependency pods (from Algorithm 1)
-    nodesMap      // mapping from node name → node object
-    costProvider  // function Cost(nodeA, nodeB) → (*$\mathbb{R}^+$*)
+    nodesMap      // mapping from node name -> node object
+    costProvider  // function Cost(nodeA, nodeB) -> (*$\mathbb{R}^+$*)
 
 Output:
     totalCost // sum of pairwise communication costs

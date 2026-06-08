@@ -3,32 +3,31 @@
 \label{bab:5}
 %-----------------------------------------------------------------------------%
 
-This chapter summarizes the findings and proposes future research directions. Section 5.1 outlines the conclusion, reflecting on the success of both the resource defragmentation and network-aware policies. This chapter concludes with Section 5.2, which proposes future works to further enhance the descheduling architecture.
+This chapter summarizes the findings and identifies directions for extending the resource-defragmentation and network-aware architecture.
 
-%-----------------------------------------------------------------------------%
 \section{Conclusion}
 \label{sec:conclusion}
-%-----------------------------------------------------------------------------%
-In this study, we have successfully addressed the research problems formulated in Chapter 1 through the design, implementation, and evaluation of a multi-level descheduling architecture. The main conclusions drawn from the empirical results are as follows:
 
-\textbf{Transitioning a fragmented cluster to a consolidated state.} [TODO: Add conclusion for the multi-stage Resource Defragmentation pipeline design]
+This research designed and evaluated a multi-level Kubernetes Descheduler architecture for resource defragmentation and network-locality protection.
 
-\textbf{Prioritizing Pods using MCDA/TOPSIS.} [TODO: Add conclusion for TOPSIS-based ranking and stranded capacity reduction]
+\textbf{Defragmentation-focused Node assessment.} \textit{ResourceDefragmentation} combines average utilization and CPU-memory bin quality to identify drain candidates. RII and FSI then order those candidates according to dimensional skew and usable free-space pressure. This allows the policy to act on both lightly utilized Nodes and Nodes whose resource shape strands capacity.
 
-\textbf{Impact of actual runtime usage and EWMA smoothing.} [TODO: Add conclusion for actual usage vs. request-based scoring and EWMA smoothing]
+\textbf{Predicted-target victim selection.} The victim selector predicts feasible non-origin landing Nodes and chooses the Pod whose destination has the best projected CPU-memory bin score. The target ceiling and pack-upward condition prevent movements that overfill a Node or merely transfer a workload to an emptier location. The evaluation shows that this direct criterion is sufficient to produce effective packing and defragmentation.
 
-\textbf{Network-aware filtering mechanism and trade-off with fragmentation reduction.} In general, our evaluation demonstrates that network-aware filtering can be effectively integrated into the Kubernetes Descheduler via a dual-layer architecture. We developed a system combining a global pre-eviction filter (\textit{NetworkCostEvictor}) with strategy-level assessments, using real-time telemetry or topology labels to intercept latency-degrading evictions. Our analysis indicates that this architecture preserves communication efficiency without compromising resource-balancing objectives, provided non-network-sensitive pods are available to sacrifice. Specifically, our results show that the system capped latency at $\sim$1.2ms (load-balancing) and $\sim$6.1ms (multi-dimensional skews) while preventing all cross-region pod spills, avoiding the $\sim$82ms to $\sim$98ms latency penalties observed in upstream baselines. However, our evaluation of the \textit{HighNodeUtilization} scenario also revealed a critical systemic limitation: isolated descheduler intent can be subverted by the network-blind default Kubernetes scheduler, which frequently misrouted evicted pods to degraded nodes based on raw compute availability. This confirms that high-precision network locality requires explicit synchronization with the primary cluster scheduler. Ultimately, our findings prove that network protection and geometric resource balance can be achieved together when alternative eviction candidates exist; otherwise, administrators must strictly prioritize between full cluster defragmentation and network locality preservation.
+\textbf{Resource evaluation outcomes.} ResourceDefragmentation reclaimed four Nodes in S1, three Nodes in S2, and one Node in S4 where \textit{HighNodeUtilization} performed no eviction. It reduced stranding from \(3.727\) to \(0.971\) in S2 and from \(3.243\) to \(1.112\) in S4. In the heterogeneous-drain S5 scenario, ResourceDefragmentation reduced \(S\) from \(1.338\) to \(0.123\), reclaimed the source Node, and required only two evictions. Every scenario converged to a zero-eviction pass, and no run left a Pod Pending.
 
+\textbf{Network-aware filtering.} The Network-Aware Evictor demonstrates that resource movement can be screened using topology or measured latency before eviction. The dual-layer architecture blocks harmful movements of communication-sensitive Pods while still permitting alternative resource-improving candidates when available. The experiments also show the boundary of a Descheduler-only design: final network locality still depends on coordination with kube-scheduler.
 
-%-----------------------------------------------------------------------------%
+Overall, the results support a simple conclusion: selecting victims by the balance of their predicted landing Nodes is enough to drive useful Node reclamation and dimensional defragmentation when combined with request feasibility, bounded utilization, pack-upward behavior, and network-aware safety checks.
+
 \section{Future Works}
 \label{sec:future_works}
-%-----------------------------------------------------------------------------%
-Based on the architectural discoveries and constraints documented throughout this implementation, the following areas are proposed for future research:
 
 \begin{itemize}
-    \item \textbf{Coordinated Scheduling Framework:} Future research should focus on designing a unified extensible network-aware framework for the primary Kubernetes scheduler that can work together with the default descheduler.
-    \item \textbf{Adaptive Dynamic-Threshold Filtering Adjustments:} The \textit{NetworkCostEvictor} currently utilizes a static constraint threshold (\textit{minBetterCandidatesPercent}). Developing a feedback loop algorithm that dynamically tightens or loosens enforcement rules based on active cluster-wide resource scarcity or transient network jitter would maximize balancing freedom without risking SLA violations.
-    \item \textbf{Production Traffic Volume Weighting:} Integrating service mesh traffic volume data (e.g., from Istio or Linkerd) into the network cost calculations. Weighting point-to-point network latency coefficients by actual cross-service packet throughput (e.g., prioritizing Payment $\leftrightarrow$ Database over less active service pathways) would yield highly efficient, traffic-driven workload alignment.
-    \item \textbf{Broader Scenario Coverage for Resource Defragmentation:} The synthetic walk-through and the simulator-based scale-out cover a representative slice of fragmentation patterns (request-only, hidden actual-usage imbalance, transient spikes, and a Borg-derived heterogeneous cluster), but additional scenarios may exercise the policy differently. Future work should sweep more cluster shapes, mixes of CPU-heavy and memory-heavy Pod templates, and non-stationary workloads to surface cases the current evaluation may have missed and to test the Resource Defragmentation policy on configurations not represented here.
+    \item \textbf{Scheduler Coordination:} Expose the predicted target or a compatible scoring signal to kube-scheduler so final placement more reliably follows Descheduler intent.
+    \item \textbf{Adaptive Thresholds:} Tune the drain threshold and target ceiling from cluster pressure, workload volatility, and recent convergence behavior.
+    \item \textbf{Runtime Telemetry:} Evaluate whether stable runtime CPU and memory signals can complement request-based feasibility without making eviction decisions overly sensitive to short-lived spikes.
+    \item \textbf{Traffic-Volume Weighting:} Weight network costs using service-mesh traffic volumes so heavily used dependency paths receive stronger protection.
+    \item \textbf{Broader Resource Dimensions:} Extend target prediction and bin quality to storage, accelerators, and extended resources.
+    \item \textbf{Larger and Longer Experiments:} Evaluate more cluster shapes, workload mixes, failure conditions, autoscaler interactions, and long-running convergence behavior.
 \end{itemize}

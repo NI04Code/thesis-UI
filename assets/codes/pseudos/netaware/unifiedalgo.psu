@@ -1,5 +1,5 @@
 Function: NetworkAwareShouldAllowEviction
-─────────────────────────────────────────────────────────
+---------------------------------------------------------
 Input:
     N              // set of all cluster nodes
     config         //* descheduler policy configuration:
