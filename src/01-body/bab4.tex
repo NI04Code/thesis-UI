@@ -856,14 +856,15 @@ While all strategies achieved equivalent resource balancing, their impact on net
             scale only axis,
             xmin=0.5, xmax=4.5,
             xtick={1,2,3,4},
-            xticklabels={Initial, Baseline, Topology-Aware, Latency-Aware},
+            xticklabels={Initial, Baseline, {Topology\\Aware}, {Latency\\Aware}},
+            xticklabel style={align=center, yshift=-2pt},
             enlarge x limits=0.2,
         }
         
         % Left Y-Axis: CPU & MEM Standard Deviation (Grouped Bar Chart)
         \begin{axis}[
             axis y line*=left,
-            ymin=0, ymax=25,
+            ymin=0, ymax=30,
             ylabel={Standard Deviation After Eviction (\%)},
             ylabel near ticks,
             ybar=2pt,
@@ -1186,8 +1187,9 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             axis y line*=left,
             ymin=0, ymax=60,
             ylabel={Mean Absolute Imbalance (RII \%)},
-            ybar=2pt,
-            bar width=20pt,
+            ybar,
+            bar width=15pt,
+            bar shift=-8.5pt,
             legend pos=north west,
             nodes near coords,
             every node near coord/.append style={yshift=5pt, font=\small},
@@ -1200,7 +1202,7 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             };
             \addlegendentry{Mean RII \%}
         \end{axis}
-        % Right Y-Axis: Average Latency (Line Chart)
+        % Right Y-Axis: Average Latency (Bar Chart)
         \begin{axis}[
             axis y line*=right,
             axis x line=none,
@@ -1208,11 +1210,14 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             ylabel={Average Latency (ms)},
             ylabel near ticks,
             yticklabel pos=right,
+            ybar,
+            bar width=15pt,
+            bar shift=8.5pt,
+            nodes near coords,
+            every node near coord/.append style={yshift=5pt, font=\small},
             legend pos=north east,
-            mark=*,
-            mark options={scale=1.5}
         ]
-            \addplot[color=red, thick, mark=*] coordinates {
+            \addplot[fill=red!60, draw=black] coordinates {
                 (1, 8.0)
                 (2, 167.2)
                 (3, 165.7)
