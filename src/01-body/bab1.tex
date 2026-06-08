@@ -7,7 +7,7 @@ This chapter provides the main background and challenges that drive this thesis.
 \section{Research Background}
 \label{sec:researchBackground}
 
-Kubernetes schedules Pods by filtering feasible Nodes and scoring the remaining alternatives. This process is effective for initial placement, but running Pods normally remain bound to their Nodes until they terminate or are recreated. As workloads scale and change, free CPU and memory can become scattered into incompatible shapes. Aggregate capacity may be sufficient while no individual Node can accommodate a new Pod, a condition commonly described as resource fragmentation or the ``Tetris problem''~\citep{mishra_bellur_2016,grandl_tetris_2014}.
+Kubernetes schedules Pods by filtering feasible Nodes and scoring the remaining alternatives. This process is effective for initial placement, but running Pods normally remain bound to their Nodes until they terminate or are recreated. As workloads scale and change, free CPU and memory can become scattered into incompatible shapes. Aggregate capacity may be sufficient while no individual Node can accommodate a new Pod, a condition commonly described as resource fragmentation.
 
 Fragmentation affects schedulability, utilization, and infrastructure cost. A Node may retain CPU without enough memory, while another retains memory without enough CPU. These asymmetric residuals strand capacity because the two dimensions cannot be allocated independently~\citep{xiao2013dynamic,guo2025joint}. Directed Pod eviction can repair such placement states and reduce the number of Nodes required by the same workload~\citep{larsson_klein_elmroth_2023}.
 
@@ -79,7 +79,7 @@ The study addresses the following problems:
 \section{Research Position}
 \label{sec:researchPosition}
 
-Existing Kubernetes bin-packing strategies such as \texttt{MostAllocated} and \texttt{RequestedToCapacityRatio} improve initial placement but do not move running Pods~\citep{k8s_resource_bin_packing}. Upstream Descheduler utilization policies can pack workloads using thresholds, but a scalar utilization threshold does not directly represent CPU-memory shape. Research on directed eviction and multi-resource scheduling establishes that placement repair and dimensional balance can improve effective capacity~\citep{larsson_klein_elmroth_2023,grandl_tetris_2014,guo2025joint}.
+Existing Kubernetes bin-packing strategies such as \texttt{MostAllocated} and \texttt{RequestedToCapacityRatio} improve initial placement but do not move running Pods~\citep{k8s_resource_bin_packing}. Upstream Descheduler utilization policies can pack workloads using thresholds, but a scalar utilization threshold does not directly represent CPU-memory shape. Research on directed eviction and multi-resource allocation establishes that placement repair and dimensional balance can improve effective capacity~\citep{larsson_klein_elmroth_2023,guo2025joint}.
 
 This study positions \textit{ResourceDefragmentation} between threshold-only draining and a full scheduler replacement. The policy uses the Descheduler to choose limited, purposeful evictions while preserving kube-scheduler ownership of placement. Its defining choice is a single predicted-target criterion: among feasible Pods on a drain Node, prefer the Pod whose predicted destination has the strongest projected CPU-memory bin score. The accompanying network-aware layer treats communication cost as an eviction guardrail.
 

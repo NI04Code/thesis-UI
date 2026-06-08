@@ -15,7 +15,7 @@ These decisions are made when a Pod is scheduled. A running Pod is not continuou
 \section{Resource Fragmentation and Stranded Capacity}
 \label{sec:resourceFragmentation}
 
-Resource fragmentation occurs when free capacity is divided among Nodes in shapes that do not match incoming workloads. A cluster can have enough aggregate CPU and memory while no individual Node satisfies both dimensions of a Pod request~\citep{mishra_bellur_2016}. Multi-dimensional schedulers therefore treat workloads as differently shaped items rather than scalar loads~\citep{grandl_tetris_2014}.
+Resource fragmentation occurs when free capacity is divided among Nodes in shapes that do not match incoming workloads. A cluster can have enough aggregate CPU and memory while no individual Node satisfies both dimensions of a Pod request. This makes CPU and memory placement a multi-dimensional problem rather than a scalar load-balancing problem.
 
 CPU-memory skew is one source of stranded capacity. If one Node is CPU-heavy and another is memory-heavy, each leaves a different residual resource that cannot be consumed alone. The absolute difference between normalized CPU and memory fractions provides a direct shape indicator, while the product of free CPU and memory fractions represents the jointly usable free-space region. Prior work shows that directed eviction can repair fragmented Kubernetes layouts and support Node reclamation~\citep{larsson_klein_elmroth_2023}.
 
