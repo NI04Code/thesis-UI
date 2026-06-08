@@ -52,12 +52,11 @@ The study addresses the following problems:
 \label{sec:researchObjectives}
 
 \begin{itemize}
-    \item Design a defragmentation-focused Descheduler policy that combines utilization and resource-shape assessment.
-    \item Quantify dimensional skew and free-space pressure using RII, FSI, and a CPU-memory bin score.
+    \item Design a defragmentation-focused Descheduler policy that combines utilization and resource-shape assessment by quantifying dimensional skew and free-space pressure using RII, FSI, and a CPU-memory bin score.
     \item Predict feasible landing Nodes before eviction and select eviction candidates using projected target balance.
     \item Enforce an eviction budget, target-utilization ceiling, and pack-upward constraint to reduce unsafe or unproductive movement.
     \item Evaluate node reclamation, stranding reduction, balanced headroom, eviction efficiency, convergence, and safety.
-    \item Integrate network-aware filtering that protects communication locality during workload movement.
+    \item Integrate network-aware filtering that protects communication locality during workload eviction.
 \end{itemize}
 
 \section{Research Contributions}
