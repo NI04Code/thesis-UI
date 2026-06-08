@@ -69,15 +69,26 @@ To maintain focus and define the scope of this study, the research limitations a
     \item \textbf{A predicted-target eviction-candidate selector:} Candidate Pods are compared using the projected bin score of their predicted landing Nodes.
     \item \textbf{Scheduler-target prediction and safety constraints:} Evictions require request feasibility, a target-utilization ceiling, and a target at least as packed as the source.
     \item \textbf{A scenario-based evaluation:} Five node reclamation and fragmentation scenarios quantify reclamation, stranding, headroom, efficiency, convergence, and safety.
-    \item Implement and evaluate topology or latency-based network costs PreEviction Filter to guard network dependent services from harmful movement.
+    \item Implement and evaluate topology or latency-based network costs PreEviction Filter to guard network dependent services from harmful movement and it trade-off with cluster fragmentation reduction..
 \end{itemize}
 
 \section{Research Position}
 \label{sec:researchPosition}
 
-Existing Kubernetes bin-packing strategies such as \textit{MostAllocated} and \textit{RequestedToCapacityRatio} improve initial placement but do not move running Pods~\citep{k8s_resource_bin_packing}. Upstream Descheduler utilization policies can pack workloads using thresholds, but a scalar utilization threshold does not directly represent CPU-memory shape. Research on directed eviction and multi-resource allocation establishes that placement repair and dimensional balance can improve effective capacity~\citep{larsson_klein_elmroth_2023,guo2025joint}.
+Prior studies have addressed several parts of the problem targeted by this research. Early work on dynamic resource allocation, such as \citet{xiao2013dynamic}, shows that multi-dimensional resource skewness can reduce effective server utilization. However, these approaches were primarily designed for traditional virtual-machine environments and often rely on static threshold-based heuristics. More recent work has studied container resource defragmentation and task scheduling using optimization or learning-based methods~\citep{guo2025joint,bagaa2024multiobjective}, but these studies are commonly oriented toward placement or scheduling decisions rather than long-term post-placement correction in Kubernetes clusters.
 
-This study positions \textit{ResourceDefragmentation} between threshold-only draining and a full scheduler replacement. The policy uses the Descheduler to choose limited, purposeful evictions while preserving kube-scheduler ownership of placement. Its defining choice is a single predicted-target criterion: among feasible Pods on a drain Node, prefer the Pod whose predicted destination has the strongest projected CPU-memory bin score. The accompanying network-aware layer treats communication cost as an eviction guardrail.
+Kubernetes-specific research has also shown that resource fragmentation can emerge over time and that directed Pod eviction can improve utilization~\citep{mishra_bellur_2016,larsson_klein_elmroth_2023}. Nevertheless, fragmentation-aware consolidation by itself is not sufficient for microservice workloads because improving packing can accidentally worsen communication locality. Network-aware placement studies show that service communication patterns and network conditions can affect placement quality~\citep{marchese2022network,marchese_tomarchio_2022,chen2024trade}, but these works do not fully address how such considerations should be integrated into a Descheduler-based consolidation policy.
+
+Another related direction is group or gang-style movement, where dependent services are moved together to preserve affinity. While this approach can protect communication locality, it may increase the risk of resource deadlock or failed movement because the scheduler must find enough capacity for a larger combined group. For a fragmentation-oriented Descheduler policy, this can worsen the packing problem instead of solving it. Therefore, this research positions itself away from strictly atomic group migration and instead adopts a non-atomic, individual scoring paradigm.
+
+This study addresses the gap by developing a Descheduler-based framework that combines multi-dimensional resource imbalance analysis and network-aware eviction considerations. The proposed direction uses a mathematical imbalance index ($RII_i$) and a resource defragmentation algorithm to target specific Pods that contribute to stranded capacity, while adding network-aware filtering so that consolidation decisions are less likely to degrade communication latency.
+
+The research position can be summarized as follows:
+\begin{itemize}
+    \item It broadens resource balancing beyond simple utilization thresholds by considering multi-dimensional imbalance and stranded capacity.
+    \item It uses individual, score-based eviction rather than atomic group migration when evaluating network sensitive pods to reduce the risk of deadlock and excessive fragmentation.
+    \item It incorporates network-aware considerations as a guardrail for consolidation decisions, connecting fragmentation reduction with network-locality preservation.
+\end{itemize}
 
 \section{Research Steps}
 \label{sec:langkahPenelitian}
