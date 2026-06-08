@@ -24,7 +24,7 @@ The study addresses the following problems:
 
 \begin{enumerate}
     \item \textbf{Resource fragmentation:} CPU and memory may remain available in aggregate but become scattered across Nodes in incompatible shapes. CPU-heavy and memory-heavy placements can strand one resource dimension behind another, while scheduler bin-packing scores only act during initial placement and do not repair fragmentation that has accumulated in an already running cluster.
-    \item \textbf{Network-locality risk:} Eviction decisions that focus only on cluster rebalance can separate network dependent services and increase communication overhead, especially in multi-node or multi-zone deployments~\citep{marchese2022network,chen2024trade}.
+    \item \textbf{Network-locality risk:} Eviction decisions that focus only on cluster rebalance can separate network dependent services and increase communication overhead, especially in multi-node or multi-zone deployments.
 \end{enumerate}
 
 \subsection{Research Question}
@@ -39,13 +39,15 @@ The study addresses the following problems:
 \subsection{Research Limitation}
 \label{sec:researchLimitation}
 
+To maintain focus and define the scope of this study, the research limitations are established as follows:
+
 \begin{itemize}
-    \item Evaluation uses a controlled multi-node Kubernetes deployment and synthetic workloads with declared CPU and memory requests.
-    \item Resource-policy experiments use request-based accounting because kube-scheduler feasibility is request-based.
-    \item Final placement remains the responsibility of the configured kube-scheduler; the Descheduler predicts but does not bind Pods.
-    \item Movement uses standard Kubernetes eviction and controller recreation rather than live migration.
-    \item The resource model focuses on CPU and memory; storage, accelerators, and additional extended resources are outside the main evaluation.
-    \item Network awareness is implemented as eviction filtering, not as a complete routing or traffic-engineering system.
+    \item \textbf{Infrastructure:} Evaluation is conducted on a small-scale Kubernetes cluster using AWS EC2 nodes, with additional logical topology separation to emulate multi-region network conditions.
+    \item \textbf{Simulator:} Extended evaluation for large-scale cluster topologies is conducted using a custom Kubernetes cluster simulator.
+    \item \textbf{Network:} Experiments assume standard AWS networking without specialized hardware acceleration such as SR-IOV.
+    \item \textbf{Provisioning:} The cluster is provisioned using kubeadm to approximate production behavior, but excludes enterprise-grade storage features and complex service meshes unless specifically required for the evaluation scenario.
+    \item \textbf{Framework dependencies:} The solution is implemented within the Kubernetes Descheduler framework; it determines which Pods should be evicted, while final placement remains the responsibility of the kube-scheduler.
+    \item \textbf{Scope of network awareness:} Network-aware logic is treated as an eviction scoring or filtering consideration, not as a complete traffic-engineering or routing solution.
 \end{itemize}
 
 \section{Research Objectives}
