@@ -12,13 +12,13 @@ This research designed and evaluated a multi-level Kubernetes Descheduler archit
 
 \textbf{Defragmentation-focused Node assessment.} \textit{ResourceDefragmentation} combines average utilization and CPU-memory bin quality to identify drain candidates. RII and FSI then order those candidates according to dimensional skew and usable free-space pressure. This allows the policy to act on both lightly utilized Nodes and Nodes whose resource shape strands capacity.
 
-\textbf{Predicted-target victim selection.} The victim selector predicts feasible non-origin landing Nodes and chooses the Pod whose destination has the best projected CPU-memory bin score. The target ceiling and pack-upward condition prevent movements that overfill a Node or merely transfer a workload to an emptier location. The evaluation shows that this direct criterion is sufficient to produce effective packing and defragmentation.
+\textbf{Predicted-target eviction-candidate selection.} The eviction-candidate selector predicts feasible non-origin landing Nodes and chooses the Pod whose destination has the best projected CPU-memory bin score. The target ceiling and pack-upward condition prevent movements that overfill a Node or merely transfer a workload to an emptier location. The evaluation shows that this direct criterion is sufficient to produce effective packing and defragmentation.
 
 \textbf{Resource evaluation outcomes.} ResourceDefragmentation reclaimed four Nodes in S1, three Nodes in S2, and one Node in S4 where \textit{HighNodeUtilization} performed no eviction. It reduced stranding from \(3.727\) to \(0.971\) in S2 and from \(3.243\) to \(1.112\) in S4. In the heterogeneous-drain S5 scenario, ResourceDefragmentation reduced \(S\) from \(1.338\) to \(0.123\), reclaimed the source Node, and required only two evictions. Every scenario converged to a zero-eviction pass, and no run left a Pod Pending.
 
 \textbf{Network-aware filtering.} The Network-Aware Evictor demonstrates that resource movement can be screened using topology or measured latency before eviction. The dual-layer architecture blocks harmful movements of communication-sensitive Pods while still permitting alternative resource-improving candidates when available. The experiments also show the boundary of a Descheduler-only design: final network locality still depends on coordination with kube-scheduler.
 
-Overall, the results support a simple conclusion: selecting victims by the balance of their predicted landing Nodes is enough to drive useful Node reclamation and dimensional defragmentation when combined with request feasibility, bounded utilization, pack-upward behavior, and network-aware safety checks.
+Overall, the results support a simple conclusion: selecting eviction candidates by the balance of their predicted landing Nodes is enough to drive useful Node reclamation and dimensional defragmentation when combined with request feasibility, bounded utilization, pack-upward behavior, and network-aware safety checks.
 
 \section{Future Works}
 \label{sec:future_works}

@@ -19,7 +19,7 @@ The two systems under comparison are:
 
 \begin{itemize}
     \item \textbf{HighNodeUtilization (HNU):} the upstream utilization-based baseline with CPU and memory thresholds of \(40\%\).
-    \item \textbf{ResourceDefragmentation (RD):} the proposed policy using request-based Node state, predicted feasible targets, and projected target bin score as its victim criterion.
+    \item \textbf{ResourceDefragmentation (RD):} the proposed policy using request-based Node state, predicted feasible targets, and projected target bin score as its eviction-candidate criterion.
 \end{itemize}
 
 \subsection{Scenarios}
@@ -43,7 +43,7 @@ The two systems under comparison are:
     \end{tabular}
 \end{table}
 
-S1 primarily tests Node reclamation. S2 and S4 test whether dimensional fragmentation can be reduced when a scalar utilization baseline has no suitable action. S3 combines node reclamation and shape preservation. S5 isolates shape-aware victim selection during a heterogeneous drain.
+S1 primarily tests Node reclamation. S2 and S4 test whether dimensional fragmentation can be reduced when a scalar utilization baseline has no suitable action. S3 combines node reclamation and shape preservation. S5 isolates shape-aware eviction-candidate selection during a heterogeneous drain.
 
 \subsection{Evaluation Metrics}
 \label{sec:defrag_metrics}

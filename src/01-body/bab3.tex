@@ -102,17 +102,17 @@ The final condition is the pack-upward guard:
 
 It prevents an eviction from merely moving a Pod to an emptier Node. Among feasible Nodes, the predicted target is the Node with the highest projected bin score after receiving \(p\).
 
-\subsection{Predicted-Target Victim Selection}
+\subsection{Predicted-Target Eviction-Candidate Selection}
 \label{sec:defrag_victim_selection}
 
-For candidate Pod \(p\), let \(t_p\) be its predicted target and \(B'_{t_p}\) the target bin score after placement. The victim is:
+For candidate Pod \(p\), let \(t_p\) be its predicted target and \(B'_{t_p}\) the target bin score after placement. The selected eviction candidate is:
 
 \begin{equation}
     p^\star = \arg\max_{p} B'_{t_p}.
     \label{eq:defrag_selector}
 \end{equation}
 
-This is the only victim-selection criterion. It directly prefers a movement that combines complementary CPU-memory shapes at the expected destination. Candidates without a feasible target are excluded. After a successful eviction, the local source and predicted-target snapshots are updated before the next decision. Predicted targets are marked as bins so the same pass does not subsequently drain a Node that has just received packed workload.
+This is the only eviction-candidate selection criterion. It directly prefers a movement that combines complementary CPU-memory shapes at the expected destination. Candidates without a feasible target are excluded. After a successful eviction, the local source and predicted-target snapshots are updated before the next decision. Predicted targets are marked as bins so the same pass does not subsequently drain a Node that has just received packed workload.
 
 \begin{figure}[H]
     \centering
@@ -135,7 +135,7 @@ This is the only victim-selection criterion. It directly prefers a movement that
         \draw[line] (select) -- (evict);
     \end{tikzpicture}%
     }
-    \caption{ResourceDefragmentation assessment and victim-selection pipeline.}
+    \caption{ResourceDefragmentation assessment and eviction-candidate selection pipeline.}
     \label{fig:defrag_flow}
 \end{figure}
 

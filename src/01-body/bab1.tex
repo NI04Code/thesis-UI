@@ -2,7 +2,7 @@
 \chapter{\babSatu}
 \label{bab:1}
 %----------------------------------------------------------------------------- %%
-This chapter introduces the resource-fragmentation and network-locality problems addressed by this thesis. It defines the research questions, scope, objectives, contributions, research position, and research steps.
+This chapter provides the main background and challenges that drive this thesis. Section 1.1 outlines the research background, highlighting the motivation behind addressing resource fragmentation and network locality in Kubernetes clusters. Section 1.2 defines the problem statement, specifying the main research questions and limitations. Section 1.3 enumerates the objectives of the thesis, while Section 1.4 describes the anticipated research contributions. Section 1.5 positions this work within relevant academic domains. Section 1.6 summarizes the principal steps taken during the research. This chapter concludes with Section 1.7, which presents the thesis outline.
 
 \section{Research Background}
 \label{sec:researchBackground}
@@ -35,7 +35,7 @@ The study addresses the following problems:
 
 \begin{itemize}
     \item How can a Descheduler policy identify Nodes whose low utilization or poor CPU-memory shape makes them suitable drain candidates?
-    \item How can predicted scheduler targets and a single target-bin-score criterion select effective and safe eviction victims?
+    \item How can predicted scheduler targets and a single target-bin-score criterion select effective and safe eviction candidates?
     \item How effectively does the proposed policy reclaim Nodes, reduce stranded capacity, preserve balanced headroom, and converge compared with \textit{HighNodeUtilization}?
     \item How can network-aware filtering reduce latency risk without preventing useful resource improvement?
 \end{itemize}
@@ -58,7 +58,7 @@ The study addresses the following problems:
 \begin{itemize}
     \item Design a defragmentation-focused Descheduler policy that combines utilization and resource-shape assessment.
     \item Quantify dimensional skew and free-space pressure using RII, FSI, and a CPU-memory bin score.
-    \item Predict feasible landing Nodes before eviction and select victims using projected target balance.
+    \item Predict feasible landing Nodes before eviction and select eviction candidates using projected target balance.
     \item Enforce an eviction budget, target-utilization ceiling, and pack-upward constraint to reduce unsafe or unproductive movement.
     \item Evaluate node reclamation, stranding reduction, balanced headroom, eviction efficiency, convergence, and safety.
     \item Integrate network-aware filtering that protects communication locality during workload movement.
@@ -70,7 +70,7 @@ The study addresses the following problems:
 \begin{itemize}
     \item \textbf{A defragmentation-focused Descheduler policy:} \textit{ResourceDefragmentation} repairs post-placement scatter without replacing the kube-scheduler.
     \item \textbf{RII- and stranding-aware Node assessment:} Drain candidates are identified from average utilization and CPU-memory bin quality, then prioritized using RII and FSI.
-    \item \textbf{A predicted-target victim selector:} Candidate Pods are compared using the projected bin score of their predicted landing Nodes.
+    \item \textbf{A predicted-target eviction-candidate selector:} Candidate Pods are compared using the projected bin score of their predicted landing Nodes.
     \item \textbf{Scheduler-target prediction and safety constraints:} Evictions require request feasibility, a target-utilization ceiling, and a target at least as packed as the source.
     \item \textbf{Network-aware eviction filtering:} Topology- or latency-based costs protect dependent services from harmful movement.
     \item \textbf{A scenario-based evaluation:} Five node reclamation and fragmentation scenarios quantify reclamation, stranding, headroom, efficiency, convergence, and safety.
@@ -88,7 +88,7 @@ This study positions \textit{ResourceDefragmentation} between threshold-only dra
 
 \begin{enumerate}
     \item Review Kubernetes scheduling, fragmentation, node reclamation, Descheduler policies, and communication-aware placement.
-    \item Define Node-state metrics, drain-candidate rules, target prediction, victim selection, and safety constraints.
+    \item Define Node-state metrics, drain-candidate rules, target prediction, eviction-candidate selection, and safety constraints.
     \item Implement the resource and network-aware plugins in the Kubernetes Descheduler framework.
     \item Evaluate the resource policy on five controlled scenarios and compare it with \textit{HighNodeUtilization}.
     \item Evaluate network-aware filtering using topology- and latency-sensitive workloads.

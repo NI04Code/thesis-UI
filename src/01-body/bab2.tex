@@ -35,10 +35,10 @@ An eviction policy must nevertheless account for the scheduler boundary. Deletin
 
 Upstream utilization policies provide important baselines. \textit{HighNodeUtilization} packs by draining low-utilization Nodes toward more utilized Nodes, but it does not explicitly optimize CPU-memory stranding. This distinction is central to the evaluation in Chapter~\ref{bab:4}.
 
-\section{Predicted-Target Victim Selection}
+\section{Predicted-Target Eviction-Candidate Selection}
 \label{sec:predictedTargetSelection}
 
-Victim selection can be formulated around the expected landing state. For every evictable Pod on a drain candidate, the policy simulates request-based placement on non-origin Nodes that satisfy scheduler constraints. Feasible targets must have sufficient CPU and memory, remain below a node reclamation ceiling after placement, and be at least as packed as the source.
+Eviction-candidate selection can be formulated around the expected landing state. For every evictable Pod on a drain candidate, the policy simulates request-based placement on non-origin Nodes that satisfy scheduler constraints. Feasible targets must have sufficient CPU and memory, remain below a node reclamation ceiling after placement, and be at least as packed as the source.
 
 The target with the best projected CPU-memory bin score is retained for each Pod. The Pod whose predicted target has the highest score is selected for eviction. This single criterion aligns the action directly with the desired destination state: the selected movement should place complementary resource shapes together while preserving node reclamation pressure.
 
