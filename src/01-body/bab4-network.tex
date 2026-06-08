@@ -584,10 +584,10 @@ During testing, we also discovered that the global Pre-Eviction filter (L1) is h
         \toprule
         \textbf{Configuration} & \textbf{Degraded Pods} & \textbf{Avg Latency (ms)} \\
         \midrule
-        L1 Pre-Eviction (MinBetter = 50\%) & 1 & 63.696 \\
-        L1 Pre-Eviction (MinBetter = 75\%) & 0 & 4.195 \\
+        L1 Pre-Eviction (MinBetter = 50\%) & 1 & 63.696 ms \\
+        L1 Pre-Eviction (MinBetter = 75\%) & 0 & 4.195 ms\\
         \midrule
-        L2 Strategy Filter (No Tuning Req.) & 0 & 3.017 \\
+        L2 Strategy Filter (No Tuning Req.) & 0 & 3.017 ms\\
         \bottomrule
     \end{tabular}%
     }
@@ -615,9 +615,9 @@ Table \ref{tab:hard_tradeoff_results} presents the evaluation results when no fi
         \midrule
         Initial State & - & 23.6 & 21.2 & $\sim$4.0 ms & 0 \\
         \midrule
-        a1: Baseline & 6 & 13.1 & 13.9 & 69.073 & 2 \\
-        a4: Topology L1+L2 & 6 & 13.1 & 13.9 & 61.249 & 2 \\
-        a7: Latency L1+L2 & 0 & 23.6 & 21.2 & 5.102 & 0 \\
+        a1: Baseline & 6 & 13.1 & 13.9 & 69.073 ms & 2 \\
+        a4: Topology L1+L2 & 6 & 13.1 & 13.9 & 61.249 ms & 2 \\
+        a7: Latency L1+L2 & 0 & 23.6 & 21.2 & 5.102 ms & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -830,7 +830,7 @@ Because this algorithm optimizes for the geometric "shape" of resource utilizati
 Prior to the descheduler execution, the cluster was forced into a highly fragmented state (Mean Absolute RII: \textbf{50.7\%}), with nodes exhibiting massive orthogonal skews (e.g., 90\% CPU vs 51\% Mem, and 10\% CPU vs 82\% Mem).
 
 Table \ref{tab:resourcedefrag_results} presents the raw performance of the descheduler across the three filtering strategies.
-\begin{table}[htbp]
+\begin{table}[H]
     \centering
     \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c c r c}
@@ -861,7 +861,7 @@ Because the Kube-Descheduler framework operates iteratively, blocking the \texti
 \label{subsubsec:netaware4_resultanalysis3_tradeoff}
 
 Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of the three filtering strategies, highlighting our Latency-Aware plugin's ability to decouple cluster resource balancing from network performance degradation.
-\begin{figure}[htbp]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \pgfplotsset{
