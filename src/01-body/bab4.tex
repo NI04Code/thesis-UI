@@ -822,17 +822,17 @@ Table \ref{tab:low_node_results} presents the raw performances of the evaluation
     \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c c c c r c}
         \toprule
-        \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} & \textbf{Active Nodes} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
+        \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
         \midrule
         Initial State & - & 23.6 & 23.5 & $\sim$4.0-20.0 ms & 0 \\
         \midrule
-        a1: Baseline & 6 & 15.7 & 13.9 & 5 & 61.717 ms & 1 \\
-        a2: Topology L1 & 6 & 15.7 & 13.9 & 5 & 61.271 ms & 1 \\
-        a3: Topology L2 & 6 & 15.7 & 13.9 & 5 & 59.477 ms & 1 \\
-        a4: Topology L1+L2 & 6 & 15.7 & 13.9 & 5 & 67.305 ms & 1 \\
-        a5: Latency L1 & 6 & 15.4 & 14.3 & 5 & 4.195 ms & 0 \\
-        a6: Latency L2 & 6 & 15.4 & 14.3 & 5 & 3.017 ms & 0 \\
-        a7: Latency L1+L2 & 6 & 15.4 & 14.3 & 5 & 2.649 ms & 0 \\
+        a1: Baseline & 6 & 15.7 & 13.9 & 61.717 ms & 1 \\
+        a2: Topology L1 & 6 & 15.7 & 13.9 & 61.271 ms & 1 \\
+        a3: Topology L2 & 6 & 15.7 & 13.9 & 59.477 ms & 1 \\
+        a4: Topology L1+L2 & 6 & 15.7 & 13.9 & 67.305 ms & 1 \\
+        a5: Latency L1 & 6 & 15.4 & 14.3 & 4.195 ms & 0 \\
+        a6: Latency L2 & 6 & 15.4 & 14.3 & 3.017 ms & 0 \\
+        a7: Latency L1+L2 & 6 & 15.4 & 14.3 & 2.649 ms & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -1167,7 +1167,7 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
     \begin{tikzpicture}
         \pgfplotsset{
             width=12cm,
-            height=9.5cm,
+            height=10cm,
             scale only axis,
             xmin=0.5, xmax=4.5,
             xtick={1,2,3,4},
@@ -1200,6 +1200,8 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             axis x line=none,
             ymin=0, ymax=200,
             ylabel={Average Latency (ms)},
+            ylabel near ticks,
+            yticklabel pos=right,
             legend pos=north east,
             mark=*,
             mark options={scale=1.5}
