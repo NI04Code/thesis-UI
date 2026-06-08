@@ -55,10 +55,9 @@ To maintain focus and define the scope of this study, the research limitations a
 
 \begin{itemize}
     \item Design a defragmentation-focused Descheduler policy that combines utilization and resource-shape assessment by quantifying dimensional skew and free-space pressure using RII, FSI, and a CPU-memory bin score.
-    \item Predict feasible landing Nodes before eviction and select eviction candidates using projected target balance.
-    \item Enforce an eviction budget, target-utilization ceiling, and pack-upward constraint to reduce unsafe or unproductive movement.
-    \item Evaluate node reclamation, stranding reduction, balanced headroom, eviction efficiency, convergence, and safety.
-    \item Integrate network-aware filtering that protects communication locality during workload eviction.
+    \item Evaluate the policy's effectiveness in freeing up underutilized infrastructure, reducing wasted resources, and increasing usable capacity, while ensuring minimal disruption and cluster stability.
+    \item Design and integrate network-aware filtering that protects network locality of a pod during workload eviction.
+    \item Evaluate the network-aware filtering's effect and it trade-off with cluster fragmentation reduction.
 \end{itemize}
 
 \section{Research Contributions}
@@ -66,17 +65,17 @@ To maintain focus and define the scope of this study, the research limitations a
 
 \begin{itemize}
     \item \textbf{A defragmentation-focused Descheduler policy:} \textit{ResourceDefragmentation} repairs post-placement scatter without replacing the kube-scheduler.
-    \item \textbf{RII- and FSI-aware Node assessment:} Drain candidates are identified from average utilization and CPU-memory bin quality, then prioritized using dimensional skew and usable free-space pressure.
+    \item \textbf{RII and FSI-aware Node assessment:} Drain candidates are identified from average utilization and CPU-memory bin quality, then prioritized using dimensional skew and usable free-space pressure.
     \item \textbf{A predicted-target eviction-candidate selector:} Candidate Pods are compared using the projected bin score of their predicted landing Nodes.
     \item \textbf{Scheduler-target prediction and safety constraints:} Evictions require request feasibility, a target-utilization ceiling, and a target at least as packed as the source.
-    \item \textbf{Network-aware eviction filtering:} Topology- or latency-based costs protect dependent services from harmful movement.
     \item \textbf{A scenario-based evaluation:} Five node reclamation and fragmentation scenarios quantify reclamation, stranding, headroom, efficiency, convergence, and safety.
+    \item Implement and evaluate topology or latency-based network costs PreEviction Filter to guard network dependent services from harmful movement.
 \end{itemize}
 
 \section{Research Position}
 \label{sec:researchPosition}
 
-Existing Kubernetes bin-packing strategies such as \texttt{MostAllocated} and \texttt{RequestedToCapacityRatio} improve initial placement but do not move running Pods~\citep{k8s_resource_bin_packing}. Upstream Descheduler utilization policies can pack workloads using thresholds, but a scalar utilization threshold does not directly represent CPU-memory shape. Research on directed eviction and multi-resource allocation establishes that placement repair and dimensional balance can improve effective capacity~\citep{larsson_klein_elmroth_2023,guo2025joint}.
+Existing Kubernetes bin-packing strategies such as \textit{MostAllocated} and \textit{RequestedToCapacityRatio} improve initial placement but do not move running Pods~\citep{k8s_resource_bin_packing}. Upstream Descheduler utilization policies can pack workloads using thresholds, but a scalar utilization threshold does not directly represent CPU-memory shape. Research on directed eviction and multi-resource allocation establishes that placement repair and dimensional balance can improve effective capacity~\citep{larsson_klein_elmroth_2023,guo2025joint}.
 
 This study positions \textit{ResourceDefragmentation} between threshold-only draining and a full scheduler replacement. The policy uses the Descheduler to choose limited, purposeful evictions while preserving kube-scheduler ownership of placement. Its defining choice is a single predicted-target criterion: among feasible Pods on a drain Node, prefer the Pod whose predicted destination has the strongest projected CPU-memory bin score. The accompanying network-aware layer treats communication cost as an eviction guardrail.
 
@@ -84,11 +83,10 @@ This study positions \textit{ResourceDefragmentation} between threshold-only dra
 \label{sec:langkahPenelitian}
 
 \begin{enumerate}
-    \item Review Kubernetes scheduling, fragmentation, node reclamation, Descheduler policies, and communication-aware placement.
-    \item Define Node-state metrics, drain-candidate rules, target prediction, eviction-candidate selection, and safety constraints.
-    \item Implement the resource and network-aware plugins in the Kubernetes Descheduler framework.
+    \item Review current Kubernetes scheduling, fragmentation, node reclamation, Descheduler policies, and communication-aware placement.
+    \item Design Implement the resource defragmentation and network-aware plugins in the Kubernetes Descheduler framework.
     \item Evaluate the resource policy on five controlled scenarios and compare it with \textit{HighNodeUtilization}.
-    \item Evaluate network-aware filtering using topology- and latency-sensitive workloads.
+    \item Evaluate network-aware filtering using topology and latency-sensitive workloads.
     \item Analyze reclamation, stranding, headroom, eviction efficiency, convergence, safety, and latency outcomes.
 \end{enumerate}
 
