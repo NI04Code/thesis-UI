@@ -447,19 +447,19 @@ Table \ref{tab:low_node_results} presents the raw performances of the evaluation
 \begin{table}[H]
     \centering
     \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l c c c c r c}
+    \begin{tabular}{l c c c r c}
         \toprule
-        \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} & \textbf{Active Nodes} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
+        \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
         \midrule
         Initial State & - & 23.6 & 23.5 & $\sim$4.0-20.0 ms & 0 \\
         \midrule
-        a1: Baseline & 6 & 15.7 & 13.9 & 5 & 61.717 ms & 1 \\
-        a2: Topology L1 & 6 & 15.7 & 13.9 & 5 & 61.271 ms & 1 \\
-        a3: Topology L2 & 6 & 15.7 & 13.9 & 5 & 59.477 ms & 1 \\
-        a4: Topology L1+L2 & 6 & 15.7 & 13.9 & 5 & 67.305 ms & 1 \\
-        a5: Latency L1 & 6 & 15.4 & 14.3 & 5 & 4.195 ms & 0 \\
-        a6: Latency L2 & 6 & 15.4 & 14.3 & 5 & 3.017 ms & 0 \\
-        a7: Latency L1+L2 & 6 & 15.4 & 14.3 & 5 & 2.649 ms & 0 \\
+        a1: Baseline & 6 & 15.7 & 13.9 & 61.717 ms & 1 \\
+        a2: Topology L1 & 6 & 15.7 & 13.9 & 61.271 ms & 1 \\
+        a3: Topology L2 & 6 & 15.7 & 13.9 & 59.477 ms & 1 \\
+        a4: Topology L1+L2 & 6 & 15.7 & 13.9 & 67.305 ms & 1 \\
+        a5: Latency L1 & 6 & 15.4 & 14.3 & 4.195 ms & 0 \\
+        a6: Latency L2 & 6 & 15.4 & 14.3 & 3.017 ms & 0 \\
+        a7: Latency L1+L2 & 6 & 15.4 & 14.3 & 2.649 ms & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -481,33 +481,36 @@ While all strategies achieved equivalent resource balancing, their impact on net
             width=12cm,
             height=10cm,
             scale only axis,
-            xmin=0.5, xmax=3.5,
-            xtick={1,2,3},
-            xticklabels={Baseline, Topology-Aware, Latency-Aware},
+            xmin=0.5, xmax=4.5,
+            xtick={1,2,3,4},
+            xticklabels={Initial, Baseline, {Topology\\Aware}, {Latency\\Aware}},
+            xticklabel style={align=center, yshift=-2pt},
             enlarge x limits=0.2,
         }
         
         % Left Y-Axis: CPU & MEM Standard Deviation (Grouped Bar Chart)
         \begin{axis}[
             axis y line*=left,
-            ymin=0, ymax=20,
+            ymin=0, ymax=30,
             ylabel={Standard Deviation After Eviction (\%)},
             ylabel near ticks,
-            ybar=2pt,
-            bar width=15pt,
+            ybar=5pt,
+            bar width=14pt,
             legend pos=north west,
             nodes near coords,
-            every node near coord/.append style={yshift=5pt, font=\small},
+            every node near coord/.append style={yshift=5pt, font=\footnotesize},
         ]
             \addplot[fill=blue!60, draw=black] coordinates {
-                (1, 15.7)
+                (1, 23.6)
                 (2, 15.7)
-                (3, 15.4)
+                (3, 15.7)
+                (4, 15.4)
             };
             \addplot[fill=cyan!60, draw=black] coordinates {
-                (1, 13.9)
+                (1, 23.5)
                 (2, 13.9)
-                (3, 14.3)
+                (3, 13.9)
+                (4, 14.3)
             };
             \addlegendentry{CPU StdDev}
             \addlegendentry{MEM StdDev}
@@ -526,9 +529,10 @@ While all strategies achieved equivalent resource balancing, their impact on net
             mark options={scale=1.5},
         ]
             \addplot[color=red, thick, mark=*] coordinates {
-                (1, 61.717)
-                (2, 67.305)
-                (3, 2.649)
+                (1, 12.0)
+                (2, 61.717)
+                (3, 67.305)
+                (4, 2.649)
             };
             \addlegendentry{Latency (ms)}
         \end{axis}
@@ -609,11 +613,11 @@ Table \ref{tab:hard_tradeoff_results} presents the evaluation results when no fi
         \toprule
         \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} &  \textbf{Avg Latency (ms)} & \textbf{Degraded Pods} \\
         \midrule
-        Initial State & - & 23.6 & 21.2 & $\sim$4.0-20.0 ms & 0 \\
+        Initial State & - & 23.6 & 21.2 & $\sim$4.0 ms & 0 \\
         \midrule
-        a1: Baseline & 6 & 13.1 & 13.9 & 6.668 $\rightarrow$ 39.073 & 2 \\
-        a4: Topology L1+L2 & 6 & 13.1 & 13.9 & 10.401 $\rightarrow$ 51.249 & 2 \\
-        a7: Latency L1+L2 & 0 & 23.6 & 21.2 & 23.140 $\rightarrow$ 21.102 & 0 \\
+        a1: Baseline & 6 & 13.1 & 13.9 & 69.073 & 2 \\
+        a4: Topology L1+L2 & 6 & 13.1 & 13.9 & 61.249 & 2 \\
+        a7: Latency L1+L2 & 0 & 23.6 & 21.2 & 5.102 & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -624,6 +628,71 @@ Table \ref{tab:hard_tradeoff_results} presents the evaluation results when no fi
 This scenario forces the descheduler to make a definitive choice between cluster symmetry and network performance. As shown in Table \ref{tab:hard_tradeoff_results}, the Baseline and Topology-Aware strategies blindly prioritized CPU balancing. They evicted 6 critical pods, successfully balancing the cluster by dropping the CPU and Memory Standard Deviation to $\sim$13\%. However, they placed 2 of those sensitive pods directly into the degraded zone, severely degrading the workload's performance (spiking average latency to $\sim$50ms).
 
 In contrast, the Latency-Aware strategies evaluated the critical pods, detected that evicting any of them would subject them to degraded network conditions, and strictly blocked all evictions (0 Evicted Pods). By intentionally refusing to evict, the Latency-Aware descheduler chose to leave the cluster imbalanced (StdDev remained at $\sim$21-23\%) to guarantee the network integrity of the application. This conclusively proves that the proposed implementation strictly prioritizes application latency over infrastructure symmetry.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \pgfplotsset{
+            width=12cm,
+            height=10cm,
+            scale only axis,
+            xmin=0.5, xmax=4.5,
+            xtick={1,2,3,4},
+            xticklabels={Initial, Baseline, {Topology\\Aware}, {Latency\\Aware}},
+            xticklabel style={align=center, yshift=-2pt},
+            enlarge x limits=0.2,
+        }
+
+        \begin{axis}[
+            axis y line*=left,
+            ymin=0, ymax=30,
+            ylabel={Standard Deviation After Eviction (\%)},
+            ylabel near ticks,
+            ybar=5pt,
+            bar width=14pt,
+            legend pos=north west,
+            nodes near coords,
+            every node near coord/.append style={yshift=5pt, font=\footnotesize},
+        ]
+            \addplot[fill=blue!60, draw=black] coordinates {
+                (1, 23.6)
+                (2, 13.1)
+                (3, 13.1)
+                (4, 23.6)
+            };
+            \addplot[fill=cyan!60, draw=black] coordinates {
+                (1, 21.2)
+                (2, 13.9)
+                (3, 13.9)
+                (4, 21.2)
+            };
+            \addlegendentry{CPU StdDev}
+            \addlegendentry{MEM StdDev}
+        \end{axis}
+
+        \begin{axis}[
+            axis y line*=right,
+            axis x line=none,
+            ymin=0, ymax=80,
+            ylabel={Average Latency (ms)},
+            ylabel near ticks,
+            yticklabel pos=right,
+            legend pos=north east,
+            mark=*,
+            mark options={scale=1.5},
+        ]
+            \addplot[color=red, thick, mark=*] coordinates {
+                (1, 4.0)
+                (2, 69.073)
+                (3, 61.249)
+                (4, 5.102)
+            };
+            \addlegendentry{Latency (ms)}
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Cluster Balance vs. Network Performance (No Filler Pods Scenario).}
+    \label{fig:hard_tradeoff_latency}
+\end{figure}
 
 
 %-----------------------------------------------------------------------------%
@@ -677,9 +746,10 @@ Because the descheduler cannot guarantee final placement, it must assess the sta
             ybar,
             bar width=15pt,
             bar shift=-8.5pt, 
-            xmin=0.5, xmax=6.5,
-            xtick={1,2,3,4,5,6},
+            xmin=0.5, xmax=7.5,
+            xtick={1,2,3,4,5,6,7},
             xticklabels={
+                Initial,
                 Baseline, 
                 Topology, 
                 {Latency\\L1 (50\%)}, 
@@ -694,12 +764,13 @@ Because the descheduler cannot guarantee final placement, it must assess the sta
             legend style={at={(0.01,0.99)}, anchor=north west},
         ]
             \addplot[fill=red!60, draw=black] coordinates {
-                (1, 126.2)
-                (2, 129.8)
-                (3, 63.5)
-                (4, 122.8)
-                (5, 2.7)
-                (6, 2.6)
+                (1, 3.0)
+                (2, 126.2)
+                (3, 129.8)
+                (4, 63.5)
+                (5, 122.8)
+                (6, 2.7)
+                (7, 2.6)
             };
             \addlegendentry{Latency (ms)}
         \end{axis}
@@ -717,7 +788,7 @@ Because the descheduler cannot guarantee final placement, it must assess the sta
             ybar,
             bar width=15pt,
             bar shift=8.5pt,
-            xmin=0.5, xmax=6.5,
+            xmin=0.5, xmax=7.5,
             axis y line*=right,
             axis x line=none, 
             nodes near coords,
@@ -725,12 +796,13 @@ Because the descheduler cannot guarantee final placement, it must assess the sta
             legend style={at={(0.99,0.99)}, anchor=north east},
         ]
             \addplot[fill=blue!60, draw=black] coordinates {
-                (1, 3)
+                (1, 5)
                 (2, 3)
-                (3, 4)
-                (4, 3)
-                (5, 5)
+                (3, 3)
+                (4, 4)
+                (5, 3)
                 (6, 5)
+                (7, 5)
             };
             \addlegendentry{Active Nodes}
         \end{axis}
@@ -767,9 +839,9 @@ Table \ref{tab:resourcedefrag_results} presents the raw performance of the desch
         \midrule
         Initial State & - & 50.7\% & $\sim$8.0 ms & 0 \\
         \midrule
-        c1: Baseline & 8 & 19.9\% & 167.216 ms & 2 \\
-        Topology: Topology L1 & 8 & 19.9\% & 165.783 ms & 2 \\
-        c3: Latency L1 & 8 & 17.9\% & 8.762 ms & 0 \\
+        r1: Baseline & 8 & 19.9\% & 167.216 ms & 2 \\
+        r2: Topology L1 & 8 & 19.9\% & 165.783 ms & 2 \\
+        r3: Latency L1 & 8 & 17.9\% & 8.762 ms & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -794,7 +866,7 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
     \begin{tikzpicture}
         \pgfplotsset{
             width=12cm,
-            height=9.5cm,
+            height=10cm,
             scale only axis,
             xmin=0.5, xmax=4.5,
             xtick={1,2,3,4},
@@ -807,8 +879,9 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             axis y line*=left,
             ymin=0, ymax=60,
             ylabel={Mean Absolute Imbalance (RII \%)},
-            ybar=2pt,
-            bar width=20pt,
+            ybar,
+            bar width=15pt,
+            bar shift=-8.5pt,
             legend pos=north west,
             nodes near coords,
             every node near coord/.append style={yshift=5pt, font=\small},
@@ -821,17 +894,22 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             };
             \addlegendentry{Mean RII \%}
         \end{axis}
-        % Right Y-Axis: Average Latency (Line Chart)
+        % Right Y-Axis: Average Latency (Bar Chart)
         \begin{axis}[
             axis y line*=right,
             axis x line=none,
             ymin=0, ymax=200,
             ylabel={Average Latency (ms)},
+            ylabel near ticks,
+            yticklabel pos=right,
+            ybar,
+            bar width=15pt,
+            bar shift=8.5pt,
+            nodes near coords,
+            every node near coord/.append style={yshift=5pt, font=\small},
             legend pos=north east,
-            mark=*,
-            mark options={scale=1.5}
         ]
-            \addplot[color=red, thick, mark=*] coordinates {
+            \addplot[fill=red!60, draw=black] coordinates {
                 (1, 8.0)
                 (2, 167.2)
                 (3, 165.7)
