@@ -31,10 +31,9 @@ The study addresses the following problems:
 \label{sec:researchQuestion}
 
 \begin{itemize}
-    \item How can a Descheduler policy identify Nodes whose low utilization or poor CPU-memory shape makes them suitable drain candidates?
-    \item How can predicted scheduler targets and a single target-bin-score criterion select effective and safe eviction candidates?
-    \item How effectively does the proposed policy reclaim Nodes, reduce stranded capacity, preserve balanced headroom, and converge compared with \textit{HighNodeUtilization}?
-    \item How can network-aware filtering reduce latency risk without preventing useful resource improvement?
+    \item How can a Descheduler policy identify fragmented Nodes whose CPU-memory shape should be corrected through Pod eviction?
+    \item How effectively does the proposed policy reclaim Nodes, reduce stranded capacity, preserve balanced headroom, and converge compared with utilization-based descheduling baselines?
+    \item How can a network-aware filtering mechanism implemented in Kubernetes Descheduler affect the trade-off between cluster fragmentation reduction and communication latency compared with a non-network-aware baseline?
 \end{itemize}
 
 \subsection{Research Limitation}
