@@ -48,22 +48,168 @@ S1 primarily tests Node reclamation. S2 and S4 test whether dimensional fragment
 \subsection{Evaluation Metrics}
 \label{sec:defrag_metrics}
 
-\textbf{Node reclamation.} \(N_{\mathrm{active}}\) counts worker Nodes hosting evictable experiment workloads. A reduction in \(N_{\mathrm{active}}\) indicates that Nodes have become reclaimable.
+The success of each policy-scenario cell is assessed through five complementary metrics that jointly capture node reclamation, dimensional balance, residual schedulability, and operational cost. Every metric operates on request-space Node state, so the cluster layout is described entirely by per-Node resource requests rather than runtime telemetry. The fundamental quantity shared by all metrics is the per-dimension utilization fraction of a worker Node \(n\):
 
-\textbf{Stranding.} The cluster stranding score is:
+\[
+u_{n,R}
+=
+\frac{R_{\text{req}}(n)}
+{R_{\text{alloc}}(n)},
+\qquad
+R \in \{\text{cpu}, \text{mem}\}
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(u_{n,R}\) is the request-based utilization fraction of Node \(n\) along dimension \(R\), bounded in \([0,1]\).
+
+    \item \(R_{\text{req}}(n)\) is the sum of resource \(R\) requested by all evictable experiment Pods assigned to Node \(n\).
+
+    \item \(R_{\text{alloc}}(n)\) is the allocatable capacity of Node \(n\) for resource \(R\) (\(2000\,m\) CPU and approximately \(811\,Mi\) memory per worker).
+\end{itemize}
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Active Node Count}
+\label{subsubsec:defrag_metric_active}
+%-----------------------------------------------------------------------------%
+The Active Node Count (\(N_{\text{active}}\)) is the primary indicator of node reclamation. A worker Node is counted as active only when it hosts at least one evictable experiment workload; infrastructure namespaces such as \texttt{kube-system} are excluded and therefore never keep a Node active.
+
+\[
+N_{\text{active}}
+=
+\sum_{n=1}^{N} a_n
+\]
+
+\[
+a_n =
+\begin{cases}
+1, & \text{if } \sum R_{\text{req}}(n) > 0 \\
+0, & \text{otherwise}
+\end{cases}
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(N_{\text{active}}\) is the number of worker Nodes hosting evictable experiment workloads.
+
+    \item \(a_n\) is the binary activity indicator for Node \(n\).
+
+    \item \(N\) is the total number of worker Nodes available in the scenario.
+\end{itemize}
+
+A reduction in \(N_{\text{active}}\) between the before- and after-snapshots indicates that one or more Nodes have been fully drained and become reclaimable for scale-down. This metric directly measures the consolidation objective and is reported as the before-and-after pair together with the number of Nodes reclaimed.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Resource Stranding Score}
+\label{subsubsec:defrag_metric_stranding}
+%-----------------------------------------------------------------------------%
+Because defragmentation optimizes the geometric \emph{shape} of utilization rather than its absolute spread, the cluster is evaluated through a stranding score that measures how far each Node deviates from per-dimension balance. The cluster stranding score \(S\) aggregates the absolute CPU-to-memory imbalance across all active Nodes:
 
 \begin{equation}
-    S = \sum_{n \in N} \left|u_{n,c}-u_{n,m}\right|.
+    S = \sum_{n \in N_{\text{active}}} \left|u_{n,\text{cpu}} - u_{n,\text{mem}}\right|.
     \label{eq:stranding_score}
 \end{equation}
 
-Lower \(S\) indicates that CPU and memory fractions are more closely aligned across the cluster.
+Where:
 
-\textbf{Balanced headroom.} \(H_{balanced}\) counts how many reference Pods requesting \(200\,m/80\,Mi\) can fit in the remaining request space. This converts residual capacity into a schedulability-oriented quantity.
+\begin{itemize}
+    \item \(S\) is the cluster-wide resource stranding score.
 
-\textbf{Eviction efficiency.} Efficiency is interpreted jointly from the number of evictions, Nodes reclaimed, and reduction in \(S\). A policy is more efficient when it achieves the same structural improvement with fewer movements.
+    \item \(u_{n,\text{cpu}}\) and \(u_{n,\text{mem}}\) are the request-based CPU and memory utilization fractions of Node \(n\).
+\end{itemize}
 
-\textbf{Convergence and safety.} Per-pass eviction counts must eventually reach zero. After each run, all Pods must be schedulable and no eviction request may remain stuck.
+A Node with a large gap between its CPU and memory fractions strands the under-used dimension, since the remaining capacity cannot be allocated to a balanced reference workload. A lower \(S\) therefore indicates that CPU and memory fractions are more tightly aligned across the cluster, unlocking trapped capacity. Unlike a global standard deviation, \(S\) is insensitive to intentional differences in absolute load between Nodes and reacts only to per-Node dimensional skew.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Average Active-Node Utilization}
+\label{subsubsec:defrag_metric_density}
+%-----------------------------------------------------------------------------%
+To quantify packing density, the Average Active-Node Utilization (\(\bar{U}\)) reports the mean request-based load of the Nodes that remain active after descheduling, averaged over both resource dimensions:
+
+\[
+\bar{U}
+=
+\frac{1}{N_{\text{active}}}
+\sum_{n : a_n = 1}
+\frac{u_{n,\text{cpu}} + u_{n,\text{mem}}}{2}
+\times 100\%
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(\bar{U}\) is the average utilization of the surviving active Nodes, expressed as a percentage.
+
+    \item \(N_{\text{active}}\) is the number of active Nodes after descheduling.
+
+    \item \(\frac{u_{n,\text{cpu}} + u_{n,\text{mem}}}{2}\) is the mean per-dimension utilization fraction of Node \(n\).
+\end{itemize}
+
+A higher \(\bar{U}\) indicates that the surviving Nodes carry denser workloads, which is the expected consequence of successful consolidation. This metric complements \(N_{\text{active}}\): reclaiming Nodes is only beneficial when the retained Nodes absorb the displaced load rather than leaving the cluster uniformly sparse.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Balanced Headroom}
+\label{subsubsec:defrag_metric_headroom}
+%-----------------------------------------------------------------------------%
+The Balanced Headroom (\(H_{balanced}\)) converts residual request space into a schedulability-oriented quantity. It counts how many reference Pods, each requesting \(200\,m\) CPU and \(80\,Mi\) memory, can still be placed across the cluster after descheduling:
+
+\[
+H_{balanced}
+=
+\sum_{n=1}^{N}
+\min\!\left(
+\left\lfloor
+\frac{\text{cpu}_{\text{alloc}}(n) - \text{cpu}_{\text{req}}(n)}{c_{\text{ref}}}
+\right\rfloor,
+\left\lfloor
+\frac{\text{mem}_{\text{alloc}}(n) - \text{mem}_{\text{req}}(n)}{m_{\text{ref}}}
+\right\rfloor
+\right)
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(H_{balanced}\) is the total number of \(200\,m/80\,Mi\) reference Pods that fit in the remaining request space.
+
+    \item \(c_{\text{ref}} = 200\,m\) and \(m_{\text{ref}} = 80\,Mi\) are the CPU and memory requests of the balanced reference Pod.
+
+    \item the per-Node \(\min(\cdot)\) enforces that a reference Pod fits only when both dimensions admit it, penalizing Nodes whose free capacity is stranded on a single axis.
+\end{itemize}
+
+A higher \(H_{balanced}\) indicates that defragmentation has reassembled fragmented free capacity into contiguous, jointly schedulable space. Because the per-Node term is limited by the tighter dimension, a Node with abundant free CPU but little free memory contributes little headroom, which is precisely the stranding that the policy aims to remove.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Eviction Count and Efficiency}
+\label{subsubsec:defrag_metric_eviction}
+%-----------------------------------------------------------------------------%
+The Eviction Count (\(E_{count}\)) measures the operational cost of a descheduling sweep as the total number of Pods relocated, extracted from the Descheduler job log:
+
+\[
+E_{count}
+=
+\sum_{j \in J} e_j
+\]
+
+Where:
+
+\begin{itemize}
+    \item \(E_{count}\) is the total number of Pods evicted across all passes of a sweep.
+
+    \item \(J\) is the set of log entries recorded during the job lifecycle.
+
+    \item \(e_j\) is a binary flag equal to \(1\) when log entry \(j\) records an eviction, and \(0\) otherwise.
+\end{itemize}
+
+Efficiency is interpreted jointly from \(E_{count}\), the number of Nodes reclaimed (\(\Delta N_{\text{active}}\)), and the reduction in stranding (\(\Delta S\)). A policy is more efficient when it achieves the same structural improvement, that is, the same reclamation and balance gain, with fewer Pod movements, since every eviction imposes disruption on the running workload.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Convergence and Safety}
+\label{subsubsec:defrag_metric_safety}
+%-----------------------------------------------------------------------------%
+Finally, each run is validated for convergence and safety. The per-pass eviction count must eventually reach zero within the bounded loop of at most five passes, confirming that the policy reaches a stable fixed point rather than oscillating. After each run, every Pod must remain schedulable, so no after-snapshot may contain a Pending Pod, and no eviction request may remain stuck beyond the evicted Pods recorded in the log. These conditions verify that the consolidation pressure is exercised without violating feasibility or workload availability.
 
 \subsection{Node Reclamation}
 \label{sec:defrag_node_reclamation}
@@ -86,9 +232,25 @@ Lower \(S\) indicates that CPU and memory fractions are more closely aligned acr
     \end{tabular}
 \end{table}
 
-ResourceDefragmentation reclaims four Nodes in S1 and three in S2, while HNU performs no eviction in either scenario. HNU requires Nodes above its threshold to act as packing targets; uniformly low or uniformly fragmented layouts therefore produce no action. ResourceDefragmentation instead treats sparse Nodes and low bin-quality Nodes as resource-only consolidation sources, then uses \texttt{predictSchedulerTarget} to choose Pods with feasible denser targets even when the baseline cannot form high- and low-utilization groups.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_active_nodes.png}
+    \caption{Active worker Nodes per scenario after descheduling.}
+    \label{fig:defrag_active_nodes}
+\end{figure}
+
+ResourceDefragmentation reclaims four Nodes in S1 and three in S2, while HNU performs no eviction in either scenario, as shown in Figure \ref{fig:defrag_active_nodes}. HNU requires Nodes above its threshold to act as packing targets; uniformly low or uniformly fragmented layouts therefore produce no action. ResourceDefragmentation instead treats sparse Nodes and low bin-quality Nodes as resource-only consolidation sources, then uses \texttt{predictSchedulerTarget} to choose Pods with feasible denser targets even when the baseline cannot form high- and low-utilization groups.
 
 S3 is the only reclamation case won by HNU. Dense balanced targets already exist, allowing the threshold policy to drain two Nodes greedily. ResourceDefragmentation respects the \(0.90\) ceiling and reclaims one Node. S5 is especially useful because both policies reclaim the same Node, allowing placement quality and eviction cost to distinguish them.
+
+The consolidation effect is also visible in the density of the surviving Nodes. Figure \ref{fig:defrag_avg_utilization} reports the average active-Node utilization \(\bar{U}\) after descheduling: in the consolidation and fragmentation scenarios ResourceDefragmentation drives the retained Nodes to substantially higher density than HNU, confirming that the reclaimed capacity is absorbed rather than left uniformly sparse.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_avg_utilization.png}
+    \caption{Average utilization of active Nodes after descheduling (\(\bar{U}\)).}
+    \label{fig:defrag_avg_utilization}
+\end{figure}
 
 \subsection{Stranding Reduction}
 \label{sec:defrag_stranding_results}
@@ -111,7 +273,14 @@ S3 is the only reclamation case won by HNU. Dense balanced targets already exist
     \end{tabular}
 \end{table}
 
-The result separates node reclamation from dimensional defragmentation. S1 begins with little stranding, so packing four Nodes into two leaves \(S\) essentially unchanged. In S2 and S4, ResourceDefragmentation uses the predicted-target score to combine complementary shapes and reduces \(S\) by approximately \(74\%\) and \(66\%\), respectively; HNU does not act.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_stranding.png}
+    \caption{Final cluster stranding score \(S\) per scenario (lower is better).}
+    \label{fig:defrag_stranding}
+\end{figure}
+
+As summarized in Figure \ref{fig:defrag_stranding}, the result separates node reclamation from dimensional defragmentation. S1 begins with little stranding, so packing four Nodes into two leaves \(S\) essentially unchanged. In S2 and S4, ResourceDefragmentation uses the predicted-target score to combine complementary shapes and reduces \(S\) by approximately \(74\%\) and \(66\%\), respectively; HNU does not act.
 
 In S3, HNU reclaims one additional Node but slightly worsens \(S\), whereas ResourceDefragmentation reduces it from \(1.395\) to \(1.386\). This shows the consequence of retaining resource shape in the target objective rather than optimizing Node count alone.
 
@@ -145,7 +314,23 @@ HNU also empties one Node, but it requires three evictions and only reduces \(S\
     \end{tabular}
 \end{table}
 
-HNU retains higher distributed headroom in S1 because it leaves all six Nodes active; this is not a node reclamation success. In the fragmentation scenarios, ResourceDefragmentation exposes substantially more balanced headroom. S5 is the strongest efficiency result: two ResourceDefragmentation evictions reclaim one Node, reduce \(S\) by \(1.215\), and leave headroom for 38 balanced reference Pods. HNU uses three evictions for the same reclamation, reduces \(S\) by only \(0.040\), and leaves headroom for 32 reference Pods.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_balanced.png}
+    \caption{Balanced headroom \(H_{balanced}\) per scenario after descheduling.}
+    \label{fig:defrag_h_balanced}
+\end{figure}
+
+HNU retains higher distributed headroom in S1 because it leaves all six Nodes active; this is not a node reclamation success. In the fragmentation scenarios, ResourceDefragmentation exposes substantially more balanced headroom, as shown in Figure \ref{fig:defrag_h_balanced}. S5 is the strongest efficiency result: two ResourceDefragmentation evictions reclaim one Node, reduce \(S\) by \(1.215\), and leave headroom for 38 balanced reference Pods. HNU uses three evictions for the same reclamation, reduces \(S\) by only \(0.040\), and leaves headroom for 32 reference Pods.
+
+The eviction cost behind these gains is reported in Figure \ref{fig:defrag_evictions}. ResourceDefragmentation spends evictions only where consolidation or defragmentation is achievable, and in S3 and S5 it reaches an equal or better cluster state than HNU with fewer Pod movements.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_evictions.png}
+    \caption{Total Pod evictions per scenario (\(E_{count}\)).}
+    \label{fig:defrag_evictions}
+\end{figure}
 
 \subsection{Convergence and Safety}
 \label{sec:defrag_convergence_safety}
