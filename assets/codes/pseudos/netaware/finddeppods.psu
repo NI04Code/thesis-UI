@@ -1,5 +1,5 @@
 Function: FindDependencyPods
-─────────────────────────────────────────────────────────
+---------------------------------------------------------
 Input:
     pod              // the source pod being evaluated
     labelKey         // the network group label key (e.g., "network-group")

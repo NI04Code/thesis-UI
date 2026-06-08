@@ -3,12 +3,16 @@ kind: DeschedulerPolicy
 profiles:
   - name: default
     pluginConfig:
-      - name: ResourceDefragmentation
+      - name: ResourceDefragmentationC2
         args:
-          imbalanceThreshold: 0.20      # |RII| above this marks a Node fragmented
-          maxEvictions: 5               # Upper bound on evictions per pass
-          usageMode: requests           # Use declared Pod requests as the signal
+          maxEvictions: 50
+          consolidationThreshold: 0.40
+          consolidationTarget: 0.90
+          usageMode: requests
+          namespaces:
+            exclude:
+              - kube-system
     plugins:
       balance:
         enabled:
-          - ResourceDefragmentation
+          - ResourceDefragmentationC2
