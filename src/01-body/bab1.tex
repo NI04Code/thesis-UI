@@ -69,7 +69,7 @@ The study addresses the following problems:
 
 \begin{itemize}
     \item \textbf{A defragmentation-focused Descheduler policy:} \textit{ResourceDefragmentation} repairs post-placement scatter without replacing the kube-scheduler.
-    \item \textbf{RII- and stranding-aware Node assessment:} Drain candidates are identified from average utilization and CPU-memory bin quality, then prioritized using RII and FSI.
+    \item \textbf{RII- and FSI-aware Node assessment:} Drain candidates are identified from average utilization and CPU-memory bin quality, then prioritized using dimensional skew and usable free-space pressure.
     \item \textbf{A predicted-target eviction-candidate selector:} Candidate Pods are compared using the projected bin score of their predicted landing Nodes.
     \item \textbf{Scheduler-target prediction and safety constraints:} Evictions require request feasibility, a target-utilization ceiling, and a target at least as packed as the source.
     \item \textbf{Network-aware eviction filtering:} Topology- or latency-based costs protect dependent services from harmful movement.
