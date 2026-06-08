@@ -23,10 +23,7 @@ This research develops a defragmentation-focused Descheduler architecture with t
 The study addresses the following problems:
 
 \begin{enumerate}
-    \item \textbf{Scattered capacity:} CPU and memory remain available in aggregate but cannot satisfy workload requests on any single Node.
-    \item \textbf{Stranded resource dimensions:} CPU-heavy and memory-heavy placement states leave asymmetric capacity that is difficult to reuse.
-    \item \textbf{Missing post-placement node reclamation:} Scheduler bin-packing scores act when a Pod is placed and do not repair an already fragmented cluster.
-    \item \textbf{Uncertain rescheduling outcome:} An eviction is useful only if the Pod has a feasible non-origin target that improves packing without exceeding a utilization ceiling.
+    \item \textbf{Resource fragmentation:} CPU and memory may remain available in aggregate but become scattered across Nodes in incompatible shapes. CPU-heavy and memory-heavy placements can strand one resource dimension behind another, while scheduler bin-packing scores only act during initial placement and do not repair fragmentation that has accumulated in an already running cluster.
     \item \textbf{Network-locality risk:} Compute-efficient movement can separate communicating services and degrade application latency.
 \end{enumerate}
 
