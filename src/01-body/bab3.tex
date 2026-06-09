@@ -8,7 +8,7 @@ This chapter presents the design and implementation of the two Descheduler compo
 \section{ResourceDefragmentation Policy Design}
 \label{sec:imbalanceindex_design}
 
-\textit{ResourceDefragmentation} is a resource-only \textit{Balance} plugin for post-placement consolidation. It builds a request-based snapshot of worker Nodes, finds source Nodes that are either sparse or poorly shaped in CPU-memory space, predicts feasible landing Nodes for their Pods, and evicts the Pod whose predicted scheduler target has the strongest projected CPU-memory bin score. The kube-scheduler remains responsible for final binding.
+\textit{ResourceDefragmentation} is a \textit{Balance} plugin for post-placement consolidation. It builds a snapshot of worker Nodes based on Pod resource requests, finds source Nodes that are either sparse or poorly shaped in CPU-memory space, predicts feasible landing Nodes for their Pods, and evicts the Pod whose predicted scheduler target has the strongest projected CPU-memory bin score. The kube-scheduler remains responsible for final binding.
 
 The experimental configuration explicitly uses declared Pod requests. This keeps Node assessment, feasibility checks, and target prediction aligned with the admission model used by kube-scheduler.
 
@@ -23,12 +23,14 @@ For Node \(n\), let \(u_{n,c}\) and \(u_{n,m}\) denote normalized requested CPU 
     u_{n,m} = \frac{R_{n,m}}{C_{n,m}},
 \end{equation}
 
-where \(R\) is the sum of Pod requests and \(C\) is allocatable capacity. Average utilization represents density:
+where \(u_{n,c}\) is the normalized CPU utilization of Node \(n\), \(u_{n,m}\) is the normalized memory utilization of Node \(n\), \(R_{n,c}\) is the sum of CPU requests from all Pods on Node \(n\), \(R_{n,m}\) is the sum of memory requests from all Pods on Node \(n\), \(C_{n,c}\) is the allocatable CPU capacity of Node \(n\), and \(C_{n,m}\) is the allocatable memory capacity of Node \(n\). Average utilization represents density:
 
 \begin{equation}
-    U_n^{avg} = \frac{u_{n,c} + u_{n,m}}{2}.
+    U_n^{avg} = \frac{u_{n,c} + u_{n,m}}{2},
     \label{eq:defrag_avg_utilization}
 \end{equation}
+
+where \(U_n^{avg}\) is the average utilization of Node \(n\), representing overall resource density by taking the mean of normalized CPU and memory utilization.
 
 The bin score combines density and dimensional balance:
 
@@ -37,23 +39,25 @@ The bin score combines density and dimensional balance:
     \frac{
         \frac{u_{n,c}+u_{n,m}}{2}
         \left(1-\left|u_{n,c}-u_{n,m}\right|\right)
-    }{2}.
+    }{2},
     \label{eq:defrag_bin_score}
 \end{equation}
 
-A dense and balanced Node has a high \(B_n\), whereas an empty or strongly skewed Node has a lower score. The signed Resource Imbalance Index identifies the skew direction:
+where \(B_n\) is the bin score of Node \(n\), combining density (average utilization) with dimensional balance (the penalty factor \(1-|u_{n,c}-u_{n,m}|\) reduces the score when CPU and memory utilization diverge). A dense and balanced Node has a high \(B_n\), whereas an empty or strongly skewed Node has a lower score. The signed Resource Imbalance Index identifies the skew direction:
 
 \begin{equation}
-    RII_n = u_{n,c} - u_{n,m}.
+    RII_n = u_{n,c} - u_{n,m},
     \label{eq:rii_node}
 \end{equation}
 
-The Free-Space Index represents joint CPU-memory headroom:
+where \(RII_n\) is the Resource Imbalance Index of Node \(n\). A positive value indicates CPU-heavy skew (CPU utilization exceeds memory utilization), while a negative value indicates memory-heavy skew. The Free-Space Index represents joint CPU-memory headroom:
 
 \begin{equation}
-    FSI_n = (1-u_{n,c})(1-u_{n,m}).
+    FSI_n = (1-u_{n,c})(1-u_{n,m}),
     \label{eq:defrag_fsi}
 \end{equation}
+
+where \(FSI_n\) is the Free-Space Index of Node \(n\), representing the product of remaining CPU capacity \((1-u_{n,c})\) and remaining memory capacity \((1-u_{n,m})\). A higher \(FSI_n\) indicates a larger jointly usable headroom region, while a low \(FSI_n\) suggests constrained free space in at least one dimension.
 
 \subsection{Drain-Candidate Detection and Ordering}
 \label{sec:defrag_drain_candidates}
@@ -96,11 +100,11 @@ For every evictable Pod \(p\) on source Node \(s\), the plugin evaluates non-ori
 The final condition is the pack-upward guard:
 
 \begin{equation}
-    \min(u_{t,c},u_{t,m}) \geq \min(u_{s,c},u_{s,m}).
+    \min(u_{t,c},u_{t,m}) \geq \min(u_{s,c},u_{s,m}),
     \label{eq:defrag_pack_upward}
 \end{equation}
 
-It prevents an eviction from merely moving a Pod to an emptier Node. Among feasible Nodes, \texttt{predictSchedulerTarget} returns the Node with the highest projected bin score after receiving \(p\).
+where \(u_{t,c}\) and \(u_{t,m}\) are the projected CPU and memory utilization of target Node \(t\) after receiving Pod \(p\), while \(u_{s,c}\) and \(u_{s,m}\) are the current CPU and memory utilization of source Node \(s\). The constraint requires that the minimum utilization dimension of the target (its less-utilized resource) must be at least as high as the minimum utilization dimension of the source. It prevents an eviction from merely moving a Pod to an emptier Node. Among feasible Nodes, \texttt{predictSchedulerTarget} returns the Node with the highest projected bin score after receiving \(p\).
 
 \subsection{Predicted-Target Eviction-Candidate Selection}
 \label{sec:defrag_victim_selection}
@@ -116,18 +120,18 @@ This is the only eviction-candidate selection criterion after target feasibility
 
 \begin{figure}[H]
     \centering
-    \resizebox{0.94\textwidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}[
         x=1cm,y=1cm,>=stealth,
-        box/.style={draw, line width=0.5pt, fill=white, align=center, inner sep=3pt},
-        line/.style={draw, line width=0.5pt, -stealth}
+        box/.style={draw, line width=0.6pt, fill=white, align=center, inner sep=6pt, minimum width=2.5cm, minimum height=1.2cm},
+        line/.style={draw, line width=0.6pt, -stealth}
     ]
         \node[box] (state) at (0,0) {\shortstack{Build request-based\\Node state}};
-        \node[box] (metrics) at (3.0,0) {\shortstack{Compute \(U^{avg}\),\\\(B\), RII, FSI}};
-        \node[box] (drain) at (6.2,0) {\shortstack{Select and order\\drain candidates}};
-        \node[box] (predict) at (9.3,0) {\shortstack{Predict feasible\\landing Nodes}};
-        \node[box] (select) at (12.4,0) {\shortstack{Select highest\\projected \(B\)}};
-        \node[box] (evict) at (15.3,0) {\shortstack{Evict and update\\local state}};
+        \node[box] (metrics) at (3.75,0) {\shortstack{Compute \(U^{avg}\),\\\(B\), RII, FSI}};
+        \node[box] (drain) at (7.2,0) {\shortstack{Select and order\\drain candidates}};
+        \node[box] (predict) at (10.75,0) {\shortstack{Predict feasible\\landing Nodes}};
+        \node[box] (select) at (14.0,0) {\shortstack{Select highest\\projected \(B\)}};
+        \node[box] (evict) at (17.5,0) {\shortstack{Evict and update\\local state}};
         \draw[line] (state) -- (metrics);
         \draw[line] (metrics) -- (drain);
         \draw[line] (drain) -- (predict);
