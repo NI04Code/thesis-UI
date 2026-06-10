@@ -1,0 +1,16 @@
+apiVersion: descheduler/v1alpha2
+kind: DeschedulerPolicy
+profiles:
+  - name: default
+    pluginConfig:
+      - name: ActualUsageEvictor
+        args:
+          cpuUsageThreshold: 0.80
+          memoryUsageThreshold: 0.80
+          namespaces:
+            exclude:
+              - kube-system
+    plugins:
+      preEvictionFilter:
+        enabled:
+          - ActualUsageEvictor

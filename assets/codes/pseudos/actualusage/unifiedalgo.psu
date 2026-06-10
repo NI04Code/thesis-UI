@@ -1,0 +1,51 @@
+Function: ActualUsagePreEvictionFilter
+---------------------------------------------------------
+Input:
+    P                   // candidate Pod
+    config              // {cpuThreshold, memoryThreshold,
+                           namespaces, labelSelector}
+
+Output:
+    Allow or Block
+
+if P is outside namespace scope then
+    return Allow
+end if
+
+if P does not match labelSelector then
+    return Allow
+end if
+
+metrics (*$\leftarrow$*) ReadPodMetrics(P)
+if metrics is unavailable then
+    return Block
+end if
+
+requestCPU (*$\leftarrow$*) 0
+requestMemory (*$\leftarrow$*) 0
+usageCPU (*$\leftarrow$*) 0
+usageMemory (*$\leftarrow$*) 0
+
+for each container c (*$\in$*) P.containers do
+    if metrics for c are incomplete then
+        return Block
+    end if
+
+    requestCPU (*$\leftarrow$*) requestCPU + c.requestCPU
+    requestMemory (*$\leftarrow$*) requestMemory + c.requestMemory
+    usageCPU (*$\leftarrow$*) usageCPU + metrics[c].cpu
+    usageMemory (*$\leftarrow$*) usageMemory + metrics[c].memory
+end for
+
+cpuRatio (*$\leftarrow$*) UsageRatio(usageCPU, requestCPU)
+memoryRatio (*$\leftarrow$*) UsageRatio(usageMemory, requestMemory)
+
+if cpuRatio (*$\geq$*) config.cpuThreshold then
+    return Block
+end if
+
+if memoryRatio (*$\geq$*) config.memoryThreshold then
+    return Block
+end if
+
+return Allow
