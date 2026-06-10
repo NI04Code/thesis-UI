@@ -61,8 +61,10 @@ To maintain focus and define the scope of this study, the research limitations a
 \begin{itemize}
     \item Design a defragmentation-focused Descheduler policy that combines utilization and resource-shape assessment by quantifying dimensional skew and free-space pressure using RII, FSI, and a CPU-memory bin score.
     \item Evaluate the policy's effectiveness in freeing up underutilized infrastructure, reducing wasted resources, and increasing usable capacity, while ensuring minimal disruption and cluster stability.
-    \item Design and integrate network-aware filtering that protects network locality of a pod during workload eviction.
-    \item Evaluate the network-aware filtering's effect and it trade-off with cluster fragmentation reduction.
+    \item Design and integrate an actual-usage pre-eviction filter that prevents high-demand Pods from being evicted during workload replacement.
+    \item Evaluate the actual-usage filter's effect on eviction safety and its trade-off with cluster fragmentation reduction.
+    \item Design and integrate network-aware filtering that protects network locality of a Pod during workload eviction.
+    \item Evaluate the network-aware filtering's effect and its trade-off with cluster fragmentation reduction.
 \end{itemize}
 
 \section{Research Contributions}
@@ -71,6 +73,7 @@ To maintain focus and define the scope of this study, the research limitations a
 \begin{itemize}
     \item Design and implement \textit{ResourceDefragmentation}, a defragmentation-focused Descheduler policy that repairs post-placement scatter without replacing the kube-scheduler.
     \item Evaluate the policy's effectiveness in reducing fragmentation, improving usable capacity, and supporting cluster consolidation while minimizing disruption and preserving cluster stability.
+    \item Implement and evaluate actual-usage cost filtering to guard high-demand Pods from disruptive eviction and assess its trade-off with fragmentation reduction.
     \item Implement and evaluate topology- or latency-based network cost filtering to guard network-dependent services from harmful movement and assess its trade-off with fragmentation reduction.
 \end{itemize}
 
