@@ -3,7 +3,7 @@
 \label{bab:2}
 %----------------------------------------------------------------------------- %%
 
-This chapter reviews the theoretical concepts and prior work that form the foundation of this study. Section 2.1 outlines the Kubernetes architecture and its resource management principles. Section 2.2 defines the resource fragmentation problem within dynamic clusters. Section 2.3 details the bin-packing problem and the application of Multi-Criteria Decision Analysis. Section 2.4 describes the Kubernetes Descheduler and its current limitations. Section 2.5 explains runtime metrics, actual usage, and smoothing techniques. Section 2.6 discusses communication-aware and network-aware scheduling approaches. Section 2.7 evaluates group eviction, atomic migration, and non-atomic scoring. This chapter concludes with Section 2.8, which identifies the current approaches and the resulting research gap.
+This chapter reviews the theoretical concepts and prior work that form the foundation of this study. Section 2.1 outlines the Kubernetes architecture and its resource management principles. Section 2.2 defines the resource fragmentation problem within dynamic clusters. Section 2.3 details resource defragmentation and multi-resource bin packing. Section 2.4 describes the Kubernetes Descheduler and its current limitations. Section 2.5 explains predicted-target eviction-candidate selection. Section 2.6 discusses runtime load-aware eviction guarding. Section 2.7 discusses communication-aware and network-aware scheduling approaches. This chapter concludes with Section 2.8, which identifies the current approaches and the resulting research gap.
 
 \section{Kubernetes Architecture and Resource Management}
 \label{sec:kubernetesArchitecture}
@@ -42,6 +42,13 @@ Eviction-candidate selection can be formulated around the expected landing state
 
 The target with the best projected CPU-memory bin score is retained for each Pod. The Pod whose predicted target has the highest score is selected for eviction. This single criterion aligns the action directly with the desired destination state: the selected movement should place complementary resource shapes together while preserving node reclamation pressure.
 
+\section{Runtime Load-Aware Eviction Guard}
+\label{sec:runtimeLoadAwareEviction}
+
+Request-based resource information is sufficient for scheduler feasibility and bin-packing analysis, because Kubernetes places Pods based on declared requests rather than instantaneous consumption. However, the operational cost of eviction depends on the Pod's runtime state. A Pod that is attractive from a defragmentation perspective may still be handling high live demand when the Descheduler attempts to evict it. Load-aware orchestration addresses this limitation by incorporating runtime resource usage into placement decisions; \citet{marchese2024loadaware} propose a Kubernetes orchestration strategy that continuously considers dynamic resource usage patterns when placing microservice applications in shared clusters.
+
+This research applies the same principle at the eviction boundary rather than replacing the scheduler. The defragmentation policy still evaluates source Nodes, target feasibility, and projected CPU-memory shape using declared requests, because those quantities determine whether the replacement Pod can be scheduled. Before the selected Pod is evicted, an actual-usage guard evaluates live CPU and memory consumption. If the Pod is currently under high demand, the eviction is blocked or deferred. This separates request-space analysis, which identifies structurally useful evictions, from runtime usage filtering, which reduces the risk of disrupting actively used workloads.
+
 \section{Communication-Aware and Network-Aware Placement}
 \label{sec:networkAwareScheduling}
 
@@ -52,14 +59,15 @@ This research applies network awareness as an eviction guardrail. A global pre-e
 \section{Current Approaches and Research Gap}
 \label{sec:researchGap}
 
-Existing mechanisms address individual parts of the problem. Scheduler scoring improves new placement, utilization-based descheduling drains Nodes according to thresholds, fragmentation research motivates directed eviction, and network-aware schedulers protect communication locality. The remaining gap is a practical Descheduler pipeline that combines:
+Existing mechanisms address individual parts of the problem. Scheduler scoring improves new placement, utilization-based descheduling drains Nodes according to thresholds, fragmentation research motivates directed eviction, load-aware orchestration highlights the importance of runtime demand, and network-aware schedulers protect communication locality. The remaining gap is a practical Descheduler pipeline that combines:
 
 \begin{itemize}
     \item source assessment using utilization and CPU-memory shape;
     \item RII/FSI-based drain ordering;
     \item request-feasible scheduler-target prediction;
     \item a direct projected-target balance criterion;
-    \item bounded, convergent eviction; and
+    \item bounded, convergent eviction;
+    \item actual-usage pre-eviction filtering for busy Pods; and
     \item network-aware filtering for latency-sensitive workloads.
 \end{itemize}
 
