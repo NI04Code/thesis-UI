@@ -26,6 +26,7 @@ The study addresses the following problems:
 
 \begin{enumerate}
     \item \textbf{Resource fragmentation:} CPU and memory may remain available in aggregate but become scattered across Nodes in incompatible shapes. CPU-heavy and memory-heavy placements can strand one resource dimension behind another, while scheduler bin-packing scores only act during initial placement and do not repair fragmentation that has accumulated in an already running cluster.
+    \item \textbf{Actual-usage eviction risk:} A Pod that looks beneficial to evict from a resource-request and bin-packing perspective may still be handling high live demand when eviction is attempted. Evicting such a Pod can temporarily reduce application capacity because the replacement Pod must be scheduled, started, become ready, and reconnect to traffic before service capacity is restored. Therefore, defragmentation decisions need a pre-eviction guardrail that considers actual resource usage, not only declared resource requests.
     \item \textbf{Network-locality risk:} Eviction decisions that focus only on cluster rebalance can separate network dependent services and increase communication overhead, especially in multi-node or multi-zone deployments.
 \end{enumerate}
 
@@ -35,6 +36,7 @@ The study addresses the following problems:
 \begin{itemize}
     \item How can a Descheduler policy identify fragmented Nodes whose CPU-memory shape should be corrected through Pod eviction?
     \item How effectively does the proposed policy reclaim Nodes, reduce stranded capacity, preserve balanced headroom, and converge compared with utilization-based descheduling baselines?
+    \item How can an actual-usage pre-eviction filtering mechanism implemented in Kubernetes Descheduler reduce the risk of evicting Pods under high live demand while preserving cluster fragmentation reduction?
     \item How can a network-aware filtering mechanism implemented in Kubernetes Descheduler affect the trade-off between cluster fragmentation reduction and communication latency compared with a non-network-aware baseline?
 \end{itemize}
 
@@ -46,6 +48,7 @@ To maintain focus and define the scope of this study, the research limitations a
 \begin{itemize}
     \item \textbf{Infrastructure:} Evaluation is conducted on a small-scale Kubernetes cluster using AWS EC2 nodes, with additional logical topology separation to emulate multi-region network conditions.
     \item \textbf{Simulator:} Extended evaluation for large-scale cluster topologies is conducted using a custom Kubernetes cluster simulator.
+    \item \textbf{Workload load generation:} Actual workload demand used to evaluate the pre-eviction actual-usage filter is generated using k6 load testing scenarios, rather than relying on naturally occurring production traffic.
     \item \textbf{Network:} Experiments assume standard AWS networking without specialized hardware acceleration such as SR-IOV.
     \item \textbf{Provisioning:} The cluster is provisioned using kubeadm to approximate production behavior, but excludes enterprise-grade storage features and complex service meshes unless specifically required for the evaluation scenario.
     \item \textbf{Framework dependencies:} The solution is implemented within the Kubernetes Descheduler framework; it determines which Pods should be evicted, while final placement remains the responsibility of the kube-scheduler.
