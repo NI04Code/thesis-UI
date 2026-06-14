@@ -181,6 +181,24 @@ Where:
 
 A higher \(H_{balanced}\) indicates that defragmentation has reassembled fragmented free capacity into contiguous, jointly schedulable space. Because the per-Node term is limited by the tighter dimension, a Node with abundant free CPU but little free memory contributes little headroom, which is precisely the stranding that the policy aims to remove.
 
+The same construction generalizes to any reference Pod shape \(r = (c_r, m_r)\), giving a family of probes \(H_r\) that reveal \emph{which} kind of capacity a layout can still admit:
+
+\[
+H_r
+=
+\sum_{n=1}^{N}
+\min\!\left(
+\left\lfloor
+\frac{\text{cpu}_{\text{alloc}}(n) - \text{cpu}_{\text{req}}(n)}{c_r}
+\right\rfloor,
+\left\lfloor
+\frac{\text{mem}_{\text{alloc}}(n) - \text{mem}_{\text{req}}(n)}{m_r}
+\right\rfloor
+\right)
+\]
+
+In addition to the balanced probe, three skewed probes are evaluated: a CPU-skewed Pod (\(H_{cpu\text{-}skewed}\)), a memory-skewed Pod (\(H_{mem\text{-}skewed}\)), and a large jumbo Pod (\(H_{jumbo}\), \(800\,m/324\,Mi\)). The balanced probe measures general schedulability, the two skewed probes measure how much single-axis capacity remains usable, and the jumbo probe measures whether the layout retains room for large indivisible workloads. Together they show that defragmentation does not merely free aggregate space but free space of the right shape.
+
 %-----------------------------------------------------------------------------%
 \subsubsection{Eviction Count and Efficiency}
 \label{subsubsec:defrag_metric_eviction}
@@ -330,6 +348,55 @@ The eviction cost behind these gains is reported in Figure \ref{fig:defrag_evict
     \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_evictions.png}
     \caption{Total Pod evictions per scenario (\(E_{count}\)).}
     \label{fig:defrag_evictions}
+\end{figure}
+
+\subsection{Shape-Specific Schedulability Yield}
+\label{sec:defrag_shape_headroom}
+
+Balanced headroom alone does not show \emph{which} kind of workload a defragmented layout can still admit. To make this explicit, the residual capacity is also probed with three skewed reference Pods: a CPU-skewed Pod, a memory-skewed Pod, and a large jumbo Pod (\(800\,m/324\,Mi\)). Table \ref{tab:defrag_shape_headroom} reports the resulting yields after descheduling.
+
+\begin{table}[H]
+    \centering
+    \caption{Schedulability Yield by Reference-Pod Shape After Descheduling}
+    \label{tab:defrag_shape_headroom}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{l cc cc cc}
+        \hline
+        & \multicolumn{2}{c}{\textbf{CPU-skewed}} & \multicolumn{2}{c}{\textbf{Memory-skewed}} & \multicolumn{2}{c}{\textbf{Jumbo}} \\
+        \textbf{Scenario} & \textbf{HNU} & \textbf{RD} & \textbf{HNU} & \textbf{RD} & \textbf{HNU} & \textbf{RD} \\
+        \hline
+        S1 & \(12\) & \(\mathbf{13}\) & \(12\) & \(\mathbf{13}\) & \(6\) & \(\mathbf{8}\) \\
+        S2 & \(9\)  & \(9\)          & \(9\)  & \(\mathbf{11}\) & \(0\) & \(\mathbf{6}\) \\
+        S3 & \(\mathbf{6}\) & \(5\)   & \(6\)  & \(\mathbf{9}\)  & \(\mathbf{4}\) & \(2\) \\
+        S4 & \(4\)  & \(\mathbf{8}\)  & \(4\)  & \(\mathbf{7}\)  & \(3\) & \(\mathbf{4}\) \\
+        S5 & \(\mathbf{12}\) & \(11\) & \(11\) & \(11\)          & \(6\) & \(\mathbf{7}\) \\
+        \hline
+    \end{tabular}
+\end{table}
+
+In the fragmentation scenarios, ResourceDefragmentation increases the yield for skewed and jumbo workloads where it matters most. In S2 and S4, where complementary CPU-heavy and memory-heavy Nodes are merged, it lifts memory-skewed yield (\(9 \to 11\) in S2, \(4 \to 7\) in S4) and restores jumbo capacity that the baseline cannot provide at all in S2 (\(0 \to 6\)), as shown in Figures \ref{fig:defrag_h_cpu_skewed}, \ref{fig:defrag_h_mem_skewed}, and \ref{fig:defrag_h_jumbo}. In S5 it matches or slightly exceeds the baseline on every shape while using fewer evictions.
+
+The two cases where HNU leads, CPU-skewed and jumbo yield in S3, reflect the same trade-off seen in the balanced headroom and stranding results: HNU empties an additional Node by greedily packing onto pre-dense targets, which leaves more whole-Pod slots free but at a slightly worse stranding score. ResourceDefragmentation instead preserves resource shape, so its remaining capacity is more evenly balanced across dimensions rather than concentrated on one emptied Node.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_cpu_skewed.png}
+    \caption{CPU-skewed schedulability yield \(H_{cpu\text{-}skewed}\) per scenario after descheduling.}
+    \label{fig:defrag_h_cpu_skewed}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_mem_skewed.png}
+    \caption{Memory-skewed schedulability yield \(H_{mem\text{-}skewed}\) per scenario after descheduling.}
+    \label{fig:defrag_h_mem_skewed}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_jumbo.png}
+    \caption{Jumbo (\(800\,m/324\,Mi\)) schedulability yield \(H_{jumbo}\) per scenario after descheduling.}
+    \label{fig:defrag_h_jumbo}
 \end{figure}
 
 \subsection{Convergence and Safety}
