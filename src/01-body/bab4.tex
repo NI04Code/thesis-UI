@@ -766,7 +766,16 @@ Figure~\ref{fig:actualusage4_failure_timeline} shows the request failures using 
     \label{fig:actualusage4_failure_timeline}
 \end{figure}
 
-The three control runs exhibit compact failure intervals after the Descheduler event, whereas the corresponding Actual Usage Evictor treatments contain no failed response. Table~\ref{tab:actualusage4_cross_strategy} separates this common application effect from the strategy-specific placement cost. The failure-rate denominator is the number of requests completed within the common interval.
+The three control runs exhibit compact failure intervals after the Descheduler event, whereas the corresponding Actual Usage Evictor treatments contain no failed response. Figure~\ref{fig:actualusage4_failure_bar} summarizes the failure rates across all six systems. The control configurations consistently produce failure rates between \(16.67\%\) and \(17.24\%\), while every treatment records \(0\%\).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{assets/pics/actual-usage/failure_rate_bar.png}
+    \caption{HTTP Failure Rate Comparison Across All Strategy Pairs}
+    \label{fig:actualusage4_failure_bar}
+\end{figure}
+
+Table~\ref{tab:actualusage4_cross_strategy} separates this common application effect from the strategy-specific placement cost. The failure-rate denominator is the number of requests completed within the common interval.
 
 \begin{table}[H]
     \centering
