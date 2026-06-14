@@ -47,7 +47,6 @@ To maintain focus and define the scope of this study, the research limitations a
 
 \begin{itemize}
     \item \textbf{Infrastructure:} Evaluation is conducted on a small-scale Kubernetes cluster using AWS EC2 nodes, with additional logical topology separation to emulate multi-region network conditions.
-    \item \textbf{Simulator:} Extended evaluation for large-scale cluster topologies is conducted using a custom Kubernetes cluster simulator.
     \item \textbf{Workload load generation:} Actual workload demand used to evaluate the pre-eviction actual-usage filter is generated using k6 load testing scenarios, rather than relying on naturally occurring production traffic.
     \item \textbf{Network:} Experiments assume standard AWS networking without specialized hardware acceleration such as SR-IOV.
     \item \textbf{Provisioning:} The cluster is provisioned using kubeadm to approximate production behavior, but excludes enterprise-grade storage features and complex service meshes unless specifically required for the evaluation scenario.
