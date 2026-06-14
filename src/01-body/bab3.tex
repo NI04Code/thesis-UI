@@ -3,7 +3,9 @@
 \label{bab:3}
 %----------------------------------------------------------------------------- %%
 
-This chapter presents the design and implementation of the two Descheduler components developed in this research. Section 3.1 describes the defragmentation-focused \textit{ResourceDefragmentation} policy. Section 3.2 describes the Network-Aware Evictor and its topology and latency-based cost models.
+This chapter presents the design and implementation of the Descheduler components developed in this research. Section 3.1 describes the defragmentation-focused \textit{ResourceDefragmentation} policy. Section 3.2 describes the Actual Usage Evictor, a runtime-usage-based pre-eviction filter. Section 3.3 describes the Network-Aware Evictor and its topology and latency-based cost models.
+
+Several components are implemented as descheduler \textit{EvictorPlugin} extensions. In this framework, the \textit{Filter} stage performs candidate filtering, while the \textit{PreEvictionFilter} stage is executed immediately before an eviction request is submitted. Pre-eviction filters can be chained, therefore a candidate Pod must pass all enabled filters before the descheduler performs the eviction. This mechanism is used by both the Actual Usage Evictor and the Network-Aware Evictor as safety gates around strategy-driven eviction decisions.
 
 \section{ResourceDefragmentation Policy Design}
 \label{sec:imbalanceindex_design}
@@ -175,6 +177,112 @@ Listing~\ref{lst:resource_defrag} summarizes the complete execution flow.
     caption={Request-based ResourceDefragmentation configuration using the ResourceDefragmentationC2 plugin.},
     label={lst:resource_defrag_config_requests},
 ]{assets/codes/pseudos/resource-defrag-config-requests.psu}
+
+\section{Actual Usage Evictor Policy Design}
+\label{sec:actualusage_policydesign}
+%----------------------------------------------------------------------------- %%
+The Actual Usage Evictor is designed to prevent eviction of Pods that are currently busy even when they are selected by a descheduler strategy. Resource-balancing strategies commonly reason about declared requests or node-level utilization, while the real workload state may change at runtime. Evicting a Pod during high CPU or memory activity can interrupt active processing and may increase service disruption. The Actual Usage Evictor addresses this issue by evaluating the current Pod metrics immediately before eviction.
+
+This plugin does not choose source nodes, destination nodes, or eviction candidates. Instead, it acts as a global pre-eviction safety gate. A candidate Pod is allowed to continue only when its current CPU and memory usage are both below the configured thresholds relative to its declared requests.
+
+\subsection{System Overview}
+\label{sec:actualusage_sysoverview}
+
+The Actual Usage Evictor is implemented as an \textit{EvictorPlugin}. Its \textit{Filter} function is a no-op and always returns true, because runtime usage is evaluated only at the \textit{PreEvictionFilter} stage. This design separates general candidate eligibility from runtime safety checking: the strategy may first select a Pod as an eviction candidate, but the Actual Usage Evictor still has the opportunity to block the eviction before the request is submitted.
+
+The plugin can be scoped using namespace rules and a Kubernetes label selector. When a Pod is outside the configured scope, the plugin allows the eviction without reading metrics. When both namespace and label selector scopes are configured, both conditions must match before the Pod is evaluated. This allows the filter to protect only selected workloads, for example latency-sensitive applications, while leaving other workloads unaffected.
+
+For Pods inside the configured scope, the plugin reads Pod metrics through the descheduler metrics collector and the Kubernetes Metrics API. The metrics of all containers in the Pod are matched against the Pod specification and aggregated before the usage ratios are calculated.
+
+\subsection{Runtime Usage Model}
+\label{sec:actualusage_model}
+
+For a Pod \(p\), let \(R_{p,c}\) and \(R_{p,m}\) denote its effective requested CPU and memory aggregated across all regular containers, and let \(A_{p,c}\) and \(A_{p,m}\) denote the corresponding actual usage obtained from Pod metrics. A Pod-level request dimension is complete only when every regular container declares an effective request for that resource. For complete CPU and memory dimensions, the runtime usage ratios are defined as:
+
+\begin{equation}
+    \rho_{p,c} = \frac{A_{p,c}}{R_{p,c}},
+    \qquad
+    \rho_{p,m} = \frac{A_{p,m}}{R_{p,m}},
+    \label{eq:actualusage_ratio}
+\end{equation}
+
+where \(\rho_{p,c}\) is the actual CPU usage ratio and \(\rho_{p,m}\) is the actual memory usage ratio. CPU is aggregated in millicores, while memory is aggregated in bytes. The Actual Usage Evictor reads effective requests from the Pod object stored by the API server. Therefore, requests introduced during admission, including defaults from a \texttt{LimitRange}, are included without requiring the plugin to query \texttt{LimitRange} objects directly.
+
+The ratios intentionally compare usage with requests rather than with resource limits or Node capacity. Requests are the workload baseline used for scheduler placement and request-space defragmentation, so the ratio expresses whether a Pod is active relative to that baseline. Limits instead define runtime enforcement ceilings. Replacing a request denominator with a limit would change the decision from busy-Pod protection to detecting proximity to CPU throttling or a memory out-of-memory boundary.
+
+Given CPU threshold \(\theta_c\) and memory threshold \(\theta_m\), the eviction is blocked when either resource reaches or exceeds its threshold:
+
+\begin{equation}
+    \rho_{p,c} \geq \theta_c
+    \quad \lor \quad
+    \rho_{p,m} \geq \theta_m.
+    \label{eq:actualusage_block_condition}
+\end{equation}
+
+Therefore, a Pod is allowed to be evicted only when both usage ratios are below their thresholds:
+
+\begin{equation}
+    \rho_{p,c} < \theta_c
+    \quad \land \quad
+    \rho_{p,m} < \theta_m.
+    \label{eq:actualusage_allow_condition}
+\end{equation}
+
+The default values \(\theta_c = 0.80\) and \(\theta_m = 0.80\) are configurable thresholds used to classify a Pod as busy relative to its effective requests. A ratio of \(0.80\) means that the observed usage has reached \(80\%\) of the configured request. It does not by itself indicate that the Pod is close to resource saturation because requests can represent different workload baselines.
+
+The interpretation of the threshold therefore depends on request calibration and workload behavior. When a request equals its limit, a threshold of \(0.80\) also corresponds to \(80\%\) of the enforcement ceiling. When a request is lower than its limit, the same ratio indicates usage relative to the scheduling baseline but does not indicate proximity to the runtime ceiling. A workload with a small request and a large limit can frequently produce ratios above one. Thresholds greater than one are valid for intentionally bursty workloads. For example, a threshold of \(10.0\) blocks eviction when usage reaches ten times the request. Operators can adjust the threshold according to how requests represent the expected demand of workloads within the plugin's scope.
+
+When any regular container lacks an effective request for a resource, the entire Pod-level dimension is marked as missing. The plugin does not divide aggregate usage by the requests of only the remaining containers because such a partial denominator would overstate usage relative to an incomplete baseline. Missing CPU and memory dimensions are evaluated independently using \textit{missingRequestPolicy}.
+
+With the default \texttt{Allow} policy, a missing dimension is skipped and contributes \(\mathrm{busy}=\mathrm{false}\). The other resource dimension can still block eviction through the OR condition in Equation~\ref{eq:actualusage_block_condition}. With \texttt{Block}, a missing dimension contributes \(\mathrm{busy}=\mathrm{true}\) and blocks eviction. The default does not assert that a Pod without requests is idle or that eviction is harmless. It indicates only that the plugin has no request-relative denominator from which to infer busyness. Operators can select \texttt{Block} when a conservative missing-request behavior is required.
+
+\subsection{Eviction Decision Workflow and Algorithm}
+\label{sec:actualusage_algorithm}
+
+Listing~\ref{lst:actualusage_algorithm} summarizes the Actual Usage Evictor decision workflow. The algorithm first checks whether the candidate Pod is inside the configured namespace and label scope. Pods outside the scope are allowed immediately because the plugin is not responsible for protecting them.
+
+\lstinputlisting[
+    caption={Actual Usage Evictor pre-eviction filtering algorithm.},
+    label={lst:actualusage_algorithm},
+]{assets/codes/pseudos/actualusage/unifiedalgo.psu}
+
+For scoped Pods, the plugin retrieves the latest Pod metrics from the metrics client and matches them with every regular container in the Pod specification. Missing or incomplete metrics block the eviction. For each resource, the plugin separately determines whether every container has an effective request. A complete dimension is aggregated and compared with its configured threshold. An incomplete request dimension is not divided by a partial aggregate request and is instead resolved using \textit{missingRequestPolicy}. Eviction is blocked when either the CPU or memory dimension reports \(\mathrm{busy}=\mathrm{true}\). Otherwise, the Pod passes the filter and the Descheduler may continue with the next pre-eviction filter or the final eviction request.
+
+This workflow complements request-based strategies such as \textit{ResourceDefragmentation}. A strategy may select a Pod because moving it improves cluster packing, but the Actual Usage Evictor can still reject the eviction when runtime metrics indicate that the Pod is actively consuming its requested resources.
+
+\subsection{Failure and Safety Behavior}
+\label{sec:actualusage_safety}
+
+The Actual Usage Evictor distinguishes unavailable runtime observations from absent declared request baselines. Runtime observations remain fail-closed: if the metrics collector or metrics client is unavailable, Pod metrics cannot be read, or any regular container has incomplete CPU or memory metrics, the eviction is blocked.
+
+Missing requests follow \textit{missingRequestPolicy} instead of the metrics failure path. This distinction is necessary because unavailable metrics leave the plugin unable to observe whether the Pod is busy, whereas a missing request leaves the plugin without a denominator for interpreting an otherwise available observation. The default \texttt{Allow} policy skips only the affected resource dimension; it does not change the fail-closed behavior for missing or incomplete metrics.
+
+\subsection{Plugin Configuration}
+\label{sec:actualusage_config}
+
+\begin{table}[H]
+    \centering
+    \caption{Actual Usage Evictor Plugin Arguments}
+    \label{tab:actualusage_args}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabular}{l l l p{7.0cm}}
+        \hline
+        \textbf{Parameter} & \textbf{Type} & \textbf{Default} & \textbf{Purpose} \\
+        \hline
+        \textit{cpuUsageThreshold} & float & \(0.80\) & Blocks eviction when actual CPU usage divided by effective requested CPU reaches the configured threshold. \\
+        \textit{memoryUsageThreshold} & float & \(0.80\) & Blocks eviction when actual memory usage divided by effective requested memory reaches the configured threshold. \\
+        \textit{missingRequestPolicy} & string & \textit{Allow} & Controls a resource dimension with a missing request. \textit{Allow} skips the dimension; \textit{Block} rejects the eviction. \\
+        \textit{namespaces} & object & optional & Restricts the Pods evaluated by this plugin using namespace include or exclude rules. \\
+        \textit{labelSelector} & object & optional & Restricts the Pods evaluated by this plugin using Kubernetes label matching. \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\lstinputlisting[
+    caption={Actual Usage Evictor configuration as a global pre-eviction filter.},
+    label={lst:actualusage_config},
+]{assets/codes/pseudos/actualusage/config.psu}
 
 \section{Network-Aware Evictor Policy Design}
 \label{sec:netaware_policydesign}

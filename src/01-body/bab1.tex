@@ -13,9 +13,11 @@ Fragmentation affects schedulability, utilization, and infrastructure cost. A No
 
 The Kubernetes Descheduler provides a post-placement correction mechanism by evicting selected Pods and allowing the kube-scheduler to place their replacements~\citep{k8s_descheduler_docs}. For node reclamation, the important question is not merely whether a source Node is lightly utilized, but whether an evicted Pod has a feasible target that produces denser and better-shaped packing. This requires source-node assessment, target prediction, and an eviction budget that limits disruption.
 
+However, eviction is not free. A defragmentation policy evaluates Pods primarily through their declared resource requests, because requests determine scheduler feasibility and bin-packing shape. In practice, a Pod selected as beneficial for resource defragmentation may still be serving high live demand at the moment eviction is attempted. Evicting such a Pod introduces a transient service cost: the original Pod is terminated, the replacement must wait for scheduling, image preparation, startup, readiness, and traffic reattachment, and during this interval the application may experience reduced capacity or degraded performance. Therefore, a practical defragmentation architecture also requires a pre-eviction filter that checks actual resource usage before allowing an eviction to proceed.
+
 Resource packing can also affect application communication. Moving dependent microservices to distant or degraded Nodes may improve compute packing while increasing latency. Communication-aware placement studies show that network topology, observed latency, and service dependencies can materially affect placement quality~\citep{marchese2022network,marchese_tomarchio_2022,chen2024trade}. A practical node reclamation architecture therefore also needs a network-aware guardrail.
 
-This research develops a defragmentation-focused Descheduler architecture with two complementary components. \textit{ResourceDefragmentation} identifies drain candidates using utilization and CPU-memory shape, predicts feasible scheduler targets, and chooses a Pod using the projected bin score of its predicted landing Node. A network-aware filtering layer blocks evictions whose feasible destinations would degrade communication locality.
+This research develops a defragmentation-focused Descheduler architecture with complementary guardrails. \textit{ResourceDefragmentation} identifies drain candidates using utilization and CPU-memory shape, predicts feasible scheduler targets, and chooses a Pod using the projected bin score of its predicted landing Node. An actual-usage pre-eviction filter blocks evictions when the selected Pod is currently consuming high live resources, reducing the risk of performance degradation during replacement. A network-aware filtering layer further blocks evictions whose feasible destinations would degrade communication locality.
 
 \section{Problem Statement}
 \label{sec:problemStatement}
@@ -24,6 +26,7 @@ The study addresses the following problems:
 
 \begin{enumerate}
     \item \textbf{Resource fragmentation:} CPU and memory may remain available in aggregate but become scattered across Nodes in incompatible shapes. CPU-heavy and memory-heavy placements can strand one resource dimension behind another, while scheduler bin-packing scores only act during initial placement and do not repair fragmentation that has accumulated in an already running cluster.
+    \item \textbf{Actual-usage eviction risk:} A Pod that looks beneficial to evict from a resource-request and bin-packing perspective may still be handling high live demand when eviction is attempted. Evicting such a Pod can temporarily reduce application capacity because the replacement Pod must be scheduled, started, become ready, and reconnect to traffic before service capacity is restored. Therefore, defragmentation decisions need a pre-eviction guardrail that considers actual resource usage, not only declared resource requests.
     \item \textbf{Network-locality risk:} Eviction decisions that focus only on cluster rebalance can separate network dependent services and increase communication overhead, especially in multi-node or multi-zone deployments.
 \end{enumerate}
 
@@ -33,6 +36,7 @@ The study addresses the following problems:
 \begin{itemize}
     \item How can a Descheduler policy identify fragmented Nodes whose CPU-memory shape should be corrected through Pod eviction?
     \item How effectively does the proposed policy reclaim Nodes, reduce stranded capacity, preserve balanced headroom, and converge compared with utilization-based descheduling baselines?
+    \item How can an actual-usage pre-eviction filtering mechanism implemented in Kubernetes Descheduler reduce the risk of evicting Pods under high live demand while preserving cluster fragmentation reduction?
     \item How can a network-aware filtering mechanism implemented in Kubernetes Descheduler affect the trade-off between cluster fragmentation reduction and communication latency compared with a non-network-aware baseline?
 \end{itemize}
 
@@ -43,7 +47,7 @@ To maintain focus and define the scope of this study, the research limitations a
 
 \begin{itemize}
     \item \textbf{Infrastructure:} Evaluation is conducted on a small-scale Kubernetes cluster using AWS EC2 nodes, with additional logical topology separation to emulate multi-region network conditions.
-    \item \textbf{Simulator:} Extended evaluation for large-scale cluster topologies is conducted using a custom Kubernetes cluster simulator.
+    \item \textbf{Workload load generation:} Actual workload demand used to evaluate the pre-eviction actual-usage filter is generated using k6 load testing scenarios, rather than relying on naturally occurring production traffic.
     \item \textbf{Network:} Experiments assume standard AWS networking without specialized hardware acceleration such as SR-IOV.
     \item \textbf{Provisioning:} The cluster is provisioned using kubeadm to approximate production behavior, but excludes enterprise-grade storage features and complex service meshes unless specifically required for the evaluation scenario.
     \item \textbf{Framework dependencies:} The solution is implemented within the Kubernetes Descheduler framework; it determines which Pods should be evicted, while final placement remains the responsibility of the kube-scheduler.
@@ -56,8 +60,10 @@ To maintain focus and define the scope of this study, the research limitations a
 \begin{itemize}
     \item Design a defragmentation-focused Descheduler policy that combines utilization and resource-shape assessment by quantifying dimensional skew and free-space pressure using RII, FSI, and a CPU-memory bin score.
     \item Evaluate the policy's effectiveness in freeing up underutilized infrastructure, reducing wasted resources, and increasing usable capacity, while ensuring minimal disruption and cluster stability.
-    \item Design and integrate network-aware filtering that protects network locality of a pod during workload eviction.
-    \item Evaluate the network-aware filtering's effect and it trade-off with cluster fragmentation reduction.
+    \item Design and integrate an actual-usage pre-eviction filter that prevents high-demand Pods from being evicted during workload replacement.
+    \item Evaluate the actual-usage filter's effect on eviction safety and its trade-off with cluster fragmentation reduction.
+    \item Design and integrate network-aware filtering that protects network locality of a Pod during workload eviction.
+    \item Evaluate the network-aware filtering's effect and its trade-off with cluster fragmentation reduction.
 \end{itemize}
 
 \section{Research Contributions}
@@ -66,6 +72,7 @@ To maintain focus and define the scope of this study, the research limitations a
 \begin{itemize}
     \item Design and implement \textit{ResourceDefragmentation}, a defragmentation-focused Descheduler policy that repairs post-placement scatter without replacing the kube-scheduler.
     \item Evaluate the policy's effectiveness in reducing fragmentation, improving usable capacity, and supporting cluster consolidation while minimizing disruption and preserving cluster stability.
+    \item Implement and evaluate actual-usage cost filtering to guard high-demand Pods from disruptive eviction and assess its trade-off with fragmentation reduction.
     \item Implement and evaluate topology- or latency-based network cost filtering to guard network-dependent services from harmful movement and assess its trade-off with fragmentation reduction.
 \end{itemize}
 
@@ -74,15 +81,16 @@ To maintain focus and define the scope of this study, the research limitations a
 
 Prior studies have addressed several parts of the problem targeted by this research. Early work on dynamic resource allocation, such as \citet{xiao2013dynamic}, shows that multi-dimensional resource skewness can reduce effective server utilization. However, these approaches were primarily designed for traditional virtual-machine environments and often rely on static threshold-based heuristics. More recent work has studied container resource defragmentation and task scheduling using optimization or learning-based methods~\citep{guo2025joint,bagaa2024multiobjective}, but these studies are commonly oriented toward placement or scheduling decisions rather than long-term post-placement correction in Kubernetes clusters.
 
-Kubernetes-specific research has also shown that resource fragmentation can emerge over time and that directed Pod eviction can improve utilization~\citep{mishra_bellur_2016,larsson_klein_elmroth_2023}. Nevertheless, fragmentation-aware consolidation by itself is not sufficient for microservice workloads because improving packing can accidentally worsen communication locality. Network-aware placement studies show that service communication patterns and network conditions can affect placement quality~\citep{marchese2022network,marchese_tomarchio_2022,chen2024trade}, but these works do not fully address how such considerations should be integrated into a Descheduler-based consolidation policy.
+Kubernetes-specific research has also shown that resource fragmentation can emerge over time and that directed Pod eviction can improve utilization~\citep{larsson_klein_elmroth_2023}. Nevertheless, fragmentation-aware consolidation by itself is not sufficient for production-oriented microservice workloads. A Pod that is attractive to evict from a resource-request perspective may still be serving high live demand when the eviction is executed. In that case, a consolidation decision that appears beneficial at the placement level may impose temporary service capacity loss during termination, rescheduling, startup, readiness recovery, and traffic reattachment. Network-aware placement studies show that service communication patterns and network conditions can affect placement quality~\citep{marchese2022network,marchese_tomarchio_2022,chen2024trade}, but these works do not fully address how such considerations should be integrated into a Descheduler-based consolidation policy.
 
 Another related direction is group or gang-style movement, where dependent services are moved together to preserve affinity. While this approach can protect communication locality, it may increase the risk of resource deadlock or failed movement because the scheduler must find enough capacity for a larger combined group. For a fragmentation-oriented Descheduler policy, this can worsen the packing problem instead of solving it. Therefore, this research positions itself away from strictly atomic group migration and instead adopts a non-atomic, individual scoring paradigm.
 
-This study addresses the gap by developing a Descheduler-based framework that combines multi-dimensional resource imbalance analysis and network-aware eviction considerations. The proposed direction uses a mathematical imbalance index ($RII_i$) and a resource defragmentation algorithm to target specific Pods that contribute to stranded capacity, while adding network-aware filtering so that consolidation decisions are less likely to degrade communication latency.
+This study addresses the gap by developing a Descheduler-based framework that combines multi-dimensional resource imbalance analysis, actual-usage eviction safety, and network-aware eviction considerations. The proposed direction uses a mathematical imbalance index ($RII_i$) and a resource defragmentation algorithm to target specific Pods that contribute to stranded capacity, while adding actual-usage cost filtering and network-aware filtering so that consolidation decisions are less likely to disrupt high-demand Pods or degrade communication latency.
 
 The research position can be summarized as follows:
 \begin{itemize}
     \item It broadens resource balancing beyond simple utilization thresholds by considering multi-dimensional imbalance and stranded capacity.
+    \item It treats actual runtime usage as a pre-eviction safety guardrail, separating scheduler feasibility from the service cost of disrupting a busy Pod.
     \item It uses individual, score-based eviction rather than atomic group migration when evaluating network sensitive pods to reduce the risk of deadlock and excessive fragmentation.
     \item It incorporates network-aware considerations as a guardrail for consolidation decisions, connecting fragmentation reduction with network-locality preservation.
 \end{itemize}
@@ -92,9 +100,10 @@ The research position can be summarized as follows:
 
 \begin{enumerate}
     \item Review current Kubernetes scheduling, fragmentation, node reclamation, Descheduler policies, and communication-aware placement.
-    \item Design Implement the resource defragmentation and network-aware plugins in the Kubernetes Descheduler framework.
+    \item Design, implement the resource defragmentation and network-aware plugins in the Kubernetes Descheduler framework.
     \item Evaluate the resource defragmentation policy on five controlled scenarios and compare it with \textit{NodeUtilization} strategy.
-    \item Evaluate network-aware filtering using topology and latency-sensitive workloads to analyze its trade-off with cluster fragmentation reduction.
+    \item Implement and evaluate actual-usage filtering using runtime workload demand to analyze its trade-off with cluster fragmentation reduction.
+    \item Implement and evaluate network-aware filtering using topology and latency-sensitive workloads to analyze its trade-off with cluster fragmentation reduction.
     \item Analyze reclamation, stranding, headroom, eviction efficiency, convergence, safety, and latency outcomes.
 \end{enumerate}
 
