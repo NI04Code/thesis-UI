@@ -3,7 +3,7 @@
 \label{bab:4}
 %-----------------------------------------------------------------------------%
 
-This chapter evaluates the developed Descheduler policies. Section 4.1 compares \textit{ResourceDefragmentation} with the upstream \textit{HighNodeUtilization} strategy across five node reclamation and fragmentation scenarios. Section 4.2 evaluates the application-protection and defragmentation trade-off of the Actual Usage Evictor. Section 4.3 evaluates the latency and resource trade-off of the Network-Aware Evictor.
+This chapter evaluates the developed Descheduler policies. Section 4.1 compares \textit{ResourceDefragmentation} with the upstream \textit{HighNodeUtilization} strategy across five node reclamation and fragmentation scenarios. Section 4.2 evaluates how the Actual Usage Evictor protects a busy application Pod under \textit{ResourceDefragmentation}, \textit{HighNodeUtilization}, and \textit{LowNodeUtilization}, and measures the resulting effect on each strategy's placement objective. Section 4.3 evaluates the latency and resource trade-off of the Network-Aware Evictor.
 
 \section{ResourceDefragmentation Evaluation}
 \label{sec:resource_defrag_evaluation}
@@ -433,18 +433,63 @@ The evaluation yields four main findings:
     \item The policy converges without leaving Pods Pending, showing that node reclamation pressure can be combined with explicit feasibility and utilization guards.
 \end{itemize}
 
-\section{Actual Usage Eviction Trade-off Test}
+\section{Actual Usage Evictor Evaluation}
 \label{sec:actualusage4_test}
 %-----------------------------------------------------------------------------%
-This section evaluates the trade-off between application protection and cluster defragmentation introduced by the Actual Usage Evictor. The experiment isolates a single decision point in which \textit{ResourceDefragmentationC2} selects a Pod that is structurally beneficial to evict from a request-space perspective but is actively serving user-facing traffic at runtime. The Actual Usage Evictor is expected to block this eviction based on live CPU and memory metrics, after which the strategy must fall back to a structurally equivalent but idle candidate. Two configurations are compared: a control profile that uses only \textit{ResourceDefragmentationC2} with the default evictor, and a treatment profile that adds the Actual Usage Evictor as a global pre-eviction filter. The evaluation measures whether the plugin protects the busy Pod, whether the strategy still acts on the source Node, and how much of the defragmentation benefit is preserved.
+This section evaluates whether the Actual Usage Evictor can protect a currently busy application Pod across different Descheduler balancing objectives. Three control-treatment pairs are evaluated under sustained API traffic. Each control enables a balancing strategy with the Default Evictor, while the corresponding treatment adds the Actual Usage Evictor as a global pre-eviction filter. The filter is expected to reject the busy API Pod while continuing to permit idle candidates.
+
+The primary evaluation concerns application availability. It measures whether protecting the busy Pod reduces failed requests and service disruption following the Descheduler event. The cluster-side effect is evaluated according to the objective of each strategy. \textit{ResourceDefragmentation} is assessed through stranding reduction, \textit{HighNodeUtilization} through active-Node reduction, and \textit{LowNodeUtilization} through normalized CPU and memory request-deviation reduction. This design distinguishes the common application-protection effect from the strategy-specific cost of excluding a busy eviction candidate.
 
 %-----------------------------------------------------------------------------%
-\subsection{Experimental Setup and Cluster Layout}
+\subsection{Evaluation Scope}
+\label{subsec:actualusage4_scope}
+%-----------------------------------------------------------------------------%
+The evaluation uses controlled scenarios for \textit{ResourceDefragmentation}, \textit{HighNodeUtilization}, and \textit{LowNodeUtilization}. Each scenario is designed to place a busy API Pod among the eviction candidates while preserving the placement objective of the evaluated strategy. The results therefore characterize the behavior of the Actual Usage Evictor in these controlled layouts rather than every possible cluster layout or workload composition.
+
+Application availability is evaluated primarily through HTTP failure rate and service disruption duration. Successful-request tail latency is reported as a secondary metric because transient variation is present in the individual runs. The configured usage threshold of \(0.80\) is used to evaluate whether request-relative runtime filtering changes the eviction outcome. The experiment does not attempt to determine an optimal threshold value.
+
+%-----------------------------------------------------------------------------%
+\subsection{Experimental Design}
 \label{subsec:actualusage4_experimentsetup}
 %-----------------------------------------------------------------------------%
-The experiment reuses the cluster topology of Section~\ref{sec:resource_defrag_evaluation}: one control-plane Node and six worker Nodes, each providing \(2000\,m\) allocatable CPU and approximately \(811\,Mi\) allocatable memory. The scheduler again uses \texttt{MostAllocated} and \texttt{BalancedAllocation}, the drain threshold is \(0.40\), and the target-utilization ceiling is \(0.90\). A single Descheduler pass is performed per run because the goal is to inspect one eviction decision in isolation rather than to drive the cluster to a fixed point.
+\subsubsection{Common Workload and Load Generation}
+\label{subsubsec:actualusage4_load}
 
-The initial layout is a modified variant of the S2 reducible-stranding scenario. Three CPU-skewed worker Nodes, two memory-skewed worker Nodes, and one source Node carry the twelve experiment Pods listed in Table~\ref{tab:actualusage4_layout}. The source Node (worker-6) is memory-skewed and hosts two Pods with the same CPU request but different memory requests: a user-facing api Pod and an idle memory-shaped worker Pod. This composition is the smallest layout in which \textit{ResourceDefragmentationC2} deterministically selects the api Pod first while still leaving a structurally valid fallback candidate on the same Node.
+Every comparison uses six worker Nodes and a singleton API Pod exposed through a dedicated NodePort Service. A \textit{k6} constant-arrival-rate workload sends approximately eight requests per second only to this Service. Other experiment Pods do not receive foreground traffic. Each request performs fixed CPU work in the API container, whose CPU request is \(50\,m\) and CPU limit is \(1000\,m\).
+
+The Descheduler is triggered only after two consecutive Metrics API samples show that the API Pod's CPU usage exceeds the configured ratio of \(0.80\). The decision-time ratios are \(11.98\) in R1, approximately \(10.02\) in H1, and approximately \(10.10\) in L1. These values confirm that the candidate is busy relative to its request. The CPU limit allows the container to burst above \(50\,m\), but it is not a denominator in the Actual Usage Evictor decision.
+
+Application results are normalized to the first \(30\) seconds after the recorded Descheduler event. R0 and R1 use a \(30\)-second post-event capture. The longer HNU and LNU captures are truncated to the same event-aligned interval. Failure-rate denominators therefore contain only requests completed within this common window.
+
+\subsubsection{Strategy-Specific Cluster Layouts}
+\label{subsubsec:actualusage4_layouts}
+
+The three pairs use layouts that expose the placement objective of each balancing strategy, as summarized in Table~\ref{tab:actualusage4_layouts}.
+
+\begin{table}[H]
+    \centering
+    \caption{Strategy-Specific Layouts for Actual Usage Evaluation}
+    \label{tab:actualusage4_layouts}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l p{7.2cm} p{5.2cm}}
+        \toprule
+        \textbf{Pair} & \textbf{Initial layout} & \textbf{Intended strategy action} \\
+        \midrule
+        R0/R1 & Complementary CPU- and memory-skewed Nodes. The API and an idle memory Pod share worker-6. & Move one source Pod to reduce request-space stranding. \\
+        H0/H1 & Three dense destination Nodes and three underutilized one-Pod source Nodes. The busy API is isolated on worker-6. & Empty source Nodes and reduce the active-Node count. \\
+        L0/L1 & Three underutilized destination Nodes and three overutilized source Nodes. The API and an idle fallback share worker-6. & Move one Pod from each source and reduce utilization deviation. \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+HNU uses the \texttt{NodeResourcesFit} scheduler plugin with \texttt{MostAllocated} scoring so replacement Pods are packed onto the three destination Nodes. LNU uses the default \texttt{LeastAllocated} scheduler so evicted Pods are distributed to the underutilized Nodes. The ResourceDefragmentation pair uses the request-space layout described below.
+
+\subsubsection{ResourceDefragmentation Layout and Candidate Ordering}
+\label{subsubsec:actualusage4_candidateordering}
+
+The initial layout is a modified variant of the S2 reducible-stranding scenario. Three CPU-skewed worker Nodes, two memory-skewed worker Nodes, and one source Node carry the twelve experiment Pods listed in Table~\ref{tab:actualusage4_layout}. The source Node (worker-6) is memory-skewed and hosts two Pods with the same CPU request but different memory requests. These are a user-facing API Pod and an idle memory-shaped worker Pod. This composition is the smallest layout in which \textit{ResourceDefragmentationC2} deterministically selects the API Pod first while still leaving a structurally valid fallback candidate on the same Node.
 
 \begin{table}[H]
     \centering
@@ -461,83 +506,65 @@ The initial layout is a modified variant of the S2 reducible-stranding scenario.
         worker-3 & cpu-skewed & 2 cpu Pods (\(750\,m\) / \(20\,Mi\) each) & \(0.80\) & \(0.11\) & none \\
         worker-4 & mem-skewed & 2 mem Pods (\(50\,m\) / \(240\,Mi\) each) & \(0.10\) & \(0.65\) & none \\
         worker-5 & mem-skewed & 2 mem Pods (\(50\,m\) / \(240\,Mi\) each) & \(0.10\) & \(0.65\) & none \\
-        worker-6 & source (mem) & 1 api (\(50\,m\) / \(240\,Mi\)) + 1 mem (\(50\,m\) / \(200\,Mi\)) & \(0.10\) & \(0.60\) & api only \\
+        worker-6 & source (mem) & 1 API (\(50\,m\) / \(240\,Mi\)) + 1 mem (\(50\,m\) / \(200\,Mi\)) & \(0.10\) & \(0.60\) & API only \\
         \hline
     \end{tabular}%
     }
 \end{table}
 
-The api Pod is exposed by a dedicated NodePort Service whose selector matches only the api Deployment. The memory Pod has no Service. Traffic is therefore routed deterministically to the api Pod and is independent of \texttt{kube-proxy} round-robin distribution. This layout satisfies three properties that are necessary for the experiment to be meaningful:
+The API Pod is exposed by a dedicated NodePort Service whose selector matches only the API Deployment. The memory Pod has no Service. Traffic is therefore routed deterministically to the API Pod and is independent of \texttt{kube-proxy} round-robin distribution. This layout satisfies three properties that are necessary for the experiment to be meaningful:
 
 \begin{itemize}
     \item Both source-Node Pods have identical CPU requests, so they appear equivalent under any CPU-only filter.
-    \item The api Pod has a strictly larger memory request (\(240\,Mi\)) than the memory Pod (\(200\,Mi\)), so \textit{ResourceDefragmentationC2} consistently selects the api Pod first when ranking by projected target bin score on a CPU-skewed destination.
-    \item Only the api Pod receives traffic, so any disruption from evicting the api Pod is fully visible at the application boundary rather than being diluted across multiple replicas behind a single Service.
+    \item The API Pod has a strictly larger memory request (\(240\,Mi\)) than the memory Pod (\(200\,Mi\)), so \textit{ResourceDefragmentationC2} consistently selects the API Pod first when ranking by projected target bin score on a CPU-skewed destination.
+    \item Only the API Pod receives traffic, so any disruption from evicting the API Pod is fully visible at the application boundary rather than being diluted across multiple replicas behind a single Service.
 \end{itemize}
 
 %-----------------------------------------------------------------------------%
-\subsubsection{Eviction Candidate Ordering}
-\label{subsubsec:actualusage4_candidateordering}
-%-----------------------------------------------------------------------------%
-\textit{ResourceDefragmentationC2} ranks candidate Pods on a source Node by the projected bin score of the predicted target Node after placement. For Pods on the memory-skewed source Node, the predicted target is one of the CPU-skewed Nodes (worker-1, worker-2, or worker-3), which has approximately \(1600\,m\) CPU and \(90\,Mi\) memory already requested before placement. Applying the bin-score model to the two source-Node Pods on a representative CPU-skewed target yields:
+\textit{ResourceDefragmentationC2} predicts a CPU-skewed destination for each worker-6 candidate. The API Pod (\(50\,m/240\,Mi\)) produces a projected target bin score of \(0.633\), while the idle memory Pod (\(50\,m/200\,Mi\)) produces \(0.596\). The API Pod is therefore considered first. The Actual Usage Evictor does not modify this ranking because it operates at the \textit{PreEvictionFilter} stage after the strategy has selected a candidate.
 
-\begin{itemize}
-    \item \textbf{api Pod} (\(50\,m\) / \(240\,Mi\)): post-placement utilization \(1750\,m\) / \(380\,Mi\), giving \(u_{\text{cpu}} = 0.875\) and \(u_{\text{mem}} = 0.469\). The corresponding bin score is \((d + b)/2 = (0.672 + 0.594)/2 = 0.633\).
-    \item \textbf{memory Pod} (\(50\,m\) / \(200\,Mi\)): post-placement utilization \(1750\,m\) / \(340\,Mi\), giving \(u_{\text{cpu}} = 0.875\) and \(u_{\text{mem}} = 0.419\). The corresponding bin score is \((0.647 + 0.544)/2 = 0.596\).
-\end{itemize}
-
-The api Pod scores higher because its larger memory request better balances the CPU-skewed target. \textit{ResourceDefragmentationC2} therefore selects the api Pod first in both configurations. The Actual Usage Evictor cannot influence this ranking because it operates only at the \textit{PreEvictionFilter} stage; it can either approve or block the eviction request after the strategy has already committed to its top candidate.
+In HNU, the busy API occupies one of the three source Nodes that the strategy attempts to empty. Protecting the API therefore leaves worker-6 active. In LNU, the busy API is considered before an idle fallback on worker-6. Blocking the API allows the strategy to use the fallback and still complete one successful eviction from that source.
 
 %-----------------------------------------------------------------------------%
-\subsubsection{Load Generation and Threshold Gating}
-\label{subsubsec:actualusage4_load}
-%-----------------------------------------------------------------------------%
-A single \textit{k6} process drives constant-arrival-rate traffic to the api Service throughout the run. The api container declares a \(50\,m\) CPU request and a \(1000\,m\) CPU limit. The request rate is calibrated so that sustained load produces an observed CPU usage of \(599\,m\), corresponding to a request-relative ratio of \(599/50 = 11.98\), while remaining below the runtime CPU limit. The limit allows the container to burst above its request and can cap observed consumption through throttling, but it is not a denominator in the Actual Usage Evictor decision. Each request consumes a fixed amount of CPU work in the application container, which produces a stable usage signal at the Metrics API.
-
-To eliminate sampling races between the descheduler and the Metrics API, the run script gates on two consecutive Metrics API samples in which the api Pod's CPU ratio exceeds \(0.80\) before the Descheduler pass is triggered. After the pass, a 60-second pre-eviction window and a 120-second post-eviction window are recorded for the per-window latency analysis.
-
-Two foreground conditions are exercised. The \textit{loaded} condition runs k6 at the calibrated rate, so the api Pod is busy at the moment of eviction. The \textit{no-load} condition skips k6 entirely, so all Pods are idle and the api Pod's CPU ratio remains near zero. The no-load condition serves as a sanity check that the Actual Usage Evictor does not perturb the descheduler when no Pod is actually busy.
-
-%-----------------------------------------------------------------------------%
-\subsection{Testing Scenario}
+\subsection{Comparison Systems}
 \label{subsec:actualusage4_scenario}
 %-----------------------------------------------------------------------------%
-The evaluation matrix combines two configurations and two foreground conditions, as summarized in Table~\ref{tab:actualusage4_matrix}. Both configurations share the same balancing strategy and the same default evictor; the only difference is whether the Actual Usage Evictor is registered as an additional pre-eviction filter.
+Each pair differs only in whether the Actual Usage Evictor is registered after the Default Evictor, as shown in Table~\ref{tab:actualusage4_matrix}.
 
 \begin{table}[H]
     \centering
-    \caption{Experimental Matrix for the Actual Usage Eviction Test}
+    \caption{Actual Usage Evictor Comparison Systems}
     \label{tab:actualusage4_matrix}
     \renewcommand{\arraystretch}{1.2}
     \resizebox{\textwidth}{!}{%
     \begin{tabular}{l l l l}
-        \hline
-        \textbf{Run} & \textbf{Strategy} & \textbf{Pre-eviction filters} & \textbf{Foreground load} \\
-        \hline
-        R0 (loaded)   & ResourceDefragmentationC2 & DefaultEvictor                          & k6 api-load \\
-        R1 (loaded)   & ResourceDefragmentationC2 & DefaultEvictor + ActualUsageEvictor     & k6 api-load \\
-        R0 (no-load)  & ResourceDefragmentationC2 & DefaultEvictor                          & none \\
-        R1 (no-load)  & ResourceDefragmentationC2 & DefaultEvictor + ActualUsageEvictor     & none \\
-        \hline
+        \toprule
+        \textbf{Run} & \textbf{Strategy} & \textbf{Pre-eviction filters} & \textbf{Load} \\
+        \midrule
+        R0 & ResourceDefragmentationC2 & DefaultEvictor & k6 API load \\
+        R1 & ResourceDefragmentationC2 & DefaultEvictor + ActualUsageEvictor & k6 API load \\
+        H0 & HighNodeUtilization & DefaultEvictor & k6 API load \\
+        H1 & HighNodeUtilization & DefaultEvictor + ActualUsageEvictor & k6 API load \\
+        L0 & LowNodeUtilization & DefaultEvictor & k6 API load \\
+        L1 & LowNodeUtilization & DefaultEvictor + ActualUsageEvictor & k6 API load \\
+        \bottomrule
     \end{tabular}%
     }
 \end{table}
 
-R0 acts as the control: it forces the descheduler to act on the strategy's top-ranked candidate without runtime safety filtering. R1 introduces the Actual Usage Evictor with default eviction-threshold ratios of \(0.80\) for both CPU and memory. The loaded pair (R0--R1) measures the application-protection effect under realistic application demand. The no-load pair confirms that the plugin is inactive when no Pod exceeds the threshold, so any difference between R0 and R1 in the loaded pair must come from runtime usage rather than from changes to request-space logic.
-
-The value \(0.80\) classifies a Pod as busy when its observed usage reaches \(80\%\) of its effective request. All Pods in this experiment declare positive CPU and memory requests, so both resource dimensions have valid request-relative denominators. The interpretation of this threshold is therefore tied to the request calibration of the evaluated workloads.
+The zero-suffix systems are controls without runtime safety filtering. The one-suffix systems use CPU and memory usage thresholds of \(0.80\). All evaluated Pods declare positive CPU and memory requests, so both dimensions have valid request-relative denominators.
 
 %-----------------------------------------------------------------------------%
 \subsection{Evaluation Metrics}
 \label{subsec:actualusage4_evaluationmetrics}
 %-----------------------------------------------------------------------------%
-The success of each configuration is assessed through four metric groups. The first measures whether the plugin's mechanism activates as designed. The second and third measure the application-level effect of the eviction decision on the workload that was either evicted or protected. The fourth reuses the request-space metrics introduced in Section~\ref{sec:defrag_metrics} so that the cluster trade-off can be expressed in the same units as the resource policy evaluation.
+The evaluation separates common application and eviction metrics from placement metrics that follow the objective of each strategy.
 
 %-----------------------------------------------------------------------------%
-\subsubsection{Actual Usage Block Count}
+\subsubsection{Common Application and Eviction Metrics}
 \label{subsubsec:actualusage4_metric_blocks}
 %-----------------------------------------------------------------------------%
-The Actual Usage Block Count (\(B\)) is the number of times the Actual Usage Evictor rejects an eviction request from a strategy because at least one resource ratio exceeds its eviction-threshold ratio. The value is extracted from the descheduler log by counting lines that record a blocking decision together with the offending Pod identity:
+The Actual Usage Block Count (\(B\)) records how many candidate evictions are rejected because at least one request-relative usage ratio reaches its threshold:
 
 \[
 B
@@ -545,69 +572,65 @@ B
 \sum_{j \in J} b_j
 \]
 
-\begin{itemize}
-    \item \(B\) is the number of blocking decisions produced during a run.
-    \item \(J\) is the set of pre-eviction filter log entries.
-    \item \(b_j \in \{0, 1\}\) indicates whether log entry \(j\) records that the Pod was rejected because its CPU or memory ratio exceeded the configured threshold.
-\end{itemize}
-
-\(B\) is the direct evidence that the mechanism activates. R0 must produce \(B = 0\) because it does not register the plugin. R1 must produce \(B \ge 1\) under load and \(B = 0\) when idle.
-
-%-----------------------------------------------------------------------------%
-\subsubsection{Application Failure Rate}
-\label{subsubsec:actualusage4_metric_failure}
-%-----------------------------------------------------------------------------%
-The Application Failure Rate (\(F\)) quantifies the user-visible disruption of an eviction decision. It is computed from the k6 summary as the fraction of HTTP requests issued to the api Service during the run that did not receive a successful response:
+The HTTP Failure Rate (\(F\)) is the fraction of completed requests that return a non-\(2xx\) response within the common post-event window:
 
 \[
 F
 =
-\frac{N_{\text{fail}}}{N_{\text{total}}}
+\frac{N_{\text{fail,post}}}{N_{\text{completed,post}}}.
 \]
 
-\begin{itemize}
-    \item \(N_{\text{total}}\) is the total number of HTTP requests dispatched by k6 during the run, including the pre-eviction and post-eviction windows.
-    \item \(N_{\text{fail}}\) is the number of those requests that returned a non-\(2{xx}\) status code, dominated in this experiment by HTTP \(503\) Service Unavailable when the Service has no Ready endpoint behind it.
-    \item \(F\) is the resulting failure ratio, expressed as a percentage.
-\end{itemize}
-
-A non-zero \(F\) indicates that at least one request was dropped because the only api endpoint became unavailable while the replacement Pod was scheduled, started, and became Ready. A failure rate close to zero indicates that the api endpoint remained continuously available throughout the eviction.
-
-%-----------------------------------------------------------------------------%
-\subsubsection{Per-Window Latency}
-\label{subsubsec:actualusage4_metric_latency}
-%-----------------------------------------------------------------------------%
-Aggregate request latency over an entire run is not a faithful indicator of eviction impact because it averages the steady-state phase together with the short interval immediately surrounding the eviction. The evaluation therefore reports k6 \(p_{50}\) and \(p_{95}\) request duration over fixed-width \(10\)-second windows aligned to the recorded eviction time \(t_{\text{ev}}\):
+Service Disruption Duration (\(D\)) measures the interval from the first failed request to the last failed request after the event. It is zero when no failed request is observed:
 
 \[
-W_k = [\,t_{\text{ev}} + 10(k-1),\; t_{\text{ev}} + 10k\,)
+D =
+\begin{cases}
+t_{\text{last fail}} - t_{\text{first fail}}, & N_{\text{fail,post}} > 0,\\
+0, & N_{\text{fail,post}} = 0.
+\end{cases}
 \]
 
-with \(k \in \{-2, -1, 1, 2, 3, 4\}\). Negative indices identify pre-eviction windows, positive indices identify post-eviction windows, and the critical window is \(W_1\), the first ten seconds after the eviction request was issued. Each window reports the request count, the success count, the failure count, and the \(p_{50}\) and \(p_{95}\) latency of all requests inside the window. This windowed view exposes whether a latency change is concentrated near the eviction or is part of background variability that is also present in the pre-eviction windows.
+Successful-request \(p_{95}\) latency excludes failed responses. Failed HTTP \(503\) responses can complete faster than successful requests and can therefore make a mixed-response percentile appear lower during an outage. Latency is retained as a secondary metric because transient bursts appear before and after events. Eviction outcome records the successful eviction count, block count, evicted Pod identity, and whether the original API Pod remains.
 
 %-----------------------------------------------------------------------------%
-\subsubsection{Stranding and Balanced Headroom Trade-off}
+\subsubsection{Strategy-Specific Placement Metrics}
 \label{subsubsec:actualusage4_metric_strandingdelta}
 %-----------------------------------------------------------------------------%
-The cluster-side effect of each run is reported through the same request-space metrics defined in Section~\ref{sec:defrag_metrics}. The cluster stranding score \(S\) and the balanced headroom \(H_{\text{balanced}}\) are computed from before- and after-snapshots, and the run-level trade-off is summarized through their changes:
+ResourceDefragmentation uses positive stranding reduction and balanced-headroom change:
 
 \[
-\Delta S
+\mathrm{StrandingReduction}
 =
-S_{\text{after}} - S_{\text{before}},
+S_{\text{before}} - S_{\text{after}},
 \qquad
 \Delta H_{\text{balanced}}
 =
-H_{\text{balanced},\text{after}} - H_{\text{balanced},\text{before}}.
+H_{\text{balanced,after}} - H_{\text{balanced,before}}.
 \]
 
-A more negative \(\Delta S\) means a larger reduction in dimensional stranding, and a more positive \(\Delta H_{\text{balanced}}\) means a larger gain in jointly schedulable capacity. The Actual Usage Evictor is expected to attenuate both quantities relative to the control because it forces the strategy to fall back from the Pod whose movement would have produced the strongest defragmentation effect to a structurally weaker but idle candidate.
+HighNodeUtilization uses active-Node reduction:
+
+\[
+\mathrm{ActiveNodeReduction}
+=
+N_{\text{active,before}} - N_{\text{active,after}}.
+\]
+
+LowNodeUtilization uses the reduction in normalized request deviation for resource \(r\):
+
+\[
+\mathrm{DeviationReduction}_{r}
+=
+\sigma_{r,\text{before}} - \sigma_{r,\text{after}},
+\]
+
+where each Node contributes its requested CPU or memory divided by its allocatable capacity. Positive values indicate improvement toward the corresponding strategy objective.
 
 %-----------------------------------------------------------------------------%
-\subsection{Experimental Results: Loaded Run}
+\subsection{ResourceDefragmentation Results}
 \label{subsec:actualusage4_resultanalysis_loaded}
 %-----------------------------------------------------------------------------%
-Table~\ref{tab:actualusage4_loaded} reports the loaded run for both configurations. R0 evicts the busy api Pod and obtains the strongest defragmentation outcome at the cost of \(40\) failed requests; R1 blocks the api Pod, falls back to the idle memory Pod, and protects all requests at the cost of a smaller defragmentation gain.
+Table~\ref{tab:actualusage4_loaded} reports the ResourceDefragmentation pair. R0 evicts the busy API Pod and obtains the stronger defragmentation outcome. R1 blocks the API Pod, evicts the idle memory fallback, and preserves application availability.
 
 \begin{table}[H]
     \centering
@@ -621,188 +644,129 @@ Table~\ref{tab:actualusage4_loaded} reports the loaded run for both configuratio
         \midrule
         Evictions                              & \(1\)                         & \(1\) \\
         Actual usage blocks (\(B\))            & \(0\)                         & \(\mathbf{1}\) \\
-        Pod evicted                            & api (busy)                    & mem worker (idle) \\
-        HTTP \(2{xx}\) responses               & \(568\)                       & \(\mathbf{622}\) \\
+        Pod evicted                            & API (busy)                    & memory worker (idle) \\
+        Completed responses in \(30\,s\)       & \(240\)                       & \(231\) \\
         HTTP \(503\) responses                 & \(40\)                        & \(\mathbf{0}\) \\
-        Failure rate \(F\)                     & \(6.57\%\)                    & \(\mathbf{0.00\%}\) \\
-        Stranding change \(\Delta S\)          & \(\mathbf{-0.816}\)           & \(0.000\) \\
+        Failure rate \(F\)                     & \(16.67\%\)                   & \(\mathbf{0.00\%}\) \\
+        Disruption duration \(D\)              & \(4.875\,s\)                  & \(\mathbf{0\,s}\) \\
+        Stranding reduction                    & \(\mathbf{0.816}\)            & \(0.000\) \\
         Headroom change \(\Delta H_{\text{balanced}}\) & \(\mathbf{+4}\)       & \(+1\) \\
         \bottomrule
     \end{tabular}%
     }
 \end{table}
 
-\subsubsection{Eviction Target Substitution}
+\subsubsection{Eviction Substitution and Application Protection}
 \label{subsubsec:actualusage4_substitution}
 
-In R0 the Descheduler issues exactly one eviction, targeting the api Pod on worker-6. The replacement Pod is admitted on worker-2, a CPU-skewed Node, which is consistent with the bin-score ranking computed in Section~\ref{subsubsec:actualusage4_candidateordering}. In R1 the strategy still selects the api Pod first, but the Actual Usage Evictor observes \(599\,m\) CPU usage against a \(50\,m\) effective request, producing \(\rho_{p,c}=599/50=11.98\). Because this request-relative ratio exceeds the configured threshold of \(0.80\), the plugin rejects the eviction. The api Pod's \(1000\,m\) CPU limit explains why it can burst far above its request without being capped at \(50\,m\), but the limit does not participate in the ratio. The Descheduler then advances to the next candidate on the same source Node, the idle memory Pod, whose CPU and memory ratios are both effectively zero, so the plugin allows the eviction. The replacement memory Pod is admitted on worker-4. In both configurations the source Node loses one Pod and the strategy still acts on worker-6; what changes is the identity of the evicted Pod.
+In R0 the Descheduler issues exactly one eviction, targeting the API Pod on worker-6. The replacement Pod is admitted on worker-2, a CPU-skewed Node, which is consistent with the bin-score ranking computed in Section~\ref{subsubsec:actualusage4_candidateordering}. In R1 the strategy still selects the API Pod first, but the Actual Usage Evictor observes \(599\,m\) CPU usage against a \(50\,m\) effective request, producing \(\rho_{p,c}=599/50=11.98\). Because this request-relative ratio exceeds the configured threshold of \(0.80\), the plugin rejects the eviction. The API Pod's \(1000\,m\) CPU limit explains why it can burst far above its request without being capped at \(50\,m\), but the limit does not participate in the ratio. The Descheduler then advances to the next candidate on the same source Node, the idle memory Pod, whose CPU and memory ratios are both effectively zero, so the plugin allows the eviction. The replacement memory Pod is admitted on worker-4. In both configurations the source Node loses one Pod and the strategy still acts on worker-6. The identity of the evicted Pod is the only change.
 
-For this workload, the substitution demonstrates that request-relative runtime filtering behaves as a safety gate around the strategy rather than as a replacement for it. The strategy's request-space ranking remains authoritative for which Pods are considered, and the plugin only intervenes when the top-ranked Pod is currently using a substantial fraction of its declared resources. When a structurally equivalent but idle Pod exists on the same source Node, as is the case here, the strategy is still able to act and the cluster movement is preserved at a different position in the candidate list.
-
-\subsubsection{Application Protection}
-\label{subsubsec:actualusage4_protection}
-
-The application-side effect of the substitution is direct. R0 produces \(40\) HTTP \(503\) responses out of \(608\) total requests, a failure rate of \(6.57\%\); these failures correspond to requests that arrived while the api Pod was terminating and the replacement was not yet Ready behind the Service. R1 produces zero failures across \(622\) requests because the api Pod remains continuously running on worker-6. The bar comparison in Figure~\ref{fig:actualusage4_protection} makes the asymmetry visible: R0 trades a small but non-negligible block of user-visible failures for the eviction, while R1 absorbs the entire request stream.
-
-\begin{figure}[H]
-    \centering
-    \begin{tikzpicture}
-        \begin{axis}[
-            ybar stacked,
-            width=12cm,
-            height=8cm,
-            ymin=0, ymax=700,
-            ylabel={HTTP Requests During Run},
-            ylabel near ticks,
-            symbolic x coords={R0 (no plugin), R1 (with plugin)},
-            xtick=data,
-            xticklabel style={align=center, font=\small},
-            bar width=40pt,
-            legend style={at={(0.5,-0.18)}, anchor=north, legend columns=-1},
-        ]
-            \addplot[fill=cyan!60, draw=black] coordinates {
-                (R0 (no plugin), 568)
-                (R1 (with plugin), 622)
-            };
-            \addplot[fill=red!70, draw=black] coordinates {
-                (R0 (no plugin), 40)
-                (R1 (with plugin), 0)
-            };
-            \legend{HTTP 2xx, HTTP 503}
-        \end{axis}
-    \end{tikzpicture}
-    \caption{Successful and failed HTTP responses during the loaded run.}
-    \label{fig:actualusage4_protection}
-\end{figure}
-
-The failure block in R0 is concentrated immediately after the eviction. Pod-lifecycle records show that the api Pod transitions to \texttt{Terminating} within the first second after the eviction request and that the replacement Pod becomes Ready only after the Service-routed requests have already begun to fail. R1 has no such transition because the api Pod is never selected for actual eviction.
-
-\subsubsection{Per-Window Latency}
-\label{subsubsec:actualusage4_perwindow}
-
-Aggregate \(p_{95}\) latency is misleading on this workload because the request stream contains sporadic CPU-induced bursts that are not caused by the eviction. Both runs exhibit such bursts in different windows, and reporting one number for the entire run obscures the difference between background variability and the eviction-induced disturbance. The per-window view in Table~\ref{tab:actualusage4_windows} therefore restricts the comparison to the windows that bracket the eviction.
-
-\begin{table}[H]
-    \centering
-    \caption{Per-Window Latency Around the Eviction Event}
-    \label{tab:actualusage4_windows}
-    \renewcommand{\arraystretch}{1.2}
-    \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l c c c c c c}
-        \toprule
-        \textbf{Window} & \textbf{Run} & \textbf{Total} & \textbf{200} & \textbf{503} & \textbf{\(p_{50}\) (ms)} & \textbf{\(p_{95}\) (ms)} \\
-        \midrule
-        Pre-eviction \(W_{-1}\): \(-10\) to \(0\,s\)  & R0 & \(83\) & \(83\) & \(0\)  & \(62.9\)  & \(526.3\)  \\
-        Pre-eviction \(W_{-1}\): \(-10\) to \(0\,s\)  & R1 & \(80\) & \(80\) & \(0\)  & \(61.9\)  & \(68.0\)   \\
-        \midrule
-        Critical \(W_{1}\): \(0\) to \(+10\,s\)    & R0 & \(80\) & \(40\) & \(40\) & \(31.3\)  & \(69.4\)   \\
-        Critical \(W_{1}\): \(0\) to \(+10\,s\)    & R1 & \(80\) & \(80\) & \(0\)  & \(62.7\)  & \(113.2\)  \\
-        \midrule
-        Post-eviction \(W_{2}\): \(+10\) to \(+20\,s\)& R0 & \(80\) & \(80\) & \(0\)  & \(61.0\)  & \(65.3\)   \\
-        Post-eviction \(W_{2}\): \(+10\) to \(+20\,s\)& R1 & \(80\) & \(80\) & \(0\)  & \(61.7\)  & \(64.8\)   \\
-        \bottomrule
-    \end{tabular}%
-    }
-\end{table}
-
-The critical window \(W_{1}\) is the only window in which R0 differs structurally from R1. Half of the requests in R0's critical window return HTTP \(503\) at sub-millisecond latency because the Service has no Ready endpoint, which mechanically pulls the window's \(p_{50}\) down to \(31.3\,\text{ms}\). The remaining successful requests in the same window have a latency profile comparable to R1, but they represent only \(50\%\) of the offered load. R1, by contrast, completes \(100\%\) of requests in \(W_{1}\). Its \(p_{95}\) is moderately higher than the steady state (\(113.2\,\text{ms}\) versus \(\approx 65\,\text{ms}\)) because the descheduler still terminates and reschedules the idle memory Pod on worker-6, which transiently shares the Node with the api Pod, but no request is lost.
-
-After \(W_{1}\), the two runs converge. R0 returns to steady-state latency once its replacement api Pod becomes Ready on worker-2, and R1 returns to steady-state latency once the memory Pod replacement is admitted on worker-4. The protection effect of the Actual Usage Evictor is therefore concentrated in the first ten seconds after the eviction, which is also the only window in which an eviction can affect user-visible request handling on this workload.
+The application-side effect is direct. During the normalized post-event window, R0 completes \(240\) requests and returns \(40\) HTTP \(503\) responses. This gives a failure rate of \(16.67\%\), with failed responses spanning \(4.875\,s\). R1 completes \(231\) requests with no failure and no disruption interval because the original API Pod remains on worker-6.
 
 \subsubsection{Defragmentation Trade-off}
 \label{subsubsec:actualusage4_strandingtradeoff}
 
-The application-protection benefit is paid for in defragmentation. R0 evicts the api Pod, whose \(240\,Mi\) memory request is the larger of the two source-Node Pods, and the replacement is placed on a CPU-skewed Node. This movement reduces the cluster stranding score \(S\) by \(0.816\) and raises balanced headroom \(H_{\text{balanced}}\) by four reference Pods. R1 evicts the memory Pod, whose \(200\,Mi\) memory request is smaller, so the replacement carries less stranding relief. Stranding is unchanged (\(\Delta S = 0\)) and headroom rises by only one reference Pod. Figure~\ref{fig:actualusage4_tradeoff} pairs the application-protection axis (failure count) with the defragmentation axis (\(\Delta S\)) so that the trade-off appears on a single chart.
-
-\begin{figure}[H]
-    \centering
-    \begin{tikzpicture}
-        \begin{axis}[
-            width=12cm,
-            height=8cm,
-            scale only axis,
-            axis y line*=left,
-            ymin=0, ymax=50,
-            ylabel={HTTP 503 Failures},
-            ylabel near ticks,
-            ybar,
-            bar width=18pt,
-            bar shift=-12pt,
-            xmin=0.5, xmax=2.5,
-            xtick={1,2},
-            xticklabels={R0 (no plugin), R1 (with plugin)},
-            xticklabel style={align=center, font=\small},
-            nodes near coords,
-            every node near coord/.append style={yshift=2pt, font=\small},
-            legend style={at={(0.01,0.99)}, anchor=north west},
-        ]
-            \addplot[fill=red!70, draw=black] coordinates {
-                (1, 40)
-                (2, 0)
-            };
-            \addlegendentry{HTTP 503}
-        \end{axis}
-
-        \begin{axis}[
-            width=12cm,
-            height=8cm,
-            scale only axis,
-            axis y line*=right,
-            axis x line=none,
-            ymin=-1.0, ymax=0.2,
-            ylabel={Stranding Change \(\Delta S\)},
-            ylabel near ticks,
-            yticklabel pos=right,
-            ybar,
-            bar width=18pt,
-            bar shift=12pt,
-            xmin=0.5, xmax=2.5,
-            xtick={1,2},
-            point meta=explicit symbolic,
-            nodes near coords,
-            every node near coord/.append style={font=\small},
-            legend style={at={(0.99,0.99)}, anchor=north east},
-        ]
-            \addplot[fill=cyan!60, draw=black, nodes near coords align={anchor=north}] coordinates {
-                (1, -0.816) [\(-0.816\)]
-                (2,  0.000) [\(0.000\)]
-            };
-            \addlegendentry{\(\Delta S\)}
-        \end{axis}
-    \end{tikzpicture}
-    \caption{Application protection (HTTP 503) versus defragmentation gain (\(\Delta S\)) for the loaded run.}
-    \label{fig:actualusage4_tradeoff}
-\end{figure}
-
-The Actual Usage Evictor cannot eliminate this trade-off because the strategy's strongest candidate is, by construction, also the busiest Pod. What the plugin guarantees is that the strategy still acts on the source Node and still produces a feasible movement; what it surrenders is the share of the defragmentation effect that depended specifically on relocating the busy Pod. On the workload in this experiment, that share is the entire stranding reduction.
+The protection benefit reduces the ResourceDefragmentation objective. R0 moves the larger \(240\,Mi\) API Pod to a CPU-skewed Node. Stranding falls from \(3.844\) to \(3.028\), giving a reduction of \(0.816\), and balanced headroom increases by four reference Pods. R1 moves the \(200\,Mi\) idle fallback. Stranding remains \(3.844\), while balanced headroom increases by one. The strategy still performs a feasible movement, but it loses the portion of the defragmentation gain that depends on relocating the busy API Pod.
 
 %-----------------------------------------------------------------------------%
-\subsection{Experimental Results: No-Load Baseline}
-\label{subsec:actualusage4_resultanalysis_noload}
+\subsection{HighNodeUtilization Results}
+\label{subsec:actualusage4_hnu_results}
 %-----------------------------------------------------------------------------%
-The no-load run repeats the same layout and the same Descheduler pass without k6 traffic. The api Pod is therefore idle at the moment of the eviction decision, and its CPU ratio at the Metrics API is \(0.04\), well below the threshold of \(0.80\). Table~\ref{tab:actualusage4_noload} summarizes both configurations.
-
 \begin{table}[H]
     \centering
-    \caption{Descheduler Behavior Without Foreground Load}
-    \label{tab:actualusage4_noload}
+    \caption{HighNodeUtilization Results}
+    \label{tab:actualusage4_hnu}
     \renewcommand{\arraystretch}{1.2}
     \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c c}
         \toprule
-        \textbf{Metric} & \textbf{R0 (no plugin)} & \textbf{R1 (with plugin)} \\
+        \textbf{Metric} & \textbf{H0 (no plugin)} & \textbf{H1 (with plugin)} \\
         \midrule
-        Pod evicted                            & api (idle) & api (idle) \\
-        Actual usage blocks (\(B\))            & \(0\)      & \(0\)      \\
-        Stranding change \(\Delta S\)          & \(-0.816\) & \(-0.816\) \\
-        Headroom change \(\Delta H_{\text{balanced}}\) & \(+4\) & \(+4\) \\
-        Foreground traffic                     & none       & none       \\
+        Successful evictions             & \(3\)       & \(2\) \\
+        Actual usage blocks (\(B\))       & \(0\)       & \(1\) \\
+        Active Nodes                      & \(6 \to 3\) & \(6 \to 4\) \\
+        Active-Node reduction             & \(3\)       & \(2\) \\
+        Completed responses in \(30\,s\)  & \(240\)     & \(240\) \\
+        HTTP \(503\) responses            & \(40\)      & \(\mathbf{0}\) \\
+        Failure rate \(F\)                & \(16.67\%\) & \(\mathbf{0.00\%}\) \\
+        Disruption duration \(D\)         & \(4.836\,s\)& \(\mathbf{0\,s}\) \\
+        Original API Pod remained         & no          & yes \\
         \bottomrule
     \end{tabular}%
     }
 \end{table}
 
-R0 and R1 produce identical request-space outcomes when no Pod is busy. Both evict the api Pod from worker-6 because it is still the highest-ranked candidate by projected target bin score, and both observe the same stranding reduction of \(0.816\) and the same headroom gain of four reference Pods. The Actual Usage Evictor produces zero blocks in R1 because no observed CPU or memory ratio crosses the threshold. This baseline confirms that the plugin does not perturb the strategy's request-space logic in the absence of runtime pressure, so the difference observed in the loaded pair is attributable to runtime usage rather than to a change in the way candidates are ranked or in the way feasibility is evaluated.
+HNU classifies workers 4--6 as underutilized sources in both runs. H0 evicts all three source Pods, including the busy API on worker-6. H1 allows the two idle source Pods but blocks the API at a CPU ratio of approximately \(10.02\). The filter therefore does not disable consolidation. It reduces the active-Node count from six to four instead of six to three.
+
+H0 records \(40\) HTTP \(503\) responses and \(4.836\,s\) of disruption. H1 records no failure and no disruption. The observed trade-off is one retained active Node in exchange for preserving the busy API endpoint.
+
+%-----------------------------------------------------------------------------%
+\subsection{LowNodeUtilization Results}
+\label{subsec:actualusage4_lnu_results}
+%-----------------------------------------------------------------------------%
+\begin{table}[H]
+    \centering
+    \caption{LowNodeUtilization Results}
+    \label{tab:actualusage4_lnu}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c c}
+        \toprule
+        \textbf{Metric} & \textbf{L0 (no plugin)} & \textbf{L1 (with plugin)} \\
+        \midrule
+        Successful evictions             & \(3\)                 & \(3\) \\
+        Actual usage blocks (\(B\))       & \(0\)                 & \(1\) \\
+        CPU deviation reduction          & \(0\)                 & \(0\) \\
+        Memory deviation                 & \(0.21639 \to 0.03091\)& \(0.21639 \to 0.03091\) \\
+        Memory deviation reduction       & \(0.18548\;(85.7\%)\) & \(0.18548\;(85.7\%)\) \\
+        Completed responses in \(30\,s\) & \(232\)               & \(240\) \\
+        HTTP \(503\) responses            & \(40\)                & \(\mathbf{0}\) \\
+        Failure rate \(F\)                & \(17.24\%\)           & \(\mathbf{0.00\%}\) \\
+        Disruption duration \(D\)         & \(4.873\,s\)          & \(\mathbf{0\,s}\) \\
+        Original API Pod remained         & no                    & yes \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+L0 evicts the busy API and one idle Pod from each of the other two sources. L1 blocks the API at a CPU ratio of approximately \(10.10\), then permits the idle fallback on worker-6. Both systems complete three successful evictions and produce the same final request distribution.
+
+Memory request deviation falls from \(0.21639\) to \(0.03091\) in both runs, a reduction of \(85.7\%\). CPU deviation remains \(0.0125\) because the layout uses memory requests to create the imbalance while candidate CPU requests are equal. L0 records \(40\) failed responses and \(4.873\,s\) of disruption. L1 records no failure and no disruption. In this scenario, runtime protection preserves the complete measured LNU balancing result.
+
+%-----------------------------------------------------------------------------%
+\subsection{Cross-Strategy Discussion}
+\label{subsec:actualusage4_cross_strategy}
+%-----------------------------------------------------------------------------%
+Figure~\ref{fig:actualusage4_failure_timeline} shows the request failures using the same event-aligned \(30\)-second post-event window for every run. Each cell counts HTTP \(503\) responses completed within a one-second interval. The dashed blue markers show the API eviction timestamps recorded in the Descheduler logs: \(1.891\,s\) in R0, \(3.647\,s\) in H0, and \(4.680\,s\) in L0. No marker appears in the treatment rows because the API eviction was blocked. Although the HNU and LNU experiments captured \(45\) seconds after the event, only the first \(30\) seconds are included for consistency with the ResourceDefragmentation experiments. Request timestamps represent completion time rather than generation time, so the number of completed responses can differ between runs despite the constant configured arrival rate of eight requests per second.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{assets/pics/actual-usage/failure_timeline_heatmap.png}
+    \caption{Event-Aligned HTTP Failure Timeline and API Eviction Time over the Common \(30\)-Second Post-Event Window}
+    \label{fig:actualusage4_failure_timeline}
+\end{figure}
+
+The three control runs exhibit compact failure intervals after the Descheduler event, whereas the corresponding Actual Usage Evictor treatments contain no failed response. Table~\ref{tab:actualusage4_cross_strategy} separates this common application effect from the strategy-specific placement cost. The failure-rate denominator is the number of requests completed within the common interval.
+
+\begin{table}[H]
+    \centering
+    \caption{Cross-Strategy Actual Usage Evictor Results}
+    \label{tab:actualusage4_cross_strategy}
+    \renewcommand{\arraystretch}{1.25}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l p{5.2cm} p{6.8cm}}
+        \toprule
+        \textbf{Pair} & \textbf{Availability result} & \textbf{Strategy-specific effect} \\
+        \midrule
+        R0/R1 & Failure rate falls from \(16.67\%\) to \(0\%\). Disruption falls from \(4.875\,s\) to \(0\,s\). & R1 still evicts an idle fallback, but stranding reduction falls from \(0.816\) to \(0\), and balanced-headroom gain falls from four to one. \\
+        H0/H1 & Failure rate falls from \(16.67\%\) to \(0\%\). Disruption falls from \(4.836\,s\) to \(0\,s\). & H1 still reclaims two source Nodes, but active-Node reduction falls from three to two. \\
+        L0/L1 & Failure rate falls from \(17.24\%\) to \(0\%\). Disruption falls from \(4.873\,s\) to \(0\,s\). & L1 completes the same three evictions and retains the \(85.7\%\) memory-deviation reduction. \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+The Actual Usage Evictor consistently changes the decision for the busy API candidate while allowing idle candidates to pass. The placement cost depends on whether the remaining candidate can satisfy the active strategy. R1 retains movement but loses the strongest stranding improvement. H1 retains partial consolidation but cannot empty the protected source. L1 substitutes an idle Pod and retains the complete measured balancing result.
 
 %-----------------------------------------------------------------------------%
 \subsection{Actual Usage Findings}
@@ -811,10 +775,10 @@ R0 and R1 produce identical request-space outcomes when no Pod is busy. Both evi
 The evaluation yields four main findings:
 
 \begin{itemize}
-    \item The Actual Usage Evictor activates only when a candidate Pod's runtime usage ratio crosses the configured threshold. In the loaded run it blocks the busy api Pod with \(B = 1\), and in the no-load run it produces \(B = 0\) without altering any other descheduler behavior.
-    \item Blocking the strategy's top-ranked candidate redirects the eviction to the next candidate on the same source Node, so the descheduler still acts on worker-6 and still produces a feasible movement instead of leaving the source Node untouched.
-    \item Application protection is concentrated in the first ten seconds after the eviction. The plugin reduces the failure rate of api traffic from \(6.57\%\) to \(0.00\%\) while leaving steady-state latency essentially unchanged once both runs have settled.
-    \item The protection is paid for in defragmentation. The plugin lowers \(\Delta S\) from \(-0.816\) to \(0.000\) and \(\Delta H_{\text{balanced}}\) from \(+4\) to \(+1\) on this layout, which represents the share of the defragmentation gain that depended specifically on relocating the currently busy Pod.
+    \item The Actual Usage Evictor consistently blocked the busy API Pod while allowing idle candidates to remain eligible. The control configurations evicted the API Pod, whereas the corresponding treatment configurations preserved its original Pod instance.
+    \item Protecting the API Pod eliminated the observed eviction-induced outage in all three loaded comparisons. Over the common \(30\,s\) post-event window, the control failure rates ranged from \(16.67\%\) to \(17.24\%\), while every treatment recorded \(0\%\). The observed disruption durations of approximately \(4.8\,s\) in the controls were reduced to \(0\,s\) in the treatments.
+    \item The placement cost depended on the strategy and the available fallback candidate. ResourceDefragmentation retained an eviction but lost the stranding reduction produced by moving the API Pod. HighNodeUtilization reclaimed two rather than three source Nodes because the protected API kept one Node active. LowNodeUtilization substituted an idle Pod and retained the same three evictions and \(85.7\%\) memory-deviation reduction.
+    \item Successful-request latency exhibited inconsistent bursts before and after the eviction event. Latency is therefore treated as a secondary metric, while failure rate and service disruption duration provide the primary evidence of application protection.
 \end{itemize}
 
 \section{Latency and Defragmentation Trade-off Test}
