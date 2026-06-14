@@ -24,9 +24,10 @@ Overall, the results support a simple conclusion: selecting eviction candidates 
 \label{sec:future_works}
 
 \begin{itemize}
-    \item \textbf{Scheduler Coordination:} Expose the predicted target or a compatible scoring signal to kube-scheduler so final placement more reliably follows Descheduler intent.
-    \item \textbf{Adaptive Thresholds:} Dynamically adjust the descheduler's thresholds based on cluster density, workload volatility, and recent convergence behavior, rather than relying on fixed configuration values.
-    \item \textbf{Traffic-Volume Weighting:} Weight network costs using service-mesh traffic volumes so heavily used dependency paths receive stronger protection.
-    \item \textbf{Broader Resource Dimensions:} Extend target prediction and bin quality to storage and extended resources.
-    \item \textbf{Larger and Longer Experiments:} Evaluate more cluster shapes, workload mixes, failure conditions, autoscaler interactions, and long-running convergence behavior.
+    \item \textbf{Broader Resource Dimensions:} Extend the framework to additional resource dimensions, including storage and GPU, so that target prediction and bin-quality scoring can handle workloads beyond CPU and memory.
+    \item \textbf{Scheduler Coordination:} Establish and evaluate scheduler coordination mechanisms that expose the predicted target, or a compatible scoring signal, to the kube-scheduler, ensuring that predicted-target placements align with actual scheduling decisions and eliminating the misalignment that currently bounds maximum defragmentation precision.
+    \item \textbf{Pending-Pod Awareness:} Introduce Pending-pod awareness into the eviction pipeline so that drain candidates are selected with knowledge of already-unschedulable workloads, ensuring evictions free the right resource type on the right Node to unblock Pending Pods rather than delaying them further.
+    \item \textbf{Threshold Sensitivity Analysis:} Conduct a sensitivity analysis of the drain threshold, target ceiling, and related parameters across various workloads and cluster types to characterize their effect on node reclamation, stranding reduction, and convergence stability.
+    \item \textbf{Broader Generalizability Evaluation:} Evaluate the plugin across broader cluster shapes, node heterogeneity, and workload mixes to assess generalizability beyond the five scenarios studied.
+    \item \textbf{Traffic-Volume Weighting:} Weight network costs using service-mesh traffic volumes so that heavily used dependency paths receive stronger protection.
 \end{itemize}
