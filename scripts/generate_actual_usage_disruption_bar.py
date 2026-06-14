@@ -101,7 +101,7 @@ def main() -> None:
         control_durations,
         width,
         label="Control (DefaultEvictor only)",
-        color="#e34a33",
+        color="#d95f02",
         edgecolor="white",
         linewidth=0.8,
     )
@@ -110,7 +110,7 @@ def main() -> None:
         treatment_durations,
         width,
         label="Treatment (+ActualUsageEvictor)",
-        color="#31a354",
+        color="#1b9e77",
         edgecolor="white",
         linewidth=0.8,
     )
@@ -126,7 +126,7 @@ def main() -> None:
             va="bottom",
             fontsize=9.5,
             fontweight="bold",
-            color="#b30000",
+            color="#7f3b08",
         )
 
     for bar, (_, treat_name) in zip(bars_treat, pairs):
@@ -139,7 +139,7 @@ def main() -> None:
             va="bottom",
             fontsize=9.5,
             fontweight="bold",
-            color="#006d2c",
+            color="#00664e",
         )
 
     ax.set_ylabel("Service Disruption Duration (s)", fontsize=11)
