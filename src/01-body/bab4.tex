@@ -1168,25 +1168,18 @@ Where:
 An un-aware baseline policy may produce an \(S_{\text{degraded}}\) value greater than zero if relocating a \textit{checkout-flow} pod to an network degraded node (worker-4 and worker-5). In contrast, an ideal successful scenario of network-aware policy should maintain \(S_{\text{degraded}} = 0\), demonstrating that latency-sensitive workloads remain confined to the high-performance node while only generic filler workloads are allowed to migrate to the degraded node tier. Similar to latency, this metric is evaluated across all three scenarios to consistently track the logical isolation of the network-sensitive \textit{checkout-flow} pods.
 
 %-----------------------------------------------------------------------------%
-\subsubsection{M5: Mean Absolute Resource Imbalance Index (RII)}
+\subsubsection{M5: Cluster Stranding Score (\(S\))}
 \label{subsubsec:netaware4_evaluationmetrics5}
 %-----------------------------------------------------------------------------%
-Because multi-dimensional defragmentation optimizes for the geometric "shape" of resource utilization rather than global absolute spread, Standard Deviation (\(\sigma_R\)) becomes an inaccurate measure of success. To properly evaluate the \textit{ResourceDefragmentation} scenario, we introduce the Mean Absolute Resource Imbalance Index (RII).
+Because multi-dimensional defragmentation optimizes for the geometric "shape" of resource utilization rather than global absolute spread, Standard Deviation (\(\sigma_R\)) becomes an inaccurate measure of success. To properly evaluate the \textit{ResourceDefragmentation} scenario, we reuse the Cluster Stranding Score (\(S\)), previously defined in Section \ref{subsubsec:defrag_metric_stranding}.
 
-RII is defined as the absolute difference between a node's CPU utilization percentage and its Memory utilization percentage. For a cluster with \(N\) nodes, the Mean Absolute RII is calculated as:
+As established, \(S\) aggregates the absolute difference between CPU and Memory utilization fractions across all active nodes:
 
 \[
-\text{Mean RII} = \frac{1}{N} \sum_{n=1}^{N} \left| U_{n,\text{cpu}} - U_{n,\text{memory}} \right|
+S = \sum_{n \in N_{\text{active}}} \left| u_{n,\text{cpu}} - u_{n,\text{memory}} \right|
 \]
 
-Where:
-\begin{itemize}
-    \item \(U_{n,\text{cpu}}\) is the request-based CPU utilization percentage of node \(n\).
-    \item \(U_{n,\text{memory}}\) is the request-based Memory utilization percentage of node \(n\).
-    \item \(N\) represents the total number of worker nodes (\(N=5\)).
-\end{itemize}
-
-This metric completely replaces \(\sigma_R\) in the \textit{ResourceDefragmentation} evaluation. A lower Mean Absolute RII indicates a perfectly balanced, geometrically symmetrical cluster where CPU and Memory ratios are tightly aligned, unlocking trapped capacity without being penalized for intentional variance in absolute global spread.
+This metric completely replaces \(\sigma_R\) in the \textit{ResourceDefragmentation} evaluation. Crucially, the score is summed rather than averaged. Averaging the imbalance across nodes can artificially mask successful consolidation (e.g., if three fragmented nodes are condensed into one node with the same local imbalance, the mean remains unchanged despite two nodes being successfully reclaimed). By using the sum, a lower Stranding Score accurately indicates a reduction in cluster-wide stranded capacity, rewarding geometric symmetry and node reclamation without being penalized for intentional variance in absolute global spread.
 
 %-----------------------------------------------------------------------------%
 \subsection{Experimental Results: LowNodeUtilization Scenario}
@@ -1577,9 +1570,9 @@ However, this network protection came as a direct tradeoff for cluster bin-packi
 %-----------------------------------------------------------------------------%
 The \textit{ResourceDefragmentation} scenario evaluates the descheduler's ability to correct multi-dimensional resource skew (CPU vs. Memory) without relying on strict utilization thresholds. This plugin uses the Resource Defragmentation algorithm to specifically target pods whose eviction will mathematically unlock trapped capacity on skewed nodes.
 
-Because this algorithm optimizes for the geometric "shape" of resource utilization rather than global absolute spread, we evaluate its performance using the \textbf{Mean Absolute Resource Imbalance Index (RII)}. RII is defined as the absolute difference between a node's CPU utilization percentage and its Memory utilization percentage ($|CPU\% - MEM\%|$). A lower Mean Absolute RII indicates a better balanced, symmetrical cluster.
+Because this algorithm optimizes for the geometric "shape" of resource utilization rather than global absolute spread, we evaluate its performance using the \textbf{Cluster Stranding Score (\(S\))}. A lower Stranding Score indicates a better balanced, symmetrical cluster.
 
-Prior to the descheduler execution, the cluster was forced into a highly fragmented state (Mean Absolute RII: \textbf{50.7\%}), with nodes exhibiting massive orthogonal skews (e.g., 90\% CPU vs 51\% Mem, and 10\% CPU vs 82\% Mem).
+Prior to the descheduler execution, the cluster was forced into a highly fragmented state (Stranding Score: \textbf{2.535}), with nodes exhibiting massive orthogonal skews (e.g., 0.90 CPU vs 0.51 Mem, and 0.10 CPU vs 0.82 Mem).
 
 Table \ref{tab:resourcedefrag_results} presents the raw performance of the descheduler across the three filtering strategies.
 \begin{table}[H]
@@ -1587,13 +1580,13 @@ Table \ref{tab:resourcedefrag_results} presents the raw performance of the desch
     \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c c r c}
         \toprule
-        \textbf{Scenario} & \textbf{Evictions} & \textbf{Mean Absolute RII (\%)} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
+        \textbf{Scenario} & \textbf{Evictions} & \textbf{Stranding Score} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
         \midrule
-        Initial State & - & 50.7\% & $\sim$8.0 ms & 0 \\
+        Initial State & - & 2.535 & $\sim$8.0 ms & 0 \\
         \midrule
-        r1: Baseline & 8 & 19.9\% & 167.216 ms & 2 \\
-        r2: Topology L1 & 8 & 19.9\% & 165.783 ms & 2 \\
-        r3: Latency L1 & 8 & 17.9\% & 8.762 ms & 0 \\
+        r1: Baseline & 8 & 0.995 & 167.216 ms & 2 \\
+        r2: Topology L1 & 8 & 0.995 & 165.783 ms & 2 \\
+        r3: Latency L1 & 8 & 0.895 & 8.762 ms & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -1601,13 +1594,13 @@ Table \ref{tab:resourcedefrag_results} presents the raw performance of the desch
     \label{tab:resourcedefrag_results}
 \end{table}
 
-As shown in Table \ref{tab:resourcedefrag_results}, the baseline \textit{ResourceDefragmentation} plugin successfully identified the orthogonal CPU and Memory skews within the cluster and executed 8 evictions to aggressively balance the nodes (reducing the Mean Absolute RII from 50.7\% down to 19.9\%). However, because the Resource Defragmentation algorithm strictly optimizes for mathematical resource symmetry, it eagerly selected the network-sensitive \textit{payment} pods for eviction, predicting that moving them to the memory-heavy degraded nodes would perfectly resolve the cluster's resource skew. Consequently, the baseline strategy placed 2 critical pods directly into the network-degraded zone, causing a catastrophic latency spike to $\sim$167ms.
+As shown in Table \ref{tab:resourcedefrag_results}, the baseline \textit{ResourceDefragmentation} plugin successfully identified the orthogonal CPU and Memory skews within the cluster and executed 8 evictions to aggressively balance the nodes (reducing the Stranding Score from 2.535 down to 0.995). However, because the Resource Defragmentation algorithm strictly optimizes for mathematical resource symmetry, it eagerly selected the network-sensitive \textit{payment} pods for eviction, predicting that moving them to the memory-heavy degraded nodes would perfectly resolve the cluster's resource skew. Consequently, the baseline strategy placed 2 critical pods directly into the network-degraded zone, causing a catastrophic latency spike to $\sim$167ms.
 
 The Topology-Aware L1 filter failed to prevent this. Because the topology model relies on static physical boundaries, it was entirely blind to the active network degradation. It approved the eviction of the critical pods, resulting in the exact same mathematical resource balance and the exact same network latency violation ($\sim$165ms) as the baseline.
 
 Our proposed Latency-Aware L1 filter achieved a much better outcome: it successfully preserved the application's network latency while simultaneously allowing the descheduler to fix the cluster's resource fragmentation. When the Resource Defragmentation algorithm initially selected the sensitive \textit{payment} pods for eviction, our Latency-Aware filter queried the real-time Prometheus metrics, detected the massive degradation on the target nodes, and strictly blocked the eviction.
 
-Because the Kube-Descheduler framework operates iteratively, blocking the \textit{payment} pods forced the Resource Defragmentation algorithm to evaluate the next-best candidates: the generic \textit{filler-cpu} pods. Because these filler pods were not part of the sensitive network group, our filter safely allowed their eviction. By actively steering the descheduler away from the critical workloads, we forced the cluster to resolve its resource fragmentation using expendable pods. This resulted in an even better reduction in resource skew (Mean RII dropped to 17.9\%) while completely protecting the network integrity of the application (0 degraded pods, $\sim$8ms latency).
+Because the Kube-Descheduler framework operates iteratively, blocking the \textit{payment} pods forced the Resource Defragmentation algorithm to evaluate the next-best candidates: the generic \textit{filler-cpu} pods. Because these filler pods were not part of the sensitive network group, our filter safely allowed their eviction. By actively steering the descheduler away from the critical workloads, we forced the cluster to resolve its resource fragmentation using expendable pods. This resulted in an even better reduction in resource skew (Stranding Score dropped to 0.895) while completely protecting the network integrity of the application (0 degraded pods, $\sim$8ms latency).
 
 \subsubsection{Defragmentation Performance and Network Latency Trade-offs}
 \label{subsubsec:netaware4_resultanalysis3_tradeoff}
@@ -1626,11 +1619,11 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             enlarge x limits=0.15,
         }
 
-        % Left Y-Axis: Mean Absolute RII
+        % Left Y-Axis: Stranding Score
         \begin{axis}[
             axis y line*=left,
-            ymin=0, ymax=60,
-            ylabel={Mean Absolute Imbalance (RII \%)},
+            ymin=0, ymax=3.0,
+            ylabel={Cluster Stranding Score ($S$)},
             ybar,
             bar width=15pt,
             bar shift=-8.5pt,
@@ -1639,12 +1632,12 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             every node near coord/.append style={yshift=5pt, font=\small},
         ]
             \addplot[fill=cyan!60, draw=black] coordinates {
-                (1, 50.7)
-                (2, 19.9)
-                (3, 19.9)
-                (4, 17.9)
+                (1, 2.535)
+                (2, 0.995)
+                (3, 0.995)
+                (4, 0.895)
             };
-            \addlegendentry{Mean RII \%}
+            \addlegendentry{Stranding Score}
         \end{axis}
         % Right Y-Axis: Average Latency (Bar Chart)
         \begin{axis}[
@@ -1670,8 +1663,8 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             \addlegendentry{Latency (ms)}
         \end{axis}
     \end{tikzpicture}
-    \caption{Mean Absolute Resource Imbalance (RII) vs. Network Performance.}
+    \caption{Cluster Stranding Score ($S$) vs. Network Performance.}
     \label{fig:resourcedefrag_latency}
 \end{figure}
 
-The results from the Resource Defragmentation scenario mathematically prove that our Latency-Aware plugin does not inherently compromise the core goal of the defragmentation algorithm. Instead of blindly moving critical workloads to satisfy a mathematical equation, the plugin intelligently evaluates network safety and blocks evictions that violate it. As demonstrated by the 17.9\% final RII, the presence of these expendable pods allowed the steered approach to achieve a slightly superior geometric resource balance compared to the baseline. However, as established in our earlier Hard Tradeoff experiments, if no such filler pods were available, the Latency-Aware plugin would actively choose to leave the cluster in a fragmented state (higher Mean RII) to guarantee network integrity like showed in \ref{tab:hard_tradeoff_results}
+The results from the Resource Defragmentation scenario mathematically prove that our Latency-Aware plugin does not inherently compromise the core goal of the defragmentation algorithm. Instead of blindly moving critical workloads to satisfy a mathematical equation, the plugin intelligently evaluates network safety and blocks evictions that violate it. As demonstrated by the 0.895 final Stranding Score, the presence of these expendable pods allowed the steered approach to achieve a slightly superior geometric resource balance compared to the baseline. However, as established in our earlier Hard Tradeoff experiments, if no such filler pods were available, the Latency-Aware plugin would actively choose to leave the cluster in a fragmented state (higher Stranding Score) to guarantee network integrity like showed in \ref{tab:hard_tradeoff_results}
