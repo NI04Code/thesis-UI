@@ -197,7 +197,7 @@ For Pods inside the configured scope, the plugin reads Pod metrics through the d
 \subsection{Runtime Usage Model}
 \label{sec:actualusage_model}
 
-For a Pod \(p\), let \(R_{p,c}\) and \(R_{p,m}\) denote the total requested CPU and memory across all containers. Let \(A_{p,c}\) and \(A_{p,m}\) denote the actual CPU and memory usage obtained from Pod metrics. The runtime usage ratios are defined as:
+For a Pod \(p\), let \(R_{p,c}\) and \(R_{p,m}\) denote its effective requested CPU and memory aggregated across all regular containers, and let \(A_{p,c}\) and \(A_{p,m}\) denote the corresponding actual usage obtained from Pod metrics. A Pod-level request dimension is complete only when every regular container declares an effective request for that resource. For complete CPU and memory dimensions, the runtime usage ratios are defined as:
 
 \begin{equation}
     \rho_{p,c} = \frac{A_{p,c}}{R_{p,c}},
@@ -206,7 +206,9 @@ For a Pod \(p\), let \(R_{p,c}\) and \(R_{p,m}\) denote the total requested CPU 
     \label{eq:actualusage_ratio}
 \end{equation}
 
-where \(\rho_{p,c}\) is the actual CPU usage ratio and \(\rho_{p,m}\) is the actual memory usage ratio. CPU is aggregated in millicores, while memory is aggregated in bytes. The ratios compare current resource usage against the Pod's declared requests rather than against node capacity, because the filter evaluates whether the Pod itself is currently active relative to the resources reserved for it.
+where \(\rho_{p,c}\) is the actual CPU usage ratio and \(\rho_{p,m}\) is the actual memory usage ratio. CPU is aggregated in millicores, while memory is aggregated in bytes. The Actual Usage Evictor reads effective requests from the Pod object stored by the API server. Therefore, requests introduced during admission, including defaults from a \texttt{LimitRange}, are included without requiring the plugin to query \texttt{LimitRange} objects directly.
+
+The ratios intentionally compare usage with requests rather than with resource limits or Node capacity. Requests are the workload baseline used for scheduler placement and request-space defragmentation, so the ratio expresses whether a Pod is active relative to that baseline. Limits instead define runtime enforcement ceilings. Replacing a request denominator with a limit would change the decision from busy-Pod protection to detecting proximity to CPU throttling or a memory out-of-memory boundary.
 
 Given CPU threshold \(\theta_c\) and memory threshold \(\theta_m\), the eviction is blocked when either resource reaches or exceeds its threshold:
 
@@ -226,9 +228,13 @@ Therefore, a Pod is allowed to be evicted only when both usage ratios are below 
     \label{eq:actualusage_allow_condition}
 \end{equation}
 
-The default thresholds are \(\theta_c = 0.80\) for CPU and \(\theta_m = 0.80\) for memory. Threshold values greater than one are also valid, allowing deployments to tolerate temporary usage above the declared request before a Pod is considered too busy to evict.
+The default values \(\theta_c = 0.80\) and \(\theta_m = 0.80\) are configurable thresholds used to classify a Pod as busy relative to its effective requests. A ratio of \(0.80\) means that the observed usage has reached \(80\%\) of the configured request. It does not by itself indicate that the Pod is close to resource saturation because requests can represent different workload baselines.
 
-The implementation treats zero-request cases conservatively. If a resource request is zero and the corresponding actual usage is positive, the usage ratio is treated as infinite and the eviction is blocked. If both request and usage are zero, the ratio is treated as zero and does not block eviction.
+The interpretation of the threshold therefore depends on request calibration and workload behavior. When a request equals its limit, a threshold of \(0.80\) also corresponds to \(80\%\) of the enforcement ceiling. When a request is lower than its limit, the same ratio indicates usage relative to the scheduling baseline but does not indicate proximity to the runtime ceiling. A workload with a small request and a large limit can frequently produce ratios above one. Thresholds greater than one are valid for intentionally bursty workloads. For example, a threshold of \(10.0\) blocks eviction when usage reaches ten times the request. Operators can adjust the threshold according to how requests represent the expected demand of workloads within the plugin's scope.
+
+When any regular container lacks an effective request for a resource, the entire Pod-level dimension is marked as missing. The plugin does not divide aggregate usage by the requests of only the remaining containers because such a partial denominator would overstate usage relative to an incomplete baseline. Missing CPU and memory dimensions are evaluated independently using \textit{missingRequestPolicy}.
+
+With the default \texttt{Allow} policy, a missing dimension is skipped and contributes \(\mathrm{busy}=\mathrm{false}\). The other resource dimension can still block eviction through the OR condition in Equation~\ref{eq:actualusage_block_condition}. With \texttt{Block}, a missing dimension contributes \(\mathrm{busy}=\mathrm{true}\) and blocks eviction. The default does not assert that a Pod without requests is idle or that eviction is harmless. It indicates only that the plugin has no request-relative denominator from which to infer busyness. Operators can select \texttt{Block} when a conservative missing-request behavior is required.
 
 \subsection{Eviction Decision Workflow and Algorithm}
 \label{sec:actualusage_algorithm}
@@ -240,16 +246,16 @@ Listing~\ref{lst:actualusage_algorithm} summarizes the Actual Usage Evictor deci
     label={lst:actualusage_algorithm},
 ]{assets/codes/pseudos/actualusage/unifiedalgo.psu}
 
-For scoped Pods, the plugin retrieves the latest Pod metrics from the metrics client. It then aggregates declared requests and observed usage across all containers. The resulting CPU and memory usage ratios are compared with the configured thresholds. If either ratio is greater than or equal to its threshold, the Pod is considered busy and the eviction is rejected. Otherwise, the Pod passes the filter and the descheduler may continue with the next pre-eviction filter or the final eviction request.
+For scoped Pods, the plugin retrieves the latest Pod metrics from the metrics client and matches them with every regular container in the Pod specification. Missing or incomplete metrics block the eviction. For each resource, the plugin separately determines whether every container has an effective request. A complete dimension is aggregated and compared with its configured threshold. An incomplete request dimension is not divided by a partial aggregate request and is instead resolved using \textit{missingRequestPolicy}. Eviction is blocked when either the CPU or memory dimension reports \(\mathrm{busy}=\mathrm{true}\). Otherwise, the Pod passes the filter and the Descheduler may continue with the next pre-eviction filter or the final eviction request.
 
 This workflow complements request-based strategies such as \textit{ResourceDefragmentation}. A strategy may select a Pod because moving it improves cluster packing, but the Actual Usage Evictor can still reject the eviction when runtime metrics indicate that the Pod is actively consuming its requested resources.
 
 \subsection{Failure and Safety Behavior}
 \label{sec:actualusage_safety}
 
-The Actual Usage Evictor uses a fail-closed behavior for Pods inside its scope. If the metrics collector or metrics client is unavailable, the eviction is blocked. If the Pod metrics cannot be read, the eviction is also blocked. The same behavior applies when the metrics are incomplete, for example when a container in the Pod specification has no corresponding CPU or memory metric.
+The Actual Usage Evictor distinguishes unavailable runtime observations from absent declared request baselines. Runtime observations remain fail-closed: if the metrics collector or metrics client is unavailable, Pod metrics cannot be read, or any regular container has incomplete CPU or memory metrics, the eviction is blocked.
 
-This conservative behavior is intentional because the plugin's role is to protect active Pods. When runtime usage cannot be verified, allowing the eviction could move a busy Pod without evidence that it is safe to do so. By blocking the eviction on missing or incomplete metrics, the plugin avoids making eviction decisions from stale or unreliable runtime information.
+Missing requests follow \textit{missingRequestPolicy} instead of the metrics failure path. This distinction is necessary because unavailable metrics leave the plugin unable to observe whether the Pod is busy, whereas a missing request leaves the plugin without a denominator for interpreting an otherwise available observation. The default \texttt{Allow} policy skips only the affected resource dimension; it does not change the fail-closed behavior for missing or incomplete metrics.
 
 \subsection{Plugin Configuration}
 \label{sec:actualusage_config}
@@ -259,12 +265,14 @@ This conservative behavior is intentional because the plugin's role is to protec
     \caption{Actual Usage Evictor Plugin Arguments}
     \label{tab:actualusage_args}
     \renewcommand{\arraystretch}{1.25}
+    \small
     \begin{tabular}{l l l p{7.0cm}}
         \hline
         \textbf{Parameter} & \textbf{Type} & \textbf{Default} & \textbf{Purpose} \\
         \hline
-        \textit{cpuUsageThreshold} & float & \(0.80\) & Blocks eviction when actual CPU usage divided by requested CPU reaches this value. \\
-        \textit{memoryUsageThreshold} & float & \(0.80\) & Blocks eviction when actual memory usage divided by requested memory reaches this value. \\
+        \textit{cpuUsageThreshold} & float & \(0.80\) & Blocks eviction when actual CPU usage divided by effective requested CPU reaches the configured threshold. \\
+        \textit{memoryUsageThreshold} & float & \(0.80\) & Blocks eviction when actual memory usage divided by effective requested memory reaches the configured threshold. \\
+        \textit{missingRequestPolicy} & string & \textit{Allow} & Controls a resource dimension with a missing request. \textit{Allow} skips the dimension; \textit{Block} rejects the eviction. \\
         \textit{namespaces} & object & optional & Restricts the Pods evaluated by this plugin using namespace include or exclude rules. \\
         \textit{labelSelector} & object & optional & Restricts the Pods evaluated by this plugin using Kubernetes label matching. \\
         \hline
