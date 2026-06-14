@@ -461,6 +461,26 @@ The Descheduler is triggered only after two consecutive Metrics API samples show
 
 Application results are normalized to the first \(30\) seconds after the recorded Descheduler event. R0 and R1 use a \(30\)-second post-event capture. The longer HNU and LNU captures are truncated to the same event-aligned interval. Failure-rate denominators therefore contain only requests completed within this common window.
 
+\subsubsection{Experiment Execution Procedure}
+\label{subsubsec:actualusage4_procedure}
+
+Each experiment run follows a common ten-step procedure. The steps are identical across all six systems; only the Descheduler policy file and the raw capture duration differ.
+
+\begin{enumerate}
+    \item \textbf{Layout deployment.} The strategy-specific layout is deployed and validated (Section~\ref{subsubsec:actualusage4_layouts}).
+    \item \textbf{Before snapshot.} Node allocatable resources, Pod placements, and cluster metrics (\(S\), \(H\), \(N_{\text{active}}\)) are recorded.
+    \item \textbf{Load start.} A \textit{k6} constant-arrival-rate generator and a Pod lifecycle watcher begin recording concurrently.
+    \item \textbf{Stabilization.} The system waits \(30\,s\) for the load to reach steady state.
+    \item \textbf{Threshold gate.} The Kubernetes Metrics API is polled every \(10\,s\) until two consecutive samples confirm the API Pod's CPU usage-to-request ratio exceeds \(0.80\).
+    \item \textbf{Event timestamp.} The current time is persisted as \(t_{\text{event}}\).
+    \item \textbf{Descheduler execution.} The Descheduler runs as a single-shot Kubernetes Job with the system's policy.
+    \item \textbf{Post-event capture.} The script sleeps for the configured post-event duration (\(30\,s\) for R0/R1, \(45\,s\) for H0/H1 and L0/L1) while \textit{k6} and the lifecycle watcher continue recording.
+    \item \textbf{After snapshot.} The same cluster metrics are captured again.
+    \item \textbf{Shutdown and summarization.} Load generation is stopped and the \textit{k6} JSON output is filtered to the \(30\,s\) event-aligned window for metric computation.
+\end{enumerate}
+
+The post-event capture for HNU and LNU uses \(45\,s\) to ensure replacement Pods reach the Ready state before the after-snapshot. During analysis, only the first \(30\,s\) of \textit{k6} data after \(t_{\text{event}}\) are retained so that failure-rate denominators are comparable across all six systems.
+
 \subsubsection{Strategy-Specific Cluster Layouts}
 \label{subsubsec:actualusage4_layouts}
 
