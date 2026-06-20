@@ -3,9 +3,30 @@
 \label{bab:3}
 %----------------------------------------------------------------------------- %%
 
-This chapter presents the design and implementation of the Descheduler components developed in this research. Section 3.1 describes the defragmentation-focused \textit{ResourceDefragmentation} policy. Section 3.2 describes the Actual Usage Evictor, a runtime-usage-based pre-eviction filter. Section 3.3 describes the Network-Aware Evictor and its topology and latency-based cost models.
+This chapter presents the design and implementation of the Descheduler components developed in this research. Section 3.1 introduces the overall end-to-end descheduler architecture workflow. Section 3.2 describes the defragmentation-focused \textit{ResourceDefragmentation} policy. Section 3.3 describes the Actual Usage Evictor, a runtime-usage-based pre-eviction filter. Section 3.4 describes the Network-Aware Evictor and its topology and latency-based cost models.
 
 Several components are implemented as descheduler \textit{EvictorPlugin} extensions. In this framework, the \textit{Filter} stage performs candidate filtering, while the \textit{PreEvictionFilter} stage is executed immediately before an eviction request is submitted. Pre-eviction filters can be chained, therefore a candidate Pod must pass all enabled filters before the descheduler performs the eviction. This mechanism is used by both the Actual Usage Evictor and the Network-Aware Evictor as safety gates around strategy-driven eviction decisions.
+
+\section{End-to-End Descheduler Architecture Workflow}
+\label{sec:end_to_end_workflow}
+
+The architecture proposed in this research consists of three primary components that form a continuous, end-to-end eviction pipeline. This pipeline ensures that defragmentation actions are structurally beneficial, safe for active workloads, and non-disruptive to network locality. The workflow operates as follows:
+
+% TODO: Insert an end-to-end architectural diagram illustrating the 3-stage pipeline here.
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{assets/pics/placeholder_e2e_diagram.png}
+%     \caption{End-to-End Descheduler Architecture Workflow.}
+%     \label{fig:e2e_architecture_workflow}
+% \end{figure}
+
+\begin{enumerate}
+    \item \textbf{Pod Selection Stage:} The \textit{ResourceDefragmentation} policy first analyzes the cluster's requested resource layout. It identifies nodes that are fragmented or underutilized, predicts feasible landing destinations for their pods, and selects an eviction candidate that will maximize the projected bin-packing score on the target node.
+    \item \textbf{First Safety Gate (Actual Utilization):} Once a candidate pod is proposed, the \textit{Actual Usage Evictor} acts as the first \textit{PreEvictionFilter}. It checks the pod's live CPU and memory metrics. If the pod is actively serving traffic (usage exceeds a threshold relative to its requests), the eviction is blocked to avoid service disruption, forcing the strategy to propose the next best candidate.
+    \item \textbf{Second Safety Gate (Network Latency):} If the pod is not actively busy, the \textit{NetworkCost Evictor} acts as the final \textit{PreEvictionFilter}. It evaluates the predicted destination node against the pod's dependencies (e.g., a backend database). If relocating the pod would force cross-region communication or violate latency thresholds, the eviction is blocked.
+\end{enumerate}
+
+An eviction request is submitted to the Kubernetes API only after a candidate pod successfully passes all three stages: structural benefit validation, actual-usage safety verification, and network-locality protection.
 
 \section{ResourceDefragmentation Policy Design}
 \label{sec:imbalanceindex_design}
@@ -19,45 +40,41 @@ The experimental configuration explicitly uses declared Pod requests. This keeps
 
 For Node \(n\), let \(u_{n,c}\) and \(u_{n,m}\) denote normalized requested CPU and memory:
 
-\begin{equation}
+\[
     u_{n,c} = \frac{R_{n,c}}{C_{n,c}},
     \qquad
     u_{n,m} = \frac{R_{n,m}}{C_{n,m}},
-\end{equation}
+\]
 
 where \(u_{n,c}\) is the normalized CPU utilization of Node \(n\), \(u_{n,m}\) is the normalized memory utilization of Node \(n\), \(R_{n,c}\) is the sum of CPU requests from all Pods on Node \(n\), \(R_{n,m}\) is the sum of memory requests from all Pods on Node \(n\), \(C_{n,c}\) is the allocatable CPU capacity of Node \(n\), and \(C_{n,m}\) is the allocatable memory capacity of Node \(n\). Average utilization represents density:
 
-\begin{equation}
+\[
     U_n^{avg} = \frac{u_{n,c} + u_{n,m}}{2},
-    \label{eq:defrag_avg_utilization}
-\end{equation}
+\]
 
 where \(U_n^{avg}\) is the average utilization of Node \(n\), representing overall resource density by taking the mean of normalized CPU and memory utilization.
 
 The bin score combines density and dimensional balance:
 
-\begin{equation}
+\[
     B_n =
     \frac{
         \frac{u_{n,c}+u_{n,m}}{2}
         \left(1-\left|u_{n,c}-u_{n,m}\right|\right)
     }{2},
-    \label{eq:defrag_bin_score}
-\end{equation}
+\]
 
 where \(B_n\) is the bin score of Node \(n\), combining density (average utilization) with dimensional balance (the penalty factor \(1-|u_{n,c}-u_{n,m}|\) reduces the score when CPU and memory utilization diverge). A dense and balanced Node has a high \(B_n\), whereas an empty or strongly skewed Node has a lower score. The signed Resource Imbalance Index identifies the skew direction:
 
-\begin{equation}
+\[
     RII_n = u_{n,c} - u_{n,m},
-    \label{eq:rii_node}
-\end{equation}
+\]
 
 where \(RII_n\) is the Resource Imbalance Index of Node \(n\). A positive value indicates CPU-heavy skew (CPU utilization exceeds memory utilization), while a negative value indicates memory-heavy skew. The Free-Space Index represents joint CPU-memory headroom:
 
-\begin{equation}
+\[
     FSI_n = (1-u_{n,c})(1-u_{n,m}),
-    \label{eq:defrag_fsi}
-\end{equation}
+\]
 
 where \(FSI_n\) is the Free-Space Index of Node \(n\), representing the product of remaining CPU capacity \((1-u_{n,c})\) and remaining memory capacity \((1-u_{n,m})\). A higher \(FSI_n\) indicates a larger jointly usable headroom region, while a low \(FSI_n\) suggests constrained free space in at least one dimension.
 
@@ -66,24 +83,22 @@ where \(FSI_n\) is the Free-Space Index of Node \(n\), representing the product 
 
 A worker Node with at least one evictable Pod becomes a drain candidate when either its average utilization or its bin score is below the configured drain threshold \(\tau\):
 
-\begin{equation}
+\[
     U_n^{avg} < \tau
     \quad \lor \quad
     B_n < \tau.
-    \label{eq:defrag_drain_condition}
-\end{equation}
+\]
 
 The disjunction allows the policy to act on two resource-only states. A lightly utilized but balanced Node can be drained to free infrastructure, while a more utilized but badly skewed Node can be drained because its remaining headroom is hard to reuse.
 
 Drain candidates are processed in descending priority:
 
-\begin{equation}
+\[
     P_n =
     0.5\left|RII_n\right|
     +
     0.5\frac{1}{FSI_n+\epsilon}.
-    \label{eq:priority_index}
-\end{equation}
+\]
 
 The first term emphasizes dimensional skew. The second term emphasizes a narrow jointly usable free-space region. The constant \(\epsilon\) prevents division by zero. Utilization and bin score decide whether a Node enters the drain set, while RII and FSI decide which drain candidate is handled first.
 
@@ -101,22 +116,20 @@ For every evictable Pod \(p\) on source Node \(s\), the plugin evaluates non-ori
 
 The final condition is the pack-upward guard:
 
-\begin{equation}
+\[
     \min(u_{t,c},u_{t,m}) \geq \min(u_{s,c},u_{s,m}),
-    \label{eq:defrag_pack_upward}
-\end{equation}
+\]
 
-where \(u_{t,c}\) and \(u_{t,m}\) are the projected CPU and memory utilization of target Node \(t\) after receiving Pod \(p\), while \(u_{s,c}\) and \(u_{s,m}\) are the current CPU and memory utilization of source Node \(s\). The constraint requires that the minimum utilization dimension of the target (its less-utilized resource) must be at least as high as the minimum utilization dimension of the source. It prevents an eviction from merely moving a Pod to an emptier Node. Among feasible Nodes, \texttt{predictSchedulerTarget} returns the Node with the highest projected bin score after receiving \(p\).
+where \(u_{t,c}\) and \(u_{t,m}\) are the projected CPU and memory utilization of target Node \(t\) after receiving Pod \(p\), while \(u_{s,c}\) and \(u_{s,m}\) are the current CPU and memory utilization of source Node \(s\). The constraint requires that the minimum utilization dimension of the target (its less-utilized resource) must be at least as high as the minimum utilization dimension of the source. It prevents an eviction from merely moving a Pod to an emptier Node. Among feasible Nodes, \textit{predictSchedulerTarget} returns the Node with the highest projected bin score after receiving \(p\).
 
 \subsection{Predicted-Target Eviction-Candidate Selection}
 \label{sec:defrag_victim_selection}
 
 For candidate Pod \(p\), let \(t_p\) be its predicted target and \(B'_{t_p}\) the target bin score after placement. The selected eviction candidate is:
 
-\begin{equation}
+\[
     p^\star = \arg\max_{p} B'_{t_p}.
-    \label{eq:defrag_selector}
-\end{equation}
+\]
 
 This is the only eviction-candidate selection criterion after target feasibility is checked. It directly prefers a movement that produces the best projected CPU-memory shape at the expected destination. Candidates without a feasible target are excluded. After a successful eviction, the local source and predicted-target snapshots are updated before the next decision. Predicted targets are marked as bins so the same pass does not subsequently drain a Node that has just received packed workload.
 
@@ -199,34 +212,31 @@ For Pods inside the configured scope, the plugin reads Pod metrics through the d
 
 For a Pod \(p\), let \(R_{p,c}\) and \(R_{p,m}\) denote its effective requested CPU and memory aggregated across all regular containers, and let \(A_{p,c}\) and \(A_{p,m}\) denote the corresponding actual usage obtained from Pod metrics. A Pod-level request dimension is complete only when every regular container declares an effective request for that resource. For complete CPU and memory dimensions, the runtime usage ratios are defined as:
 
-\begin{equation}
+\[
     \rho_{p,c} = \frac{A_{p,c}}{R_{p,c}},
     \qquad
     \rho_{p,m} = \frac{A_{p,m}}{R_{p,m}},
-    \label{eq:actualusage_ratio}
-\end{equation}
+\]
 
-where \(\rho_{p,c}\) is the actual CPU usage ratio and \(\rho_{p,m}\) is the actual memory usage ratio. CPU is aggregated in millicores, while memory is aggregated in bytes. The Actual Usage Evictor reads effective requests from the Pod object stored by the API server. Therefore, requests introduced during admission, including defaults from a \texttt{LimitRange}, are included without requiring the plugin to query \texttt{LimitRange} objects directly.
+where \(\rho_{p,c}\) is the actual CPU usage ratio and \(\rho_{p,m}\) is the actual memory usage ratio. CPU is aggregated in millicores, while memory is aggregated in bytes. The Actual Usage Evictor reads effective requests from the Pod object stored by the API server. Therefore, requests introduced during admission, including defaults from a \textit{LimitRange}, are included without requiring the plugin to query \textit{LimitRange} objects directly.
 
 The ratios intentionally compare usage with requests rather than with resource limits or Node capacity. Requests are the workload baseline used for scheduler placement and request-space defragmentation, so the ratio expresses whether a Pod is active relative to that baseline. Limits instead define runtime enforcement ceilings. Replacing a request denominator with a limit would change the decision from busy-Pod protection to detecting proximity to CPU throttling or a memory out-of-memory boundary.
 
 Given CPU threshold \(\theta_c\) and memory threshold \(\theta_m\), the eviction is blocked when either resource reaches or exceeds its threshold:
 
-\begin{equation}
+\[
     \rho_{p,c} \geq \theta_c
     \quad \lor \quad
     \rho_{p,m} \geq \theta_m.
-    \label{eq:actualusage_block_condition}
-\end{equation}
+\]
 
 Therefore, a Pod is allowed to be evicted only when both usage ratios are below their thresholds:
 
-\begin{equation}
+\[
     \rho_{p,c} < \theta_c
     \quad \land \quad
     \rho_{p,m} < \theta_m.
-    \label{eq:actualusage_allow_condition}
-\end{equation}
+\]
 
 The default values \(\theta_c = 0.80\) and \(\theta_m = 0.80\) are configurable thresholds used to classify a Pod as busy relative to its effective requests. A ratio of \(0.80\) means that the observed usage has reached \(80\%\) of the configured request. It does not by itself indicate that the Pod is close to resource saturation because requests can represent different workload baselines.
 
@@ -234,7 +244,7 @@ The interpretation of the threshold therefore depends on request calibration and
 
 When any regular container lacks an effective request for a resource, the entire Pod-level dimension is marked as missing. The plugin does not divide aggregate usage by the requests of only the remaining containers because such a partial denominator would overstate usage relative to an incomplete baseline. Missing CPU and memory dimensions are evaluated independently using \textit{missingRequestPolicy}.
 
-With the default \texttt{Allow} policy, a missing dimension is skipped and contributes \(\mathrm{busy}=\mathrm{false}\). The other resource dimension can still block eviction through the OR condition in Equation~\ref{eq:actualusage_block_condition}. With \texttt{Block}, a missing dimension contributes \(\mathrm{busy}=\mathrm{true}\) and blocks eviction. The default does not assert that a Pod without requests is idle or that eviction is harmless. It indicates only that the plugin has no request-relative denominator from which to infer busyness. Operators can select \texttt{Block} when a conservative missing-request behavior is required.
+With the default \textit{Allow} policy, a missing dimension is skipped and contributes \(\mathrm{busy}=\mathrm{false}\). The other resource dimension can still block eviction through the OR condition in the previously defined condition. With \textit{Block}, a missing dimension contributes \(\mathrm{busy}=\mathrm{true}\) and blocks eviction. The default does not assert that a Pod without requests is idle or that eviction is harmless. It indicates only that the plugin has no request-relative denominator from which to infer busyness. Operators can select \textit{Block} when a conservative missing-request behavior is required.
 
 \subsection{Eviction Decision Workflow and Algorithm}
 \label{sec:actualusage_algorithm}
@@ -255,7 +265,7 @@ This workflow complements request-based strategies such as \textit{ResourceDefra
 
 The Actual Usage Evictor distinguishes unavailable runtime observations from absent declared request baselines. Runtime observations remain fail-closed: if the metrics collector or metrics client is unavailable, Pod metrics cannot be read, or any regular container has incomplete CPU or memory metrics, the eviction is blocked.
 
-Missing requests follow \textit{missingRequestPolicy} instead of the metrics failure path. This distinction is necessary because unavailable metrics leave the plugin unable to observe whether the Pod is busy, whereas a missing request leaves the plugin without a denominator for interpreting an otherwise available observation. The default \texttt{Allow} policy skips only the affected resource dimension; it does not change the fail-closed behavior for missing or incomplete metrics.
+Missing requests follow \textit{missingRequestPolicy} instead of the metrics failure path. This distinction is necessary because unavailable metrics leave the plugin unable to observe whether the Pod is busy, whereas a missing request leaves the plugin without a denominator for interpreting an otherwise available observation. The default \textit{Allow} policy skips only the affected resource dimension; it does not change the fail-closed behavior for missing or incomplete metrics.
 
 \subsection{Plugin Configuration}
 \label{sec:actualusage_config}
