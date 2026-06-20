@@ -3,7 +3,7 @@
 \label{bab:4}
 %-----------------------------------------------------------------------------%
 
-This chapter evaluates the developed Descheduler policies. Section 4.1 compares \textit{ResourceDefragmentation} with the upstream \textit{HighNodeUtilization} strategy across five node reclamation and fragmentation scenarios. Section 4.2 evaluates the latency and resource trade-off of the Network-Aware Evictor.
+This chapter evaluates the developed Descheduler policies. Section 4.1 compares \textit{ResourceDefragmentation} with the upstream \textit{HighNodeUtilization} strategy across five node reclamation and fragmentation scenarios. Section 4.2 evaluates how the Actual Usage Evictor protects a busy application Pod under \textit{ResourceDefragmentation}, \textit{HighNodeUtilization}, and \textit{LowNodeUtilization}, and measures the resulting effect on each strategy's placement objective. Section 4.3 evaluates the latency and resource trade-off of the Network-Aware Evictor.
 
 \section{ResourceDefragmentation Evaluation}
 \label{sec:resource_defrag_evaluation}
@@ -181,6 +181,24 @@ Where:
 
 A higher \(H_{balanced}\) indicates that defragmentation has reassembled fragmented free capacity into contiguous, jointly schedulable space. Because the per-Node term is limited by the tighter dimension, a Node with abundant free CPU but little free memory contributes little headroom, which is precisely the stranding that the policy aims to remove.
 
+The same construction generalizes to any reference Pod shape \(r = (c_r, m_r)\), giving a family of probes \(H_r\) that reveal \emph{which} kind of capacity a layout can still admit:
+
+\[
+H_r
+=
+\sum_{n=1}^{N}
+\min\!\left(
+\left\lfloor
+\frac{\text{cpu}_{\text{alloc}}(n) - \text{cpu}_{\text{req}}(n)}{c_r}
+\right\rfloor,
+\left\lfloor
+\frac{\text{mem}_{\text{alloc}}(n) - \text{mem}_{\text{req}}(n)}{m_r}
+\right\rfloor
+\right)
+\]
+
+In addition to the balanced probe, three skewed probes are evaluated: a CPU-skewed Pod (\(H_{cpu\text{-}skewed}\)), a memory-skewed Pod (\(H_{mem\text{-}skewed}\)), and a large jumbo Pod (\(H_{jumbo}\), \(800\,m/324\,Mi\)). The balanced probe measures general schedulability, the two skewed probes measure how much single-axis capacity remains usable, and the jumbo probe measures whether the layout retains room for large indivisible workloads. Together they show that defragmentation does not merely free aggregate space but free space of the right shape.
+
 %-----------------------------------------------------------------------------%
 \subsubsection{Eviction Count and Efficiency}
 \label{subsubsec:defrag_metric_eviction}
@@ -332,6 +350,55 @@ The eviction cost behind these gains is reported in Figure \ref{fig:defrag_evict
     \label{fig:defrag_evictions}
 \end{figure}
 
+\subsection{Shape-Specific Schedulability Yield}
+\label{sec:defrag_shape_headroom}
+
+Balanced headroom alone does not show \emph{which} kind of workload a defragmented layout can still admit. To make this explicit, the residual capacity is also probed with three skewed reference Pods: a CPU-skewed Pod, a memory-skewed Pod, and a large jumbo Pod (\(800\,m/324\,Mi\)). Table \ref{tab:defrag_shape_headroom} reports the resulting yields after descheduling.
+
+\begin{table}[H]
+    \centering
+    \caption{Schedulability Yield by Reference-Pod Shape After Descheduling}
+    \label{tab:defrag_shape_headroom}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{l cc cc cc}
+        \hline
+        & \multicolumn{2}{c}{\textbf{CPU-skewed}} & \multicolumn{2}{c}{\textbf{Memory-skewed}} & \multicolumn{2}{c}{\textbf{Jumbo}} \\
+        \textbf{Scenario} & \textbf{HNU} & \textbf{RD} & \textbf{HNU} & \textbf{RD} & \textbf{HNU} & \textbf{RD} \\
+        \hline
+        S1 & \(12\) & \(\mathbf{13}\) & \(12\) & \(\mathbf{13}\) & \(6\) & \(\mathbf{8}\) \\
+        S2 & \(9\)  & \(9\)          & \(9\)  & \(\mathbf{11}\) & \(0\) & \(\mathbf{6}\) \\
+        S3 & \(\mathbf{6}\) & \(5\)   & \(6\)  & \(\mathbf{9}\)  & \(\mathbf{4}\) & \(2\) \\
+        S4 & \(4\)  & \(\mathbf{8}\)  & \(4\)  & \(\mathbf{7}\)  & \(3\) & \(\mathbf{4}\) \\
+        S5 & \(\mathbf{12}\) & \(11\) & \(11\) & \(11\)          & \(6\) & \(\mathbf{7}\) \\
+        \hline
+    \end{tabular}
+\end{table}
+
+In the fragmentation scenarios, ResourceDefragmentation increases the yield for skewed and jumbo workloads where it matters most. In S2 and S4, where complementary CPU-heavy and memory-heavy Nodes are merged, it lifts memory-skewed yield (\(9 \to 11\) in S2, \(4 \to 7\) in S4) and restores jumbo capacity that the baseline cannot provide at all in S2 (\(0 \to 6\)), as shown in Figures \ref{fig:defrag_h_cpu_skewed}, \ref{fig:defrag_h_mem_skewed}, and \ref{fig:defrag_h_jumbo}. In S5 it matches or slightly exceeds the baseline on every shape while using fewer evictions.
+
+The two cases where HNU leads, CPU-skewed and jumbo yield in S3, reflect the same trade-off seen in the balanced headroom and stranding results: HNU empties an additional Node by greedily packing onto pre-dense targets, which leaves more whole-Pod slots free but at a slightly worse stranding score. ResourceDefragmentation instead preserves resource shape, so its remaining capacity is more evenly balanced across dimensions rather than concentrated on one emptied Node.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_cpu_skewed.png}
+    \caption{CPU-skewed schedulability yield \(H_{cpu\text{-}skewed}\) per scenario after descheduling.}
+    \label{fig:defrag_h_cpu_skewed}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_mem_skewed.png}
+    \caption{Memory-skewed schedulability yield \(H_{mem\text{-}skewed}\) per scenario after descheduling.}
+    \label{fig:defrag_h_mem_skewed}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_jumbo.png}
+    \caption{Jumbo (\(800\,m/324\,Mi\)) schedulability yield \(H_{jumbo}\) per scenario after descheduling.}
+    \label{fig:defrag_h_jumbo}
+\end{figure}
+
 \subsection{Convergence and Safety}
 \label{sec:defrag_convergence_safety}
 
@@ -364,6 +431,392 @@ The evaluation yields four main findings:
     \item ResourceDefragmentation reduces dimensional stranding in S2, S4, and S5 while preserving or increasing balanced schedulability headroom.
     \item Predicted-target bin-score selection is especially effective for heterogeneous drain Nodes, reducing S5 stranding from \(1.338\) to \(0.123\) with two evictions.
     \item The policy converges without leaving Pods Pending, showing that node reclamation pressure can be combined with explicit feasibility and utilization guards.
+\end{itemize}
+
+\section{Actual Usage Evictor Evaluation}
+\label{sec:actualusage4_test}
+%-----------------------------------------------------------------------------%
+This section evaluates whether the Actual Usage Evictor can protect a currently busy application Pod across different Descheduler balancing objectives. Three control-treatment pairs are evaluated under sustained API traffic. Each control enables a balancing strategy with the Default Evictor, while the corresponding treatment adds the Actual Usage Evictor as a global pre-eviction filter. The filter is expected to reject the busy API Pod while continuing to permit idle candidates.
+
+The primary evaluation concerns application availability. It measures whether protecting the busy Pod reduces failed requests and service disruption following the Descheduler event. The cluster-side effect is evaluated according to the objective of each strategy. \textit{ResourceDefragmentation} is assessed through stranding reduction, \textit{HighNodeUtilization} through active-Node reduction, and \textit{LowNodeUtilization} through normalized CPU and memory request-deviation reduction. This design distinguishes the common application-protection effect from the strategy-specific cost of excluding a busy eviction candidate.
+
+%-----------------------------------------------------------------------------%
+\subsection{Evaluation Scope}
+\label{subsec:actualusage4_scope}
+%-----------------------------------------------------------------------------%
+The evaluation uses controlled scenarios for \textit{ResourceDefragmentation}, \textit{HighNodeUtilization}, and \textit{LowNodeUtilization}. Each scenario is designed to place a busy API Pod among the eviction candidates while preserving the placement objective of the evaluated strategy. The results therefore characterize the behavior of the Actual Usage Evictor in these controlled layouts rather than every possible cluster layout or workload composition.
+
+Application availability is evaluated primarily through HTTP failure rate and service disruption duration. Successful-request tail latency is reported as a secondary metric because transient variation is present in the individual runs. The configured usage threshold of \(0.80\) is used to evaluate whether request-relative runtime filtering changes the eviction outcome. The experiment does not attempt to determine an optimal threshold value.
+
+%-----------------------------------------------------------------------------%
+\subsection{Experimental Design}
+\label{subsec:actualusage4_experimentsetup}
+%-----------------------------------------------------------------------------%
+\subsubsection{Common Workload and Load Generation}
+\label{subsubsec:actualusage4_load}
+
+Every comparison uses six worker Nodes and a singleton API Pod exposed through a dedicated NodePort Service. A \textit{k6} constant-arrival-rate workload sends approximately eight requests per second only to this Service. Other experiment Pods do not receive foreground traffic. Each request performs fixed CPU work in the API container, whose CPU request is \(50\,m\) and CPU limit is \(1000\,m\).
+
+The Descheduler is triggered only after two consecutive Metrics API samples show that the API Pod's CPU usage exceeds the configured ratio of \(0.80\). The decision-time ratios are \(11.98\) in R1, approximately \(10.02\) in H1, and approximately \(10.10\) in L1. These values confirm that the candidate is busy relative to its request. The CPU limit allows the container to burst above \(50\,m\), but it is not a denominator in the Actual Usage Evictor decision.
+
+Application results are normalized to the first \(30\) seconds after the recorded Descheduler event. R0 and R1 use a \(30\)-second post-event capture. The longer HNU and LNU captures are truncated to the same event-aligned interval. Failure-rate denominators therefore contain only requests completed within this common window.
+
+\subsubsection{Experiment Execution Procedure}
+\label{subsubsec:actualusage4_procedure}
+
+Each experiment run follows a common ten-step procedure. The steps are identical across all six systems; only the Descheduler policy file and the raw capture duration differ.
+
+\begin{enumerate}
+    \item \textbf{Layout deployment.} The strategy-specific layout is deployed and validated (Section~\ref{subsubsec:actualusage4_layouts}).
+    \item \textbf{Before snapshot.} Node allocatable resources, Pod placements, and cluster metrics (\(S\), \(H\), \(N_{\text{active}}\)) are recorded.
+    \item \textbf{Load start.} A \textit{k6} constant-arrival-rate generator and a Pod lifecycle watcher begin recording concurrently.
+    \item \textbf{Stabilization.} The system waits \(30\,s\) for the load to reach steady state.
+    \item \textbf{Threshold gate.} The Kubernetes Metrics API is polled every \(10\,s\) until two consecutive samples confirm the API Pod's CPU usage-to-request ratio exceeds \(0.80\).
+    \item \textbf{Event timestamp.} The current time is persisted as \(t_{\text{event}}\).
+    \item \textbf{Descheduler execution.} The Descheduler runs as a single-shot Kubernetes Job with the system's policy.
+    \item \textbf{Post-event capture.} The script sleeps for the configured post-event duration (\(30\,s\) for R0/R1, \(45\,s\) for H0/H1 and L0/L1) while \textit{k6} and the lifecycle watcher continue recording.
+    \item \textbf{After snapshot.} The same cluster metrics are captured again.
+    \item \textbf{Shutdown and summarization.} Load generation is stopped and the \textit{k6} JSON output is filtered to the \(30\,s\) event-aligned window for metric computation.
+\end{enumerate}
+
+The post-event capture for HNU and LNU uses \(45\,s\) to ensure replacement Pods reach the Ready state before the after-snapshot. During analysis, only the first \(30\,s\) of \textit{k6} data after \(t_{\text{event}}\) are retained so that failure-rate denominators are comparable across all six systems.
+
+\subsubsection{Strategy-Specific Cluster Layouts}
+\label{subsubsec:actualusage4_layouts}
+
+The three pairs use layouts that expose the placement objective of each balancing strategy, as summarized in Table~\ref{tab:actualusage4_layouts}.
+
+\begin{table}[H]
+    \centering
+    \caption{Strategy-Specific Layouts for Actual Usage Evaluation}
+    \label{tab:actualusage4_layouts}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l p{7.2cm} p{5.2cm}}
+        \toprule
+        \textbf{Pair} & \textbf{Initial layout} & \textbf{Intended strategy action} \\
+        \midrule
+        R0/R1 & Complementary CPU- and memory-skewed Nodes. The API and an idle memory Pod share worker-6. & Move one source Pod to reduce request-space stranding. \\
+        H0/H1 & Three dense destination Nodes and three underutilized one-Pod source Nodes. The busy API is isolated on worker-6. & Empty source Nodes and reduce the active-Node count. \\
+        L0/L1 & Three underutilized destination Nodes and three overutilized source Nodes. The API and an idle fallback share worker-6. & Move one Pod from each source and reduce utilization deviation. \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+HNU uses the \texttt{NodeResourcesFit} scheduler plugin with \texttt{MostAllocated} scoring so replacement Pods are packed onto the three destination Nodes. LNU uses the default \texttt{LeastAllocated} scheduler so evicted Pods are distributed to the underutilized Nodes. The ResourceDefragmentation pair uses the request-space layout described below.
+
+\subsubsection{ResourceDefragmentation Layout and Candidate Ordering}
+\label{subsubsec:actualusage4_candidateordering}
+
+The initial layout is a modified variant of the S2 reducible-stranding scenario. Three CPU-skewed worker Nodes, two memory-skewed worker Nodes, and one source Node carry the twelve experiment Pods listed in Table~\ref{tab:actualusage4_layout}. The source Node (worker-6) is memory-skewed and hosts two Pods with the same CPU request but different memory requests. These are a user-facing API Pod and an idle memory-shaped worker Pod. This composition is the smallest layout in which \textit{ResourceDefragmentationC2} deterministically selects the API Pod first while still leaving a structurally valid fallback candidate on the same Node.
+
+\begin{table}[H]
+    \centering
+    \caption{Initial Pod Placement for the Actual Usage Eviction Test}
+    \label{tab:actualusage4_layout}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l l l c c l}
+        \hline
+        \textbf{Node} & \textbf{Role} & \textbf{Pods} & \textbf{CPU frac} & \textbf{Mem frac} & \textbf{Traffic} \\
+        \hline
+        worker-1 & cpu-skewed & 2 cpu Pods (\(750\,m\) / \(20\,Mi\) each) & \(0.80\) & \(0.11\) & none \\
+        worker-2 & cpu-skewed & 2 cpu Pods (\(750\,m\) / \(20\,Mi\) each) & \(0.80\) & \(0.11\) & none \\
+        worker-3 & cpu-skewed & 2 cpu Pods (\(750\,m\) / \(20\,Mi\) each) & \(0.80\) & \(0.11\) & none \\
+        worker-4 & mem-skewed & 2 mem Pods (\(50\,m\) / \(240\,Mi\) each) & \(0.10\) & \(0.65\) & none \\
+        worker-5 & mem-skewed & 2 mem Pods (\(50\,m\) / \(240\,Mi\) each) & \(0.10\) & \(0.65\) & none \\
+        worker-6 & source (mem) & 1 API (\(50\,m\) / \(240\,Mi\)) + 1 mem (\(50\,m\) / \(200\,Mi\)) & \(0.10\) & \(0.60\) & API only \\
+        \hline
+    \end{tabular}%
+    }
+\end{table}
+
+The API Pod is exposed by a dedicated NodePort Service whose selector matches only the API Deployment. The memory Pod has no Service. Traffic is therefore routed deterministically to the API Pod and is independent of \texttt{kube-proxy} round-robin distribution. This layout satisfies three properties that are necessary for the experiment to be meaningful:
+
+\begin{itemize}
+    \item Both source-Node Pods have identical CPU requests, so they appear equivalent under any CPU-only filter.
+    \item The API Pod has a strictly larger memory request (\(240\,Mi\)) than the memory Pod (\(200\,Mi\)), so \textit{ResourceDefragmentationC2} consistently selects the API Pod first when ranking by projected target bin score on a CPU-skewed destination.
+    \item Only the API Pod receives traffic, so any disruption from evicting the API Pod is fully visible at the application boundary rather than being diluted across multiple replicas behind a single Service.
+\end{itemize}
+
+%-----------------------------------------------------------------------------%
+\textit{ResourceDefragmentationC2} predicts a CPU-skewed destination for each worker-6 candidate. The API Pod (\(50\,m/240\,Mi\)) produces a projected target bin score of \(0.633\), while the idle memory Pod (\(50\,m/200\,Mi\)) produces \(0.596\). The API Pod is therefore considered first. The Actual Usage Evictor does not modify this ranking because it operates at the \textit{PreEvictionFilter} stage after the strategy has selected a candidate.
+
+In HNU, the busy API occupies one of the three source Nodes that the strategy attempts to empty. Protecting the API therefore leaves worker-6 active. In LNU, the busy API is considered before an idle fallback on worker-6. Blocking the API allows the strategy to use the fallback and still complete one successful eviction from that source.
+
+%-----------------------------------------------------------------------------%
+\subsection{Comparison Systems}
+\label{subsec:actualusage4_scenario}
+%-----------------------------------------------------------------------------%
+Each pair differs only in whether the Actual Usage Evictor is registered after the Default Evictor, as shown in Table~\ref{tab:actualusage4_matrix}.
+
+\begin{table}[H]
+    \centering
+    \caption{Actual Usage Evictor Comparison Systems}
+    \label{tab:actualusage4_matrix}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l l l l}
+        \toprule
+        \textbf{Run} & \textbf{Strategy} & \textbf{Pre-eviction filters} & \textbf{Load} \\
+        \midrule
+        R0 & ResourceDefragmentationC2 & DefaultEvictor & k6 API load \\
+        R1 & ResourceDefragmentationC2 & DefaultEvictor + ActualUsageEvictor & k6 API load \\
+        H0 & HighNodeUtilization & DefaultEvictor & k6 API load \\
+        H1 & HighNodeUtilization & DefaultEvictor + ActualUsageEvictor & k6 API load \\
+        L0 & LowNodeUtilization & DefaultEvictor & k6 API load \\
+        L1 & LowNodeUtilization & DefaultEvictor + ActualUsageEvictor & k6 API load \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+The zero-suffix systems are controls without runtime safety filtering. The one-suffix systems use CPU and memory usage thresholds of \(0.80\). All evaluated Pods declare positive CPU and memory requests, so both dimensions have valid request-relative denominators.
+
+%-----------------------------------------------------------------------------%
+\subsection{Evaluation Metrics}
+\label{subsec:actualusage4_evaluationmetrics}
+%-----------------------------------------------------------------------------%
+The evaluation separates common application and eviction metrics from placement metrics that follow the objective of each strategy.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Common Application and Eviction Metrics}
+\label{subsubsec:actualusage4_metric_blocks}
+%-----------------------------------------------------------------------------%
+The Actual Usage Block Count (\(B\)) records how many candidate evictions are rejected because at least one request-relative usage ratio reaches its threshold:
+
+\[
+B
+=
+\sum_{j \in J} b_j
+\]
+
+The HTTP Failure Rate (\(F\)) is the fraction of completed requests that return a non-\(2xx\) response within the common post-event window:
+
+\[
+F
+=
+\frac{N_{\text{fail,post}}}{N_{\text{completed,post}}}.
+\]
+
+Service Disruption Duration (\(D\)) measures the interval from the first failed request to the last failed request after the event. It is zero when no failed request is observed:
+
+\[
+D =
+\begin{cases}
+t_{\text{last fail}} - t_{\text{first fail}}, & N_{\text{fail,post}} > 0,\\
+0, & N_{\text{fail,post}} = 0.
+\end{cases}
+\]
+
+Successful-request \(p_{95}\) latency excludes failed responses. Failed HTTP \(503\) responses can complete faster than successful requests and can therefore make a mixed-response percentile appear lower during an outage. Latency is retained as a secondary metric because transient bursts appear before and after events. Eviction outcome records the successful eviction count, block count, evicted Pod identity, and whether the original API Pod remains.
+
+%-----------------------------------------------------------------------------%
+\subsubsection{Strategy-Specific Placement Metrics}
+\label{subsubsec:actualusage4_metric_strandingdelta}
+%-----------------------------------------------------------------------------%
+ResourceDefragmentation uses positive stranding reduction and balanced-headroom change:
+
+\[
+\mathrm{StrandingReduction}
+=
+S_{\text{before}} - S_{\text{after}},
+\qquad
+\Delta H_{\text{balanced}}
+=
+H_{\text{balanced,after}} - H_{\text{balanced,before}}.
+\]
+
+HighNodeUtilization uses active-Node reduction:
+
+\[
+\mathrm{ActiveNodeReduction}
+=
+N_{\text{active,before}} - N_{\text{active,after}}.
+\]
+
+LowNodeUtilization uses the reduction in normalized request deviation for resource \(r\):
+
+\[
+\mathrm{DeviationReduction}_{r}
+=
+\sigma_{r,\text{before}} - \sigma_{r,\text{after}},
+\]
+
+where each Node contributes its requested CPU or memory divided by its allocatable capacity. Positive values indicate improvement toward the corresponding strategy objective.
+
+%-----------------------------------------------------------------------------%
+\subsection{ResourceDefragmentation Results}
+\label{subsec:actualusage4_resultanalysis_loaded}
+%-----------------------------------------------------------------------------%
+Table~\ref{tab:actualusage4_loaded} reports the ResourceDefragmentation pair. R0 evicts the busy API Pod and obtains the stronger defragmentation outcome. R1 blocks the API Pod, evicts the idle memory fallback, and preserves application availability.
+
+\begin{table}[H]
+    \centering
+    \caption{Descheduler Behavior Under Sustained API Load}
+    \label{tab:actualusage4_loaded}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c c}
+        \toprule
+        \textbf{Metric} & \textbf{R0 (no plugin)} & \textbf{R1 (with plugin)} \\
+        \midrule
+        Evictions                              & \(1\)                         & \(1\) \\
+        Actual usage blocks (\(B\))            & \(0\)                         & \(\mathbf{1}\) \\
+        Pod evicted                            & API (busy)                    & memory worker (idle) \\
+        Completed responses in \(30\,s\)       & \(240\)                       & \(231\) \\
+        HTTP \(503\) responses                 & \(40\)                        & \(\mathbf{0}\) \\
+        Failure rate \(F\)                     & \(16.67\%\)                   & \(\mathbf{0.00\%}\) \\
+        Disruption duration \(D\)              & \(4.875\,s\)                  & \(\mathbf{0\,s}\) \\
+        Stranding reduction                    & \(\mathbf{0.816}\)            & \(0.000\) \\
+        Headroom change \(\Delta H_{\text{balanced}}\) & \(\mathbf{+4}\)       & \(+1\) \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+\subsubsection{Eviction Substitution and Application Protection}
+\label{subsubsec:actualusage4_substitution}
+
+In R0 the Descheduler issues exactly one eviction, targeting the API Pod on worker-6. The replacement Pod is admitted on worker-2, a CPU-skewed Node, which is consistent with the bin-score ranking computed in Section~\ref{subsubsec:actualusage4_candidateordering}. In R1 the strategy still selects the API Pod first, but the Actual Usage Evictor observes \(599\,m\) CPU usage against a \(50\,m\) effective request, producing \(\rho_{p,c}=599/50=11.98\). Because this request-relative ratio exceeds the configured threshold of \(0.80\), the plugin rejects the eviction. The API Pod's \(1000\,m\) CPU limit explains why it can burst far above its request without being capped at \(50\,m\), but the limit does not participate in the ratio. The Descheduler then advances to the next candidate on the same source Node, the idle memory Pod, whose CPU and memory ratios are both effectively zero, so the plugin allows the eviction. The replacement memory Pod is admitted on worker-4. In both configurations the source Node loses one Pod and the strategy still acts on worker-6. The identity of the evicted Pod is the only change.
+
+The application-side effect is direct. During the normalized post-event window, R0 completes \(240\) requests and returns \(40\) HTTP \(503\) responses. This gives a failure rate of \(16.67\%\), with failed responses spanning \(4.875\,s\). R1 completes \(231\) requests with no failure and no disruption interval because the original API Pod remains on worker-6.
+
+\subsubsection{Defragmentation Trade-off}
+\label{subsubsec:actualusage4_strandingtradeoff}
+
+The protection benefit reduces the ResourceDefragmentation objective. R0 moves the larger \(240\,Mi\) API Pod to a CPU-skewed Node. Stranding falls from \(3.844\) to \(3.028\), giving a reduction of \(0.816\), and balanced headroom increases by four reference Pods. R1 moves the \(200\,Mi\) idle fallback. Stranding remains \(3.844\), while balanced headroom increases by one. The strategy still performs a feasible movement, but it loses the portion of the defragmentation gain that depends on relocating the busy API Pod.
+
+%-----------------------------------------------------------------------------%
+\subsection{HighNodeUtilization Results}
+\label{subsec:actualusage4_hnu_results}
+%-----------------------------------------------------------------------------%
+\begin{table}[H]
+    \centering
+    \caption{HighNodeUtilization Results}
+    \label{tab:actualusage4_hnu}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c c}
+        \toprule
+        \textbf{Metric} & \textbf{H0 (no plugin)} & \textbf{H1 (with plugin)} \\
+        \midrule
+        Successful evictions             & \(3\)       & \(2\) \\
+        Actual usage blocks (\(B\))       & \(0\)       & \(1\) \\
+        Active Nodes                      & \(6 \to 3\) & \(6 \to 4\) \\
+        Active-Node reduction             & \(3\)       & \(2\) \\
+        Completed responses in \(30\,s\)  & \(240\)     & \(240\) \\
+        HTTP \(503\) responses            & \(40\)      & \(\mathbf{0}\) \\
+        Failure rate \(F\)                & \(16.67\%\) & \(\mathbf{0.00\%}\) \\
+        Disruption duration \(D\)         & \(4.836\,s\)& \(\mathbf{0\,s}\) \\
+        Original API Pod remained         & no          & yes \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+HNU classifies workers 4--6 as underutilized sources in both runs. H0 evicts all three source Pods, including the busy API on worker-6. H1 allows the two idle source Pods but blocks the API at a CPU ratio of approximately \(10.02\). The filter therefore does not disable consolidation. It reduces the active-Node count from six to four instead of six to three.
+
+H0 records \(40\) HTTP \(503\) responses and \(4.836\,s\) of disruption. H1 records no failure and no disruption. The observed trade-off is one retained active Node in exchange for preserving the busy API endpoint.
+
+%-----------------------------------------------------------------------------%
+\subsection{LowNodeUtilization Results}
+\label{subsec:actualusage4_lnu_results}
+%-----------------------------------------------------------------------------%
+\begin{table}[H]
+    \centering
+    \caption{LowNodeUtilization Results}
+    \label{tab:actualusage4_lnu}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c c}
+        \toprule
+        \textbf{Metric} & \textbf{L0 (no plugin)} & \textbf{L1 (with plugin)} \\
+        \midrule
+        Successful evictions             & \(3\)                 & \(3\) \\
+        Actual usage blocks (\(B\))       & \(0\)                 & \(1\) \\
+        CPU deviation reduction          & \(0\)                 & \(0\) \\
+        Memory deviation                 & \(0.21639 \to 0.03091\)& \(0.21639 \to 0.03091\) \\
+        Memory deviation reduction       & \(0.18548\;(85.7\%)\) & \(0.18548\;(85.7\%)\) \\
+        Completed responses in \(30\,s\) & \(232\)               & \(240\) \\
+        HTTP \(503\) responses            & \(40\)                & \(\mathbf{0}\) \\
+        Failure rate \(F\)                & \(17.24\%\)           & \(\mathbf{0.00\%}\) \\
+        Disruption duration \(D\)         & \(4.873\,s\)          & \(\mathbf{0\,s}\) \\
+        Original API Pod remained         & no                    & yes \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+L0 evicts the busy API and one idle Pod from each of the other two sources. L1 blocks the API at a CPU ratio of approximately \(10.10\), then permits the idle fallback on worker-6. Both systems complete three successful evictions and produce the same final request distribution.
+
+Memory request deviation falls from \(0.21639\) to \(0.03091\) in both runs, a reduction of \(85.7\%\). CPU deviation remains \(0.0125\) because the layout uses memory requests to create the imbalance while candidate CPU requests are equal. L0 records \(40\) failed responses and \(4.873\,s\) of disruption. L1 records no failure and no disruption. In this scenario, runtime protection preserves the complete measured LNU balancing result.
+
+%-----------------------------------------------------------------------------%
+\subsection{Cross-Strategy Discussion}
+\label{subsec:actualusage4_cross_strategy}
+%-----------------------------------------------------------------------------%
+Figure~\ref{fig:actualusage4_failure_timeline} shows the request failures using the same event-aligned \(30\)-second post-event window for every run. Each cell counts HTTP \(503\) responses completed within a one-second interval. The dashed blue markers show the API eviction timestamps recorded in the Descheduler logs: \(1.891\,s\) in R0, \(3.647\,s\) in H0, and \(4.680\,s\) in L0. No marker appears in the treatment rows because the API eviction was blocked. Although the HNU and LNU experiments captured \(45\) seconds after the event, only the first \(30\) seconds are included for consistency with the ResourceDefragmentation experiments. Request timestamps represent completion time rather than generation time, so the number of completed responses can differ between runs despite the constant configured arrival rate of eight requests per second.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{assets/pics/actual-usage/failure_timeline_heatmap.png}
+    \caption{Event-Aligned HTTP Failure Timeline and API Eviction Time over the Common \(30\)-Second Post-Event Window}
+    \label{fig:actualusage4_failure_timeline}
+\end{figure}
+
+The three control runs exhibit compact failure intervals after the Descheduler event, whereas the corresponding Actual Usage Evictor treatments contain no failed response. Figure~\ref{fig:actualusage4_failure_bar} summarizes the failure rates across all six systems. The control configurations consistently produce failure rates between \(16.67\%\) and \(17.24\%\), while every treatment records \(0\%\).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{assets/pics/actual-usage/failure_rate_bar.png}
+    \caption{HTTP Failure Rate Comparison Across All Strategy Pairs}
+    \label{fig:actualusage4_failure_bar}
+\end{figure}
+
+Figure~\ref{fig:actualusage4_disruption_bar} shows the corresponding service disruption durations. All control runs exhibit approximately \(4.8\,s\) of disruption, while every treatment records \(0\,s\).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{assets/pics/actual-usage/disruption_duration_bar.png}
+    \caption{Service Disruption Duration Comparison Across All Strategy Pairs}
+    \label{fig:actualusage4_disruption_bar}
+\end{figure}
+
+Table~\ref{tab:actualusage4_cross_strategy} separates this common application effect from the strategy-specific placement cost. The failure-rate denominator is the number of requests completed within the common interval.
+
+\begin{table}[H]
+    \centering
+    \caption{Cross-Strategy Actual Usage Evictor Results}
+    \label{tab:actualusage4_cross_strategy}
+    \renewcommand{\arraystretch}{1.25}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l p{5.2cm} p{6.8cm}}
+        \toprule
+        \textbf{Pair} & \textbf{Availability result} & \textbf{Strategy-specific effect} \\
+        \midrule
+        R0/R1 & Failure rate falls from \(16.67\%\) to \(0\%\). Disruption falls from \(4.875\,s\) to \(0\,s\). & R1 still evicts an idle fallback, but stranding reduction falls from \(0.816\) to \(0\), and balanced-headroom gain falls from four to one. \\
+        H0/H1 & Failure rate falls from \(16.67\%\) to \(0\%\). Disruption falls from \(4.836\,s\) to \(0\,s\). & H1 still reclaims two source Nodes, but active-Node reduction falls from three to two. \\
+        L0/L1 & Failure rate falls from \(17.24\%\) to \(0\%\). Disruption falls from \(4.873\,s\) to \(0\,s\). & L1 completes the same three evictions and retains the \(85.7\%\) memory-deviation reduction. \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+The Actual Usage Evictor consistently changes the decision for the busy API candidate while allowing idle candidates to pass. The placement cost depends on whether the remaining candidate can satisfy the active strategy. R1 retains movement but loses the strongest stranding improvement. H1 retains partial consolidation but cannot empty the protected source. L1 substitutes an idle Pod and retains the complete measured balancing result.
+
+%-----------------------------------------------------------------------------%
+\subsection{Actual Usage Findings}
+\label{subsec:actualusage4_findings}
+%-----------------------------------------------------------------------------%
+The evaluation yields four main findings:
+
+\begin{itemize}
+    \item The Actual Usage Evictor consistently blocked the busy API Pod while allowing idle candidates to remain eligible. The control configurations evicted the API Pod, whereas the corresponding treatment configurations preserved its original Pod instance.
+    \item Protecting the API Pod eliminated the observed eviction-induced outage in all three loaded comparisons. Over the common \(30\,s\) post-event window, the control failure rates ranged from \(16.67\%\) to \(17.24\%\), while every treatment recorded \(0\%\). The observed disruption durations of approximately \(4.8\,s\) in the controls were reduced to \(0\,s\) in the treatments.
+    \item The placement cost depended on the strategy and the available fallback candidate. ResourceDefragmentation retained an eviction but lost the stranding reduction produced by moving the API Pod. HighNodeUtilization reclaimed two rather than three source Nodes because the protected API kept one Node active. LowNodeUtilization substituted an idle Pod and retained the same three evictions and \(85.7\%\) memory-deviation reduction.
+    \item Successful-request latency exhibited inconsistent bursts before and after the eviction event. Latency is therefore treated as a secondary metric, while failure rate and service disruption duration provide the primary evidence of application protection.
 \end{itemize}
 
 \section{Latency and Defragmentation Trade-off Test}
@@ -784,25 +1237,18 @@ Where:
 An un-aware baseline policy may produce an \(S_{\text{degraded}}\) value greater than zero if relocating a \textit{checkout-flow} pod to an network degraded node (worker-4 and worker-5). In contrast, an ideal successful scenario of network-aware policy should maintain \(S_{\text{degraded}} = 0\), demonstrating that latency-sensitive workloads remain confined to the high-performance node while only generic filler workloads are allowed to migrate to the degraded node tier. Similar to latency, this metric is evaluated across all three scenarios to consistently track the logical isolation of the network-sensitive \textit{checkout-flow} pods.
 
 %-----------------------------------------------------------------------------%
-\subsubsection{M5: Mean Absolute Resource Imbalance Index (RII)}
+\subsubsection{M5: Cluster Stranding Score (\(S\))}
 \label{subsubsec:netaware4_evaluationmetrics5}
 %-----------------------------------------------------------------------------%
-Because multi-dimensional defragmentation optimizes for the geometric "shape" of resource utilization rather than global absolute spread, Standard Deviation (\(\sigma_R\)) becomes an inaccurate measure of success. To properly evaluate the \textit{ResourceDefragmentation} scenario, we introduce the Mean Absolute Resource Imbalance Index (RII).
+Because multi-dimensional defragmentation optimizes for the geometric "shape" of resource utilization rather than global absolute spread, Standard Deviation (\(\sigma_R\)) becomes an inaccurate measure of success. To properly evaluate the \textit{ResourceDefragmentation} scenario, we reuse the Cluster Stranding Score (\(S\)), previously defined in Section \ref{subsubsec:defrag_metric_stranding}.
 
-RII is defined as the absolute difference between a node's CPU utilization percentage and its Memory utilization percentage. For a cluster with \(N\) nodes, the Mean Absolute RII is calculated as:
+As established, \(S\) aggregates the absolute difference between CPU and Memory utilization fractions across all active nodes:
 
 \[
-\text{Mean RII} = \frac{1}{N} \sum_{n=1}^{N} \left| U_{n,\text{cpu}} - U_{n,\text{memory}} \right|
+S = \sum_{n \in N_{\text{active}}} \left| u_{n,\text{cpu}} - u_{n,\text{memory}} \right|
 \]
 
-Where:
-\begin{itemize}
-    \item \(U_{n,\text{cpu}}\) is the request-based CPU utilization percentage of node \(n\).
-    \item \(U_{n,\text{memory}}\) is the request-based Memory utilization percentage of node \(n\).
-    \item \(N\) represents the total number of worker nodes (\(N=5\)).
-\end{itemize}
-
-This metric completely replaces \(\sigma_R\) in the \textit{ResourceDefragmentation} evaluation. A lower Mean Absolute RII indicates a perfectly balanced, geometrically symmetrical cluster where CPU and Memory ratios are tightly aligned, unlocking trapped capacity without being penalized for intentional variance in absolute global spread.
+This metric completely replaces \(\sigma_R\) in the \textit{ResourceDefragmentation} evaluation. Crucially, the score is summed rather than averaged. Averaging the imbalance across nodes can artificially mask successful consolidation (e.g., if three fragmented nodes are condensed into one node with the same local imbalance, the mean remains unchanged despite two nodes being successfully reclaimed). By using the sum, a lower Stranding Score accurately indicates a reduction in cluster-wide stranded capacity, rewarding geometric symmetry and node reclamation without being penalized for intentional variance in absolute global spread.
 
 %-----------------------------------------------------------------------------%
 \subsection{Experimental Results: LowNodeUtilization Scenario}
@@ -1193,9 +1639,9 @@ However, this network protection came as a direct tradeoff for cluster bin-packi
 %-----------------------------------------------------------------------------%
 The \textit{ResourceDefragmentation} scenario evaluates the descheduler's ability to correct multi-dimensional resource skew (CPU vs. Memory) without relying on strict utilization thresholds. This plugin uses the Resource Defragmentation algorithm to specifically target pods whose eviction will mathematically unlock trapped capacity on skewed nodes.
 
-Because this algorithm optimizes for the geometric "shape" of resource utilization rather than global absolute spread, we evaluate its performance using the \textbf{Mean Absolute Resource Imbalance Index (RII)}. RII is defined as the absolute difference between a node's CPU utilization percentage and its Memory utilization percentage ($|CPU\% - MEM\%|$). A lower Mean Absolute RII indicates a better balanced, symmetrical cluster.
+Because this algorithm optimizes for the geometric "shape" of resource utilization rather than global absolute spread, we evaluate its performance using the \textbf{Cluster Stranding Score (\(S\))}. A lower Stranding Score indicates a better balanced, symmetrical cluster.
 
-Prior to the descheduler execution, the cluster was forced into a highly fragmented state (Mean Absolute RII: \textbf{50.7\%}), with nodes exhibiting massive orthogonal skews (e.g., 90\% CPU vs 51\% Mem, and 10\% CPU vs 82\% Mem).
+Prior to the descheduler execution, the cluster was forced into a highly fragmented state (Stranding Score: \textbf{2.535}), with nodes exhibiting massive orthogonal skews (e.g., 0.90 CPU vs 0.51 Mem, and 0.10 CPU vs 0.82 Mem).
 
 Table \ref{tab:resourcedefrag_results} presents the raw performance of the descheduler across the three filtering strategies.
 \begin{table}[H]
@@ -1203,13 +1649,13 @@ Table \ref{tab:resourcedefrag_results} presents the raw performance of the desch
     \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c c r c}
         \toprule
-        \textbf{Scenario} & \textbf{Evictions} & \textbf{Mean Absolute RII (\%)} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
+        \textbf{Scenario} & \textbf{Evictions} & \textbf{Stranding Score} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
         \midrule
-        Initial State & - & 50.7\% & $\sim$8.0 ms & 0 \\
+        Initial State & - & 2.535 & $\sim$8.0 ms & 0 \\
         \midrule
-        r1: Baseline & 8 & 19.9\% & 167.216 ms & 2 \\
-        r2: Topology L1 & 8 & 19.9\% & 165.783 ms & 2 \\
-        r3: Latency L1 & 8 & 17.9\% & 8.762 ms & 0 \\
+        r1: Baseline & 8 & 0.995 & 167.216 ms & 2 \\
+        r2: Topology L1 & 8 & 0.995 & 165.783 ms & 2 \\
+        r3: Latency L1 & 8 & 0.895 & 8.762 ms & 0 \\
         \bottomrule
     \end{tabular}%
     }
@@ -1217,13 +1663,13 @@ Table \ref{tab:resourcedefrag_results} presents the raw performance of the desch
     \label{tab:resourcedefrag_results}
 \end{table}
 
-As shown in Table \ref{tab:resourcedefrag_results}, the baseline \textit{ResourceDefragmentation} plugin successfully identified the orthogonal CPU and Memory skews within the cluster and executed 8 evictions to aggressively balance the nodes (reducing the Mean Absolute RII from 50.7\% down to 19.9\%). However, because the Resource Defragmentation algorithm strictly optimizes for mathematical resource symmetry, it eagerly selected the network-sensitive \textit{payment} pods for eviction, predicting that moving them to the memory-heavy degraded nodes would perfectly resolve the cluster's resource skew. Consequently, the baseline strategy placed 2 critical pods directly into the network-degraded zone, causing a catastrophic latency spike to $\sim$167ms.
+As shown in Table \ref{tab:resourcedefrag_results}, the baseline \textit{ResourceDefragmentation} plugin successfully identified the orthogonal CPU and Memory skews within the cluster and executed 8 evictions to aggressively balance the nodes (reducing the Stranding Score from 2.535 down to 0.995). However, because the Resource Defragmentation algorithm strictly optimizes for mathematical resource symmetry, it eagerly selected the network-sensitive \textit{payment} pods for eviction, predicting that moving them to the memory-heavy degraded nodes would perfectly resolve the cluster's resource skew. Consequently, the baseline strategy placed 2 critical pods directly into the network-degraded zone, causing a catastrophic latency spike to $\sim$167ms.
 
 The Topology-Aware L1 filter failed to prevent this. Because the topology model relies on static physical boundaries, it was entirely blind to the active network degradation. It approved the eviction of the critical pods, resulting in the exact same mathematical resource balance and the exact same network latency violation ($\sim$165ms) as the baseline.
 
 Our proposed Latency-Aware L1 filter achieved a much better outcome: it successfully preserved the application's network latency while simultaneously allowing the descheduler to fix the cluster's resource fragmentation. When the Resource Defragmentation algorithm initially selected the sensitive \textit{payment} pods for eviction, our Latency-Aware filter queried the real-time Prometheus metrics, detected the massive degradation on the target nodes, and strictly blocked the eviction.
 
-Because the Kube-Descheduler framework operates iteratively, blocking the \textit{payment} pods forced the Resource Defragmentation algorithm to evaluate the next-best candidates: the generic \textit{filler-cpu} pods. Because these filler pods were not part of the sensitive network group, our filter safely allowed their eviction. By actively steering the descheduler away from the critical workloads, we forced the cluster to resolve its resource fragmentation using expendable pods. This resulted in an even better reduction in resource skew (Mean RII dropped to 17.9\%) while completely protecting the network integrity of the application (0 degraded pods, $\sim$8ms latency).
+Because the Kube-Descheduler framework operates iteratively, blocking the \textit{payment} pods forced the Resource Defragmentation algorithm to evaluate the next-best candidates: the generic \textit{filler-cpu} pods. Because these filler pods were not part of the sensitive network group, our filter safely allowed their eviction. By actively steering the descheduler away from the critical workloads, we forced the cluster to resolve its resource fragmentation using expendable pods. This resulted in an even better reduction in resource skew (Stranding Score dropped to 0.895) while completely protecting the network integrity of the application (0 degraded pods, $\sim$8ms latency).
 
 \subsubsection{Defragmentation Performance and Network Latency Trade-offs}
 \label{subsubsec:netaware4_resultanalysis3_tradeoff}
@@ -1242,11 +1688,11 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             enlarge x limits=0.15,
         }
 
-        % Left Y-Axis: Mean Absolute RII
+        % Left Y-Axis: Stranding Score
         \begin{axis}[
             axis y line*=left,
-            ymin=0, ymax=60,
-            ylabel={Mean Absolute Imbalance (RII \%)},
+            ymin=0, ymax=3.0,
+            ylabel={Cluster Stranding Score ($S$)},
             ybar,
             bar width=15pt,
             bar shift=-8.5pt,
@@ -1255,12 +1701,12 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             every node near coord/.append style={yshift=5pt, font=\small},
         ]
             \addplot[fill=cyan!60, draw=black] coordinates {
-                (1, 50.7)
-                (2, 19.9)
-                (3, 19.9)
-                (4, 17.9)
+                (1, 2.535)
+                (2, 0.996)
+                (3, 0.996)
+                (4, 1.273)
             };
-            \addlegendentry{Mean RII \%}
+            \addlegendentry{Stranding Score}
         \end{axis}
         % Right Y-Axis: Average Latency (Bar Chart)
         \begin{axis}[
@@ -1286,8 +1732,8 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
             \addlegendentry{Latency (ms)}
         \end{axis}
     \end{tikzpicture}
-    \caption{Mean Absolute Resource Imbalance (RII) vs. Network Performance.}
+    \caption{Cluster Stranding Score ($S$) vs. Network Performance.}
     \label{fig:resourcedefrag_latency}
 \end{figure}
 
-The results from the Resource Defragmentation scenario mathematically prove that our Latency-Aware plugin does not inherently compromise the core goal of the defragmentation algorithm. Instead of blindly moving critical workloads to satisfy a mathematical equation, the plugin intelligently evaluates network safety and blocks evictions that violate it. As demonstrated by the 17.9\% final RII, the presence of these expendable pods allowed the steered approach to achieve a slightly superior geometric resource balance compared to the baseline. However, as established in our earlier Hard Tradeoff experiments, if no such filler pods were available, the Latency-Aware plugin would actively choose to leave the cluster in a fragmented state (higher Mean RII) to guarantee network integrity like showed in \ref{tab:hard_tradeoff_results}
+The results from the Resource Defragmentation scenario mathematically prove that our Latency-Aware plugin does not inherently compromise the core goal of the defragmentation algorithm. Instead of blindly moving critical workloads to satisfy a mathematical equation, the plugin intelligently evaluates network safety and blocks evictions that violate it. As demonstrated by the 0.895 final Stranding Score, the presence of these expendable pods allowed the steered approach to achieve a slightly superior geometric resource balance compared to the baseline. However, as established in our earlier Hard Tradeoff experiments, if no such filler pods were available, the Latency-Aware plugin would actively choose to leave the cluster in a fragmented state (higher Stranding Score) to guarantee network integrity like showed in \ref{tab:hard_tradeoff_results}
