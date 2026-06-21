@@ -1000,8 +1000,8 @@ Table \ref{tab:highnode_initial_state} details the exact state of the cluster pr
         worker-3 & 1b (Healthy)  & 1 db + 2 txn & $\sim$756m (37.8\%) & $\sim$366Mi (45.7\%) & \textbf{OVERUTILIZED} ($>$30\%) \\
         worker-4 & 1a (Degraded) & 6 unaware & $\sim$1006m (50.3\%) & $\sim$408Mi (51.0\%) & \textbf{OVERUTILIZED} ($>$30\%) \\
         worker-5 & 1a (Degraded) & 5 unaware & $\sim$856m (42.8\%) & $\sim$360Mi (45.0\%) & \textbf{OVERUTILIZED} ($>$30\%) \\
-        worker-1 & 1d (Healthy)  & 1 pay + 1 fill & $\sim$306m (15.3\%) & $\sim$152Mi (19.0\%) & \textbf{UNDERUTILIZED} ($<$30\%) \\
-        worker-2 & 1d (Healthy)  & 1 pay + 1 fill & $\sim$306m (15.3\%) & $\sim$152Mi (19.0\%) & \textbf{UNDERUTILIZED} ($<$30\%) \\
+        worker-1 & 1d (Healthy)  & 1 pay + 1 unaware & $\sim$306m (15.3\%) & $\sim$152Mi (19.0\%) & \textbf{UNDERUTILIZED} ($<$30\%) \\
+        worker-2 & 1d (Healthy)  & 1 pay + 1 unaware & $\sim$306m (15.3\%) & $\sim$152Mi (19.0\%) & \textbf{UNDERUTILIZED} ($<$30\%) \\
         \bottomrule
     \end{tabular}%
     }
@@ -1029,10 +1029,10 @@ Table \ref{tab:resourcedefrag_initial_state} details the exact state of the clus
         \textbf{Node} & \textbf{Zone} & \textbf{Pods} & \textbf{CPU Alloc.} & \textbf{Mem Alloc.} & \textbf{Status} \\
         \midrule
         worker-3 & 1b (Anchor) & 1 db & $\sim$1506m (75.3\%) & $\sim$520Mi (65.0\%) & Normal (+0.103 RII) \\
-        worker-1 & 1d (Heavy Overhead) & 1 pay + 2 fill-cpu & $\sim$1805m (90.3\%) & $\sim$416Mi (52.0\%) & \textbf{CPU SKEWED} (+0.383 RII) \\
-        worker-2 & 1d (Healthy) & 1 pay + 2 fill-cpu & $\sim$1706m (85.3\%) & $\sim$220Mi (27.5\%) & \textbf{CPU SKEWED} (+0.578 RII) \\
-        worker-4 & 1a (Degraded) & 2 fill-mem & $\sim$206m (10.3\%) & $\sim$670Mi (83.8\%) & \textbf{MEM SKEWED} (-0.735 RII) \\
-        worker-5 & 1a (Degraded) & 2 fill-mem & $\sim$206m (10.3\%) & $\sim$670Mi (83.8\%) & \textbf{MEM SKEWED} (-0.735 RII) \\
+        worker-1 & 1d (Heavy Overhead) & 1 pay + 2 unaware-cpu & $\sim$1805m (90.3\%) & $\sim$416Mi (52.0\%) & \textbf{CPU SKEWED} (+0.383 RII) \\
+        worker-2 & 1d (Healthy) & 1 pay + 2 unaware-cpu & $\sim$1706m (85.3\%) & $\sim$220Mi (27.5\%) & \textbf{CPU SKEWED} (+0.578 RII) \\
+        worker-4 & 1a (Degraded) & 2 unaware-mem & $\sim$206m (10.3\%) & $\sim$670Mi (83.8\%) & \textbf{MEM SKEWED} (-0.735 RII) \\
+        worker-5 & 1a (Degraded) & 2 unaware-mem & $\sim$206m (10.3\%) & $\sim$670Mi (83.8\%) & \textbf{MEM SKEWED} (-0.735 RII) \\
         \bottomrule
     \end{tabular}%
     }
