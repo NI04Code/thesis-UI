@@ -1737,42 +1737,82 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
 
 The results from the Resource Defragmentation scenario mathematically prove that our Latency-Aware plugin does not inherently compromise the core goal of the defragmentation algorithm. Instead of blindly moving critical workloads to satisfy a mathematical equation, the plugin intelligently evaluates network safety and blocks evictions that violate it. As demonstrated by the 0.895 final Stranding Score, the presence of these network-unaware pods allowed the steered approach to achieve a slightly superior geometric resource balance compared to the baseline. However, as established in our earlier Hard Tradeoff experiments, if no such network-unaware pods were available, the Latency-Aware plugin would actively choose to leave the cluster in a fragmented state (higher Stranding Score) to guarantee network integrity like showed in \ref{tab:hard_tradeoff_results}
 
-\section{End-to-End Realistic Microservice Use Case}
+\section{End-to-End Combined Descheduler Use Case}
 \label{sec:end_to_end_microservice_usecase}
 
-To illustrate the complete workflow of the proposed descheduler architecture, this section presents a realistic end-to-end scenario combining resource defragmentation, actual-usage gating, and network-aware gating. 
+This section presents an end-to-end use case that combines the three proposed mechanisms in a single Descheduler profile. The purpose is to clarify the operational position of each technique in one descheduling pass. \textit{ResourceDefragmentation} provides the request-space optimization objective at the \textit{Balance} extension point, while \textit{ActualUsageEvictor} and \textit{NetworkCostEvictor} act as pre-eviction safeguards that prevent busy or network-sensitive Pods from becoming the final eviction.
 
-\subsection{Cluster Topology and Application Workload}
-Consider a multi-zone Kubernetes cluster with worker nodes distributed across \textit{us-east-1a}, \textit{us-east-1b}, and a simulated distant zone \textit{eu-west-1a} (with an artificial $\sim$80ms network latency). The cluster hosts an e-commerce microservice application comprising several components:
-\begin{itemize}
-    \item \textbf{Payment Service}: A critical, user-facing frontend component.
-    \item \textbf{Transaction Service}: A backend service tightly coupled with the Payment service, heavily dependent on low-latency communication.
-    \item \textbf{Network-Unaware Worker}: A non-latency-sensitive batch processing pod.
-\end{itemize}
+\subsection{Scenario Objective}
 
-Over time, scaling events have caused the cluster to become structurally fragmented. Compute capacity is available but scattered in incompatible CPU-heavy and memory-heavy shapes across multiple underutilized nodes. 
+The use case is not introduced as an additional quantitative benchmark. Instead, it connects the mechanisms evaluated in the previous sections into one realistic microservice placement. The cluster contains CPU-skewed and memory-skewed Nodes, so a memory-shaped Pod from a fragmented source Node can improve request-space packing when evicted and rebound by the Kubernetes scheduler. At the same time, not every resource-useful Pod is safe to evict. A foreground API Pod may be busy at runtime, and an idle Pod may still be risky to move if it is co-located with a low-latency dependency.
 
-\subsection{End-to-End Descheduler Operation}
-The end-to-end pipeline evaluates the cluster state and executes the eviction process through three distinct stages:
+The combined profile therefore represents a constrained optimization flow. \textit{ResourceDefragmentation} identifies resource-useful eviction opportunities, \textit{ActualUsageEvictor} removes candidates whose live usage is high relative to their requests, and \textit{NetworkCostEvictor} removes candidates whose possible rebinding would degrade dependency locality. The final eviction is the Pod that remains useful for defragmentation while satisfying both operational guards.
+
+\subsection{Initial Cluster and Application Placement}
+
+The scenario uses six worker Nodes grouped into two topology zones. Nodes \textit{worker-1}, \textit{worker-2}, and \textit{worker-3} are labeled as \textit{zone-a} and act as CPU-skewed expected landing targets. Nodes \textit{worker-4} and \textit{worker-5} are memory-skewed background Nodes in \textit{zone-b}. The fragmented source Node is \textit{worker-6}, also in \textit{zone-b}. The aggregate initial placement is summarized in Table~\ref{tab:e2e_cluster_layout}.
+
+\begin{table}[H]
+    \centering
+    \caption{End-to-End Use Case: Aggregate Initial Cluster Placement}
+    \label{tab:e2e_cluster_layout}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l l l l}
+        \toprule
+        \textbf{Nodes} & \textbf{Zone} & \textbf{Resident Workloads} & \textbf{Placement Role} \\
+        \midrule
+        worker-1--worker-3 & zone-a & Each Node hosts two CPU-shaped Pods, each requesting $750\,m/25\,Mi$ & CPU-skewed expected landing targets \\
+        worker-4--worker-5 & zone-b & Each Node hosts two memory-shaped Pods, each requesting $50\,m/240\,Mi$ & Memory-skewed background Nodes \\
+        worker-6 & zone-b & Hosts API, chatty, cache, and safe-memory Pods with total requests $200\,m/760\,Mi$ & Fragmented source Node \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+This layout creates complementary resource shapes across the cluster. The first three Nodes have high requested CPU with little requested memory, so they are suitable expected targets for a memory-shaped Pod from the source Node. The next two Nodes keep the cluster heterogeneous and prevent the example from becoming a simple empty-node drain. The source Node hosts four application Pods from the combined-plugin workload, as summarized in Table~\ref{tab:e2e_source_pods}.
+
+\begin{table}[H]
+    \centering
+    \caption{End-to-End Use Case: Source Node Pods}
+    \label{tab:e2e_source_pods}
+    \renewcommand{\arraystretch}{1.2}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{l c c l l}
+        \toprule
+        \textbf{Pod} & \textbf{CPU Request} & \textbf{Memory Request} & \textbf{Runtime State} & \textbf{Network Role} \\
+        \midrule
+        workload-api & $50\,m$ & $300\,Mi$ & Busy foreground API traffic & No network group \\
+        workload-chatty & $50\,m$ & $240\,Mi$ & Idle & $network\mbox{-}group=checkout$ \\
+        workload-cache & $50\,m$ & $40\,Mi$ & Idle & $network\mbox{-}group=checkout$ \\
+        workload-mem-safe & $50\,m$ & $180\,Mi$ & Idle & No network group \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+This placement makes the roles of the three mechanisms visible. From a resource-only perspective, \textit{workload-api} is the strongest memory-shaped candidate because it has the largest memory request on the source Node. \textit{workload-chatty} is also useful for resource defragmentation, but it belongs to the same checkout communication group as \textit{workload-cache}. \textit{workload-mem-safe} has a smaller memory request than the first two candidates, but it is idle and has no network dependency label.
+
+\subsection{End-to-End Eviction Decision Flow}
+
+The combined Descheduler profile executes the following decision flow.
 
 \begin{enumerate}
-    \item \textbf{Request-Based Strategy Phase:} 
-    The \textit{ResourceDefragmentation} plugin analyzes the cluster's fragmented layout. It identifies a highly underutilized source node hosting the Payment, Transaction, and Network-Unaware Worker pods. Evaluating request-space bin packing, the strategy determines that evicting the \textbf{Payment pod} to a specific destination node will yield the highest projected bin score and significantly reduce the cluster's stranding score.
-    
-    \item \textbf{Actual Utilization Gating:} 
-    Before executing the eviction, the \textit{Actual Usage Evictor} intercepts the request. It queries the live metrics API and observes that the Payment pod is currently processing a spike in checkout traffic, with its CPU usage exceeding the 80\% threshold relative to its requested baseline. To prevent immediate service disruption to users, the filter \textbf{blocks} the eviction. The strategy falls back to its second-best candidate: the \textbf{Transaction pod}.
-    
-    \item \textbf{Network Latency Gating:} 
-    The Transaction pod passes the Actual Usage check because it is currently idle. However, the \textit{NetworkCost Evictor} intercepts the eviction. It evaluates the predicted destination node for the Transaction pod, which happens to be located in the distant \textit{eu-west-1a} zone. Moving the pod there would introduce $\sim$80ms of latency between the Transaction service and its dependent Payment service. Recognizing the severe performance penalty, the network filter \textbf{blocks} the eviction. 
+    \item \textbf{ResourceDefragmentation candidate targeting.}
+    \textit{ResourceDefragmentation} first identifies \textit{worker-6} as a source Node because its request-space shape is memory-skewed and can be improved by relocating one memory-shaped Pod toward a CPU-skewed target. In a resource-only interpretation, \textit{workload-api} offers the highest projected target bin-score improvement because its $300\,Mi$ memory request gives the strongest shape correction. The next useful candidates are \textit{workload-chatty} and \textit{workload-mem-safe}, which still provide memory-shaped relocation opportunities.
+
+    \item \textbf{ActualUsageEvictor protects workload-api.}
+    A resource-useful candidate is not automatically evicted. It must satisfy the configured pre-eviction filter chain before becoming the final eviction. \textit{ActualUsageEvictor} reads the latest Metrics API sample and compares each scoped Pod's CPU and memory usage with its declared requests. Since \textit{workload-api} is serving foreground API traffic and exceeds the configured $0.80$ usage-to-request threshold, the actual-usage guard prevents it from becoming the final eviction. The Descheduler therefore does not evict the busy API Pod.
+
+    \item \textbf{NetworkCostEvictor protects checkout locality.}
+    After the busy API Pod is guarded, \textit{workload-chatty} remains a useful memory-shaped candidate and passes the actual-usage guard because it is idle. However, it carries $network\mbox{-}group=checkout$. \textit{NetworkCostEvictor} discovers \textit{workload-cache} as a dependency Pod with the same group and computes the current communication cost from the candidate's current Node to the dependency placement. Because both Pods are initially co-located on \textit{worker-6}, the current communication cost is zero. The filter then evaluates possible schedulable Nodes as rebinding candidates; moving \textit{workload-chatty} away from \textit{worker-6} would increase the cost, especially for cross-zone placements. Since too few candidate Nodes preserve or improve the current cost under the configured threshold, the network-aware guard prevents this candidate from becoming the final eviction.
+
+    \item \textbf{workload-mem-safe becomes the final eviction target.}
+    The remaining safe candidate is \textit{workload-mem-safe}. It is idle, has no $network\mbox{-}group$ label, and still contributes a memory-shaped relocation opportunity for the defragmentation objective. It therefore satisfies both pre-eviction safeguards and becomes the final eviction target. The eviction returns the Pod to the Kubernetes scheduler; the Descheduler records the expected target for its own decision process, but the final binding is still performed by kube-scheduler.
 \end{enumerate}
 
-Finally, the strategy proposes the third candidate: the \textbf{Network-Unaware Worker pod}. The Network-Unaware Worker is neither actively busy nor bound by tight network dependencies. It safely passes both the Actual Usage and Network Cost pre-eviction filters. The descheduler executes the eviction, allowing the cluster to consolidate resources without disrupting active traffic or degrading microservice communication.
+\subsection{Discussion}
 
-\subsection{Scheduler Configuration Adjustments}
-\label{subsec:scheduler_configuration_adjustments}
+This end-to-end scenario shows that the proposed architecture does not replace the resource objective with safety checks. Instead, it constrains the resource objective with runtime and network-locality information. \textit{ResourceDefragmentation} supplies the direction of optimization by identifying a fragmented source Node and selecting Pods whose request shape can improve the target bin score. \textit{ActualUsageEvictor} adds runtime safety by preventing eviction of Pods that are currently busy relative to their declared requests. \textit{NetworkCostEvictor} adds locality safety by rejecting Pods whose communication group would likely be rebound to a worse network placement.
 
-For this end-to-end architecture to perform optimally, the descheduler's intent must be aligned with the Kubernetes scheduler. Because the descheduler operates exclusively as a post-placement correction tool, it cannot force the final pod placement; it relies on the kube-scheduler to select the predicted target node.
-
-In this study, the kube-scheduler relies strictly on default scoring plugins (such as \textit{LeastAllocated} for spreading scenarios, or \textit{MostAllocated} paired with \textit{BalancedAllocation} for the \textit{ResourceDefragmentation} strategy) to drive pod placement. When the descheduler evicts a pod to improve packing density, a packing-oriented scheduler profile naturally favors nodes with the most allocated resources, indirectly aligning with the descheduler's defragmentation goals. 
-
-However, because we do not employ custom scheduler setups (such as tightly tuned \textit{PodTopologySpread} constraints or custom \textit{InterPodAffinity} weights), there is a risk that the kube-scheduler may inadvertently place an evicted pod onto a node that degrades network latency if it blindly follows raw compute availability. Therefore, to fully guarantee that the descheduler's network-aware intent is respected during the rebinding phase, administrators must adjust the kube-scheduler configuration. Specifically, introducing stronger \textit{NodeAffinity} rules or deploying a custom scheduler profile that incorporates network topology weights is necessary to achieve perfect synchronization between the descheduler's eviction logic and the scheduler's placement logic.
+The combined result is not necessarily the Pod that is most optimal under resource shape alone. In this scenario, the most resource-useful candidate is the busy API Pod, and the next candidate is network-sensitive. The final eviction is therefore \textit{workload-mem-safe}: a Pod that still helps defragmentation, but does so under operational constraints. This illustrates the intended position of each proposed technique in the Descheduler pipeline. The strategy determines where resource correction is useful, the pre-eviction filters determine which candidates remain safe to evict, and kube-scheduler performs the final placement after the eviction.
