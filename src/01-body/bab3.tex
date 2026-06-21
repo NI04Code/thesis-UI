@@ -12,18 +12,17 @@ Several components are implemented as descheduler \textit{EvictorPlugin} extensi
 
 The architecture proposed in this research consists of three primary components that form a continuous, end-to-end eviction pipeline. This pipeline ensures that defragmentation actions are structurally beneficial, safe for active workloads, and non-disruptive to network locality. The workflow operates as follows:
 
-% TODO: Insert an end-to-end architectural diagram illustrating the 3-stage pipeline here.
-% \begin{figure}[htbp]
-%     \centering
-%     \includegraphics[width=0.8\textwidth]{assets/pics/placeholder_e2e_diagram.png}
-%     \caption{End-to-End Descheduler Architecture Workflow.}
-%     \label{fig:e2e_architecture_workflow}
-% \end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{assets/pics/e2e_workflow.png}
+    \caption{End-to-End Descheduler Architecture Workflow.}
+    \label{fig:e2e_architecture_workflow}
+\end{figure}
 
 \begin{enumerate}
     \item \textbf{Pod Selection Stage:} The \textit{ResourceDefragmentation} policy first analyzes the cluster's requested resource layout. It identifies nodes that are fragmented or underutilized, predicts feasible landing destinations for their pods, and selects an eviction candidate that will maximize the projected bin-packing score on the target node.
-    \item \textbf{First Safety Gate (Actual Utilization):} Once a candidate pod is proposed, the \textit{Actual Usage Evictor} acts as the first \textit{PreEvictionFilter}. It checks the pod's live CPU and memory metrics. If the pod is actively serving traffic (usage exceeds a threshold relative to its requests), the eviction is blocked to avoid service disruption, forcing the strategy to propose the next best candidate.
-    \item \textbf{Second Safety Gate (Network Latency):} If the pod is not actively busy, the \textit{NetworkCost Evictor} acts as the final \textit{PreEvictionFilter}. It evaluates the predicted destination node against the pod's dependencies (e.g., a backend database). If relocating the pod would force cross-region communication or violate latency thresholds, the eviction is blocked.
+    \item \textbf{First Safety Gate (Actual Utilization):} Once a candidate pod is proposed, the \textit{ActualUsage Evictor} acts as the first \textit{PreEvictionFilter}. It checks the pod's live CPU and memory metrics. If the pod is actively serving traffic (usage exceeds a threshold relative to its requests), the eviction is blocked to avoid service disruption, forcing the strategy to propose the next best candidate.
+    \item \textbf{Second Safety Gate (Network Latency):} If the pod is not actively busy, the \textit{NetworkCost Evictor} acts as the final \textit{PreEvictionFilter}. It evaluates the predicted destination node against the pod's network dependencies. It computes whether relocating the pod would result in equal or better communication costs compared to its current placement. If the eviction is likely to degrade overall network efficiency, meaning there are too few candidate nodes that can offer a comparable or improved network cost, the eviction is blocked.
 \end{enumerate}
 
 An eviction request is submitted to the Kubernetes API only after a candidate pod successfully passes all three stages: structural benefit validation, actual-usage safety verification, and network-locality protection.
