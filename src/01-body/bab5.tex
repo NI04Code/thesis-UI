@@ -8,7 +8,7 @@ This chapter summarizes the findings and proposes future research directions bas
 \section{Conclusion}
 \label{sec:conclusion}
 
-This research designed and evaluated a multi-level Kubernetes Descheduler architecture for resource defragmentation and network-locality protection.
+This research designed and evaluated a multi-level Kubernetes Descheduler architecture that combines request-based resource defragmentation, actual-usage pre-eviction protection, and network-latency-aware eviction filtering.
 
 \textbf{Identifying fragmented Nodes.} \textit{ResourceDefragmentation} identifies fragmented Nodes directly from their request-space resource shape, without a utilization threshold. It selects drain candidates from average utilization and CPU-memory bin quality, orders them by the Resource Imbalance Index (RII) and Free-Space Index (FSI), and then evicts the Pod whose predicted landing Node, found through \textit{predictSchedulerTarget}, has the best projected bin score. A target ceiling and pack-upward guard prevent overfilling a Node or relocating a workload to an emptier one. This single predicted-target criterion is sufficient to drive effective packing and defragmentation.
 
