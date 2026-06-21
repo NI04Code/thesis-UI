@@ -54,7 +54,7 @@ where \(u_{n,c}\) is the normalized CPU utilization of Node \(n\), \(u_{n,m}\) i
 
 where \(U_n^{avg}\) is the average utilization of Node \(n\), representing overall resource density by taking the mean of normalized CPU and memory utilization.
 
-The bin score combines density and dimensional balance:
+The bin score is a custom composite scoring function derived from the standard multi-dimensional bin-packing heuristics used in the Kubernetes scheduling plugins~\citep{k8s_resource_bin_packing}. It fuses two signals that those plugins apply separately, namely the density preference of the \texttt{MostAllocated} strategy, which favors well-filled Nodes, and the per-dimension balance preference of the \texttt{BalancedAllocation} strategy, which penalizes Nodes whose CPU and memory utilization diverge. Combining density and dimensional balance into a single quantity yields
 
 \[
     B_n =
@@ -64,13 +64,13 @@ The bin score combines density and dimensional balance:
     }{2},
 \]
 
-where \(B_n\) is the bin score of Node \(n\), combining density (average utilization) with dimensional balance (the penalty factor \(1-|u_{n,c}-u_{n,m}|\) reduces the score when CPU and memory utilization diverge). A dense and balanced Node has a high \(B_n\), whereas an empty or strongly skewed Node has a lower score. The signed Resource Imbalance Index identifies the skew direction:
+where \(B_n\) is the bin score of Node \(n\). The first factor \(\tfrac{u_{n,c}+u_{n,m}}{2}\) is the density term inherited from \texttt{MostAllocated}, while the penalty factor \(1-|u_{n,c}-u_{n,m}|\) is the balance term inherited from \texttt{BalancedAllocation}, which reduces the score when CPU and memory utilization diverge. A dense and balanced Node therefore has a high \(B_n\), whereas an empty or strongly skewed Node has a lower score. The signed Resource Imbalance Index, adapted to normalized request fractions from the server imbalance index of \citet{guo2025joint}, identifies the skew direction:
 
 \[
     RII_n = u_{n,c} - u_{n,m},
 \]
 
-where \(RII_n\) is the Resource Imbalance Index of Node \(n\). A positive value indicates CPU-heavy skew (CPU utilization exceeds memory utilization), while a negative value indicates memory-heavy skew. The Free-Space Index represents joint CPU-memory headroom:
+where \(RII_n\) is the Resource Imbalance Index of Node \(n\). A positive value indicates CPU-heavy skew (CPU utilization exceeds memory utilization), while a negative value indicates memory-heavy skew. The Free-Space Index, adapted from the free-space size index of \citet{guo2025joint} by expressing the headroom in normalized rather than absolute units, represents joint CPU-memory headroom:
 
 \[
     FSI_n = (1-u_{n,c})(1-u_{n,m}),
@@ -109,22 +109,33 @@ Adjusting this weighting does not change the descheduler as a whole. The priorit
 \subsection{Predicted Scheduler Target}
 \label{sec:defrag_target_prediction}
 
-For every evictable Pod \(p\) on source Node \(s\), the plugin evaluates non-origin worker Nodes. A Node \(t\) is feasible only when:
-
-\begin{itemize}
-    \item the Node is schedulable and the Pod tolerates its taints;
-    \item the Pod's CPU and memory requests fit;
-    \item projected CPU and memory utilization do not exceed the configured target ceiling; and
-    \item the target's minimum CPU-memory utilization is not lower than that of the source.
-\end{itemize}
-
-The final condition is the pack-upward guard:
+For every evictable Pod \(p\) on source Node \(s\), the plugin examines each non-origin worker Node as a potential relocation target. Let \(r_{p,c}\) and \(r_{p,m}\) denote the CPU and memory requests of \(p\). Placing \(p\) on a target Node \(t\) yields the projected utilization
 
 \[
-    \min(u_{t,c},u_{t,m}) \geq \min(u_{s,c},u_{s,m}),
+    u'_{t,c} = \frac{R_{t,c} + r_{p,c}}{C_{t,c}},
+    \qquad
+    u'_{t,m} = \frac{R_{t,m} + r_{p,m}}{C_{t,m}}.
 \]
 
-where \(u_{t,c}\) and \(u_{t,m}\) are the projected CPU and memory utilization of target Node \(t\) after receiving Pod \(p\), while \(u_{s,c}\) and \(u_{s,m}\) are the current CPU and memory utilization of source Node \(s\). The constraint requires that the minimum utilization dimension of the target (its less-utilized resource) must be at least as high as the minimum utilization dimension of the source. It prevents an eviction from merely moving a Pod to an emptier Node. Among feasible Nodes, \textit{predictSchedulerTarget} returns the Node with the highest projected bin score after receiving \(p\).
+A non-origin Node \(t\) is admissible only if it is schedulable and \(p\) tolerates its taints. An admissible Node is a feasible target when it additionally satisfies the request-fit, utilization-ceiling, and pack-upward conditions:
+
+\[
+\begin{aligned}
+    R_{t,c} + r_{p,c} \leq C_{t,c} \;\;\text{and}\;\; R_{t,m} + r_{p,m} &\leq C_{t,m} && \text{(request fit)}, \\
+    u'_{t,c} \leq \theta \;\;\text{and}\;\; u'_{t,m} &\leq \theta && \text{(utilization ceiling)}, \\
+    \min\!\left(u'_{t,c}, u'_{t,m}\right) &\geq \min\!\left(u_{s,c}, u_{s,m}\right) && \text{(pack-upward guard)},
+\end{aligned}
+\]
+
+where \(\theta\) is the configured target-utilization ceiling, and \(u_{s,c}\) and \(u_{s,m}\) are the current CPU and memory utilization of source Node \(s\). The request-fit condition ensures that the projected requests do not exceed allocatable capacity in either dimension. The utilization-ceiling condition caps the projected utilization so that consolidation does not overload a target. The pack-upward guard requires the least-utilized dimension of the target to be at least as loaded as the least-utilized dimension of the source, which prevents an eviction from merely relocating a Pod to an emptier Node.
+
+Let \(\mathcal{F}(p)\) denote the set of all feasible targets for \(p\). The function \textit{predictSchedulerTarget} returns the feasible Node that maximizes the projected bin score after receiving \(p\):
+
+\[
+    t_p = \operatorname*{arg\,max}_{t \in \mathcal{F}(p)} B'_t,
+\]
+
+where \(B'_t\) is the bin score \(B_t\) evaluated under the projected utilization \(\left(u'_{t,c}, u'_{t,m}\right)\). If \(\mathcal{F}(p) = \varnothing\), Pod \(p\) has no feasible target and is not evicted.
 
 \subsection{Predicted-Target Eviction-Candidate Selection}
 \label{sec:defrag_victim_selection}
