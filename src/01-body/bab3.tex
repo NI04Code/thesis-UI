@@ -163,31 +163,6 @@ For candidate Pod \(p\), let \(t_p\) be its predicted target and \(B'_{t_p}\) th
 
 This is the only eviction-candidate selection criterion after target feasibility is checked. It directly prefers a movement that produces the best projected CPU-memory shape at the expected destination. Candidates without a feasible target are excluded. After a successful eviction, the local source and predicted-target snapshots are updated before the next decision. Predicted targets are marked as bins so the same pass does not subsequently drain a Node that has just received packed workload.
 
-\begin{figure}[H]
-    \centering
-    \resizebox{\textwidth}{!}{%
-    \begin{tikzpicture}[
-        x=1cm,y=1cm,>=stealth,
-        box/.style={draw, line width=0.6pt, fill=white, align=center, inner sep=6pt, minimum width=2.5cm, minimum height=1.2cm},
-        line/.style={draw, line width=0.6pt, -stealth}
-    ]
-        \node[box] (state) at (0,0) {\shortstack{Build request-based\\Node state}};
-        \node[box] (metrics) at (3.75,0) {\shortstack{Compute \(U^{avg}\),\\\(B\), RII, FSI}};
-        \node[box] (drain) at (7.2,0) {\shortstack{Select and order\\drain candidates}};
-        \node[box] (predict) at (10.75,0) {\shortstack{Predict feasible\\landing Nodes}};
-        \node[box] (select) at (14.0,0) {\shortstack{Select highest\\projected \(B\)}};
-        \node[box] (evict) at (17.5,0) {\shortstack{Evict and update\\local state}};
-        \draw[line] (state) -- (metrics);
-        \draw[line] (metrics) -- (drain);
-        \draw[line] (drain) -- (predict);
-        \draw[line] (predict) -- (select);
-        \draw[line] (select) -- (evict);
-    \end{tikzpicture}%
-    }
-    \caption{ResourceDefragmentation assessment and eviction-candidate selection pipeline.}
-    \label{fig:defrag_flow}
-\end{figure}
-
 Listing~\ref{lst:resource_defrag} summarizes the complete execution flow.
 
 \lstinputlisting[
