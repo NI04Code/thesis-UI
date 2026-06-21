@@ -97,10 +97,10 @@ Drain candidates are processed in descending priority:
     P_n =
     0.5\left|RII_n\right|
     +
-    0.5\frac{1}{FSI_n+\epsilon}.
+    0.5\frac{1}{FSI_n+1\mathrm{e}{-}10}.
 \]
 
-The first term emphasizes dimensional skew. The second term emphasizes a narrow jointly usable free-space region. The constant \(\epsilon\) prevents division by zero. Utilization and bin score decide whether a Node enters the drain set, while RII and FSI decide which drain candidate is handled first.
+The first term emphasizes dimensional skew. The second term emphasizes a narrow jointly usable free-space region. Following the priority formulation of \citet{guo2025joint}, the constant is fixed at \(1\mathrm{e}{-}10\) and is added to the free-space term of \emph{every} Node as a numerical guard against division by zero, rather than being applied conditionally only when \(FSI_n = 0\). Because \(1\mathrm{e}{-}10\) is negligible relative to any non-zero \(FSI_n \in (0,1]\), it leaves the relative ordering of drain candidates unchanged for partially loaded Nodes, while bounding the term to a large finite value of \(1\mathrm{e}{+}10\) when a Node has no jointly usable headroom (\(FSI_n = 0\)), so that fully constrained Nodes receive the highest priority. Utilization and bin score decide whether a Node enters the drain set, while RII and FSI decide which drain candidate is handled first.
 
 \subsection{Predicted Scheduler Target}
 \label{sec:defrag_target_prediction}
