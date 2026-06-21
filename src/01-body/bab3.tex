@@ -203,7 +203,7 @@ The Actual Usage Evictor is designed to prevent eviction of Pods that are curren
 
 This plugin does not choose source nodes, destination nodes, or eviction candidates. Instead, it acts as a global pre-eviction safety gate. A candidate Pod is allowed to continue only when its current CPU and memory usage are both below the configured thresholds relative to its declared requests.
 
-\subsection{System Overview}
+\subsection{System Design}
 \label{sec:actualusage_sysoverview}
 
 The Actual Usage Evictor is implemented as an \textit{EvictorPlugin}. Its \textit{Filter} function is a no-op and always returns true, because runtime usage is evaluated only at the \textit{PreEvictionFilter} stage. This design separates general candidate eligibility from runtime safety checking: the strategy may first select a Pod as an eviction candidate, but the Actual Usage Evictor still has the opportunity to block the eviction before the request is submitted.
@@ -211,6 +211,13 @@ The Actual Usage Evictor is implemented as an \textit{EvictorPlugin}. Its \texti
 The plugin can be scoped using namespace rules and a Kubernetes label selector. When a Pod is outside the configured scope, the plugin allows the eviction without reading metrics. When both namespace and label selector scopes are configured, both conditions must match before the Pod is evaluated. This allows the filter to protect only selected workloads, for example latency-sensitive applications, while leaving other workloads unaffected.
 
 For Pods inside the configured scope, the plugin reads Pod metrics through the descheduler metrics collector and the Kubernetes Metrics API. The metrics of all containers in the Pod are matched against the Pod specification and aggregated before the usage ratios are calculated.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{assets/pics/actual-usage/sysoverview-diagram.png}
+    \caption{Actual Usage Evictor pre-eviction filtering flow.}
+    \label{fig:actualusage_sysoverview}
+\end{figure}
 
 \subsection{Runtime Usage Model}
 \label{sec:actualusage_model}
