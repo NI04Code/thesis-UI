@@ -3,29 +3,31 @@
 \label{bab:3}
 %----------------------------------------------------------------------------- %%
 
-This chapter presents the design and implementation of the Descheduler components developed in this research. Section 3.1 introduces the overall end-to-end descheduler architecture workflow. Section 3.2 describes the defragmentation-focused \textit{ResourceDefragmentation} policy. Section 3.3 describes the Actual Usage Evictor, a runtime-usage-based pre-eviction filter. Section 3.4 describes the Network-Aware Evictor and its topology and latency-based cost models.
+This chapter presents the design and implementation of the Descheduler components developed in this research. Section 3.1 summarizes the proposed descheduler schemes and their positions within the Kubernetes Descheduler eviction workflow. Section 3.2 describes the defragmentation-focused \textit{ResourceDefragmentation} policy. Section 3.3 describes the Actual Usage Evictor, a runtime-usage-based pre-eviction filter. Section 3.4 describes the Network-Aware Evictor and its topology and latency-based cost models.
 
 Several components are implemented as descheduler \textit{EvictorPlugin} extensions. In this framework, the \textit{Filter} stage performs candidate filtering, while the \textit{PreEvictionFilter} stage is executed immediately before an eviction request is submitted. Pre-eviction filters can be chained, therefore a candidate Pod must pass all enabled filters before the descheduler performs the eviction. This mechanism is used by both the Actual Usage Evictor and the Network-Aware Evictor as safety gates around strategy-driven eviction decisions.
 
-\section{End-to-End Descheduler Architecture Workflow}
+\section{Proposed Descheduler Extension Architecture}
 \label{sec:end_to_end_workflow}
 
-The architecture proposed in this research consists of three primary components that form a continuous, end-to-end eviction pipeline. This pipeline ensures that defragmentation actions are structurally beneficial, safe for active workloads, and non-disruptive to network locality. The workflow operates as follows:
+This section summarizes the proposed descheduler schemes and explains how they relate to the Kubernetes Descheduler eviction workflow.
+
+This research proposes three descheduler extensions that operate at different points of the Kubernetes Descheduler eviction decision flow. The extensions are designed as independent components rather than as a tightly coupled pipeline. Each component can be enabled separately according to the cluster operator's objective, and multiple components can be combined within the same descheduler profile when resource defragmentation, runtime-safety protection, and network-locality protection are required together.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{assets/pics/e2e-workflow.png}
-    \caption{End-to-End Descheduler Architecture Workflow.}
+    \includegraphics[width=\textwidth]{assets/pics/kube-descheduler-extension-position.png}
+    \caption{Proposed independent descheduler extensions and their extension points within the Kubernetes Descheduler eviction workflow.}
     \label{fig:e2e_architecture_workflow}
 \end{figure}
 
-\begin{enumerate}
-    \item \textbf{Pod Selection Stage:} The \textit{ResourceDefragmentation} policy first analyzes the cluster's requested resource layout. It identifies nodes that are fragmented or underutilized, predicts feasible landing destinations for their pods, and selects an eviction candidate that will maximize the projected bin-packing score on the target node.
-    \item \textbf{First Safety Gate (Actual Utilization):} Once a candidate pod is proposed, the \textit{ActualUsage Evictor} acts as the first \textit{PreEvictionFilter}. It checks the pod's live CPU and memory metrics. If the pod is actively serving traffic (usage exceeds a threshold relative to its requests), the eviction is blocked to avoid service disruption, forcing the strategy to propose the next best candidate.
-    \item \textbf{Second Safety Gate (Network Latency):} If the pod is not actively busy, the \textit{NetworkCost Evictor} acts as the final \textit{PreEvictionFilter}. It evaluates the predicted destination node against the pod's network dependencies. It computes whether relocating the pod would result in equal or better communication costs compared to its current placement. If the eviction is likely to degrade overall network efficiency, meaning there are too few candidate nodes that can offer a comparable or improved network cost, the eviction is blocked.
-\end{enumerate}
+Figure~\ref{fig:e2e_architecture_workflow} summarizes the position of each proposed component in the descheduler architecture. The \textit{ResourceDefragmentation} component is implemented as a \textit{Balance} plugin. It participates in the strategy phase by analyzing the requested CPU-memory layout of the cluster, identifying fragmented or underutilized source nodes, predicting feasible landing destinations, and selecting eviction candidates that are expected to improve resource packing.
 
-An eviction request is submitted to the Kubernetes API only after a candidate pod successfully passes all three stages: structural benefit validation, actual-usage safety verification, and network-locality protection.
+The \textit{Actual Usage Evictor} is implemented as a \textit{PreEvictionFilter}. It does not select source nodes, destination nodes, or eviction candidates. Instead, it evaluates a candidate Pod immediately before eviction by checking live CPU and memory usage. This allows the descheduler to block eviction of Pods that are currently active, even when the candidate was selected by either the proposed \textit{ResourceDefragmentation} strategy or by another descheduler strategy.
+
+The \textit{Network-Aware Evictor} provides communication-cost protection for eviction decisions. At the global layer, the \textit{NetworkCostEvictor} acts as a \textit{PreEvictionFilter} that evaluates whether evicting a candidate Pod may lead to a placement with worse communication cost. At the strategy layer, network-aware evaluation is integrated into node-utilization strategies, namely \textit{LowNodeUtilization} and \textit{HighNodeUtilization}, so that network cost is considered earlier when candidate destinations are derived. This component can therefore be used independently with existing descheduler strategies, combined with node-utilization strategies at the strategy layer, or composed with the proposed \textit{ResourceDefragmentation} policy through the global pre-eviction filter layer.
+
+When all proposed components are enabled together, the descheduler forms a composable eviction decision flow: a strategy proposes a candidate Pod, runtime usage filtering verifies whether the Pod is safe to evict, network-aware filtering verifies whether the eviction preserves communication locality, and only then is the eviction request submitted to the Kubernetes API. However, this combined flow is only one deployment configuration; the proposed components remain independently usable extensions.
 
 \section{ResourceDefragmentation Policy Design}
 \label{sec:imbalanceindex_design}
