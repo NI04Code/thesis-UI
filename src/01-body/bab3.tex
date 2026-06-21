@@ -312,13 +312,15 @@ The system has a two-layers plugin architecture. The first layer is a global Pre
 	\label{fig:netaware_sysoverview}
 \end{figure}
 
-The overall design of the Network-Aware Descheduler plugin is presented in Figure \ref{fig:netaware_sysoverview}. The system has two distinct independent components that can be deployed optionally as descheduler policy.
+The overall network-aware filtering system of the plugin is presented in Figure \ref{fig:netaware_sysoverview}. When an eviction candidate is evaluated, the process operates as a sequence of decision gates through the following steps:
 
-The first component is a global PreEvictionFilter plugin, which is the \textit{NetworkCostEvictor}. To avoid descheduler process resulting higher network costs, it compares eviction candidates current node with all scheduleable nodes in the cluster. This ensures that the communication efficiency at the cluster level is not degraded due to pod migration.
+First, the plugin inspects the candidate pod to determine if a network dependency label exists. If the pod has no defined dependencies, it is considered a network-unaware workload, and the plugin immediately allows the eviction since relocating it will not disrupt critical communication paths.
 
-The second plugin is integrated into node utilization based approaches, such as \textit{LowNodeUtilization} and \textit{HighNodeUtilization}. This plugin performs network-aware filtering by assessing only the selected subset of nodes that are recognized as potential destinations (e.g. overutilize/underutilize node). This enables a more specific evaluation better aligned with the resource balancing goals of the descheduler.
+If a dependency label is found, the plugin proceeds to discover all related dependency pods currently running in the cluster. It then calculates the baseline network cost by computing the communication overhead between the candidate pod's current node and all nodes hosting its dependencies.
 
-Both components use a network cost model \ref{sec:netaware_costmodel} to estimate communication costs between pods. During the eviction process, the algorithm evaluates the cost of the pod's current placement in comparison to alternative placements. If the eviction does not maintain or improve the performance of the network, it is blocked. Otherwise, the eviction is permitted.
+Next, the plugin retrieves a set of potential candidate destination nodes. Depending on the deployment configuration, these candidates can either be all schedulable nodes in the cluster (when operating as a global \textit{PreEvictionFilter}) or a specific subset of overutilized or underutilized nodes gathered from a node utilization strategy. For each of these candidate nodes, it computes the hypothetical network cost that would occur if the pod were rescheduled to that location. The algorithm then counts the number of candidate nodes whose resulting network cost is less than or equal to the baseline cost of the current node.
+
+Finally, the eviction decision is made by comparing this count against a threshold requirement. If the number of equal or better candidate nodes is greater than or equal to the total number of candidates multiplied by a configured threshold percentage (Candidate count $\geq$ totalCandidates $\times$ threshold), the eviction is allowed. If this condition is not met, indicating that a relocation would likely degrade network performance, the eviction is blocked.
 
 %----------------------------------------------------------------------------- %%
 \subsection{Architecture Design}
