@@ -425,18 +425,12 @@ For each selected eviction candidate pod, the algorithm first checks whether the
 
 \noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
-    caption={Network-Aware algorithm: \textit{FindDependencyPods} function},
+    caption={Network-Aware algorithm: \textit{FindDependencyPods} and \textit{HasSameOwner} functions},
     label={lst:netaware_finddeppods_algo},
 ]{assets/codes/pseudos/netaware/finddeppods.psu}
 \end{minipage}
-\noindent\begin{minipage}{\linewidth}
-\lstinputlisting[
-    caption={\textit{HasSameOwner} function},
-    label={lst:netaware_hasowner_algo},
-]{assets/codes/pseudos/netaware/hasowner.psu}
-\end{minipage}
 
-The \textit{FindDependencyPods} function discovers communication dependencies by examining all pods across cluster nodes and comparing their configured dependency labels. Pods sharing the same dependency label are considered part of the same communication group. During this process, the algorithm excludes the evaluated pod itself and may optionally exclude pods managed by the same controller, such as replicas belonging to the same Deployment, StatefulSet, or ReplicaSet by evaluating \textit{HasSameOwner} function shown in Listing \ref{lst:netaware_hasowner_algo}. This behavior is controlled through the \textit{excludeSameOwner} configuration parameter. The ownership relationship is determined by comparing Kubernetes owner references between pods.
+The \textit{FindDependencyPods} function discovers communication dependencies by examining all pods across cluster nodes and comparing their configured dependency labels. Pods sharing the same dependency label are considered part of the same communication group. During this process, the algorithm excludes the evaluated pod itself and may optionally exclude pods managed by the same controller, such as replicas belonging to the same Deployment, StatefulSet, or ReplicaSet by evaluating the \textit{HasSameOwner} helper function (also shown in Listing \ref{lst:netaware_finddeppods_algo}). This behavior is controlled through the \textit{excludeSameOwner} configuration parameter. The ownership relationship is determined by comparing Kubernetes owner references between pods.
 
 After dependency discovery, the algorithm computes the communication cost between the evaluated pod and all dependency pods using the \textit{ComputePlacementCost} procedure shown in Listing \ref{lst:netaware_computeplacement_algo}. This procedure evaluates the communication cost for both the current node placement and all candidate destination nodes. The set of evaluated candidate nodes depends on the architectural layer being used. The global filtering layer evaluates all scheduleable nodes in the cluster, whereas the strategy-level layer evaluates only the nodes selected by the balancing strategy.
 
