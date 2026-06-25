@@ -165,12 +165,7 @@ For candidate Pod \(p\), let \(t_p\) be its predicted target and \(B'_{t_p}\) th
 
 This is the only eviction-candidate selection criterion after target feasibility is checked. It directly prefers a movement that produces the best projected CPU-memory shape at the expected destination. Candidates without a feasible target are excluded. After a successful eviction, the local source and predicted-target snapshots are updated before the next decision. Predicted targets are marked as bins so the same pass does not subsequently drain a Node that has just received packed workload.
 
-Listing~\ref{lst:resource_defrag} summarizes the complete execution flow.
-
-\lstinputlisting[
-    caption={ResourceDefragmentation eviction loop with predicted-target bin-score selection.},
-    label={lst:resource_defrag},
-]{assets/codes/pseudos/resource-defrag.psu}
+Appendix~\ref{appendix:resource_defrag} summarizes the complete execution flow.
 
 \subsection{Plugin Configuration}
 \label{sec:resource_defrag_config}
@@ -263,12 +258,7 @@ With the default \textit{Allow} policy, a missing dimension is skipped and contr
 \subsection{Eviction Decision Workflow and Algorithm}
 \label{sec:actualusage_algorithm}
 
-Listing~\ref{lst:actualusage_algorithm} summarizes the Actual Usage Evictor decision workflow. The algorithm first checks whether the candidate Pod is inside the configured namespace and label scope. Pods outside the scope are allowed immediately because the plugin is not responsible for protecting them.
-
-\lstinputlisting[
-    caption={Actual Usage Evictor pre-eviction filtering algorithm.},
-    label={lst:actualusage_algorithm},
-]{assets/codes/pseudos/actualusage/unifiedalgo.psu}
+Appendix~\ref{appendix:actualusage_algorithm} summarizes the Actual Usage Evictor decision workflow. The algorithm first checks whether the candidate Pod is inside the configured namespace and label scope. Pods outside the scope are allowed immediately because the plugin is not responsible for protecting them.
 
 For scoped Pods, the plugin retrieves the latest Pod metrics from the metrics client and matches them with every regular container in the Pod specification. Missing or incomplete metrics block the eviction. For each resource, the plugin separately determines whether every container has an effective request. A complete dimension is aggregated and compared with its configured threshold. An incomplete request dimension is not divided by a partial aggregate request and is instead resolved using \textit{missingRequestPolicy}. Eviction is blocked when either the CPU or memory dimension reports \(\mathrm{busy}=\mathrm{true}\). Otherwise, the Pod passes the filter and the Descheduler may continue with the next pre-eviction filter or the final eviction request.
 
@@ -421,12 +411,7 @@ The network-aware eviction decision workflow is implemented within the chaining 
 
 The first stage is the built-in \textit{DefaultEvictor} plugin provided by the Kubernetes descheduler framework. This component evaluates several default eviction constraints such as pod state validation, scheduling constraints and node fit requirements to ensure that the pod is eligible for eviction \citep{k8s_descheduler_docs}. If any of these constraints is violated the eviction procedure is cancelled and the pod is skipped. Otherwise the eviction candidate continues to the next phase.
 
-After passing the default pre-eviction filtering stage, our proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Listing \ref{lst:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster.
-
-\lstinputlisting[
-    caption={Network-Aware algorithm},
-    label={lst:netaware_unified_algorithm},
-]{assets/codes/pseudos/netaware/unifiedalgo.psu}
+After passing the default pre-eviction filtering stage, our proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Appendix~\ref{appendix:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster.
 
 During the network-aware evaluation phase, the system first initializes the network cost provider used for communication cost computation. If latency metrics are configured, the plugin queries Prometheus to obtain node-to-node latency measurements and constructs a latency-based cost provider. Otherwise, the system falls back to the topology-based cost provider, which estimates communication cost using predefined topology distances such as zone and region locality.
 

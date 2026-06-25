@@ -1,8 +1,26 @@
 %-----------------------------------------------------------------------------%
-\addappendix{Network-Aware Algorithm}
-\begin{flushright}
-	Lampiran 1: CHANGELOG
-\end{flushright}
-\label{appendix:changelog}
+\addappendix{ResourceDefragmentation Algorithm}
+\label{appendix:resource_defrag}
+\lstinputlisting[
+    caption={ResourceDefragmentation eviction loop with predicted-target bin-score selection.},
+    label={lst:resource_defrag},
+]{assets/codes/pseudos/resource-defrag.psu}
 %-----------------------------------------------------------------------------%
 
+%-----------------------------------------------------------------------------%
+\addappendix{Actual Usage Evictor Algorithm}
+\label{appendix:actualusage_algorithm}
+\lstinputlisting[
+    caption={Actual Usage Evictor pre-eviction filtering algorithm.},
+    label={lst:actualusage_algorithm},
+]{assets/codes/pseudos/actualusage/unifiedalgo.psu}
+%-----------------------------------------------------------------------------%
+
+%-----------------------------------------------------------------------------%
+\addappendix{Network-Aware Evaluation Algorithm}
+\label{appendix:netaware_unified_algorithm}
+\lstinputlisting[
+    caption={Network-Aware algorithm},
+    label={lst:netaware_unified_algorithm},
+]{assets/codes/pseudos/netaware/unifiedalgo.psu}
+%-----------------------------------------------------------------------------%
