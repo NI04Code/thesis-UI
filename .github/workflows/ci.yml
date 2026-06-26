@@ -28,5 +28,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: thesis-pdf
-          path: thesis.pdf
+          name: journal-pdf
+          path: journal_paper.pdf
