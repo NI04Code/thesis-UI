@@ -25,12 +25,12 @@ The two systems under comparison are:
 \subsubsection{Scenarios}
 \label{sec:defrag_scenarios}
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{ResourceDefragmentation Evaluation Scenarios}
     \label{tab:defrag_scenarios}
+    \small
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
     \begin{tabular}{l p{3.6cm} p{7.4cm}}
         \hline
         \textbf{Scenario} & \textbf{Intent} & \textbf{Initial condition} \\
@@ -41,9 +41,8 @@ The two systems under comparison are:
         S4 & Hogs and jumbo Pod & Skewed resource hogs must be merged around a large workload. \\
         S5 & Heterogeneous drain & A drain Node contains differently shaped Pods that should land on complementary targets. \\
         \hline
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
 S1 primarily tests Node reclamation. S2 and S4 test whether dimensional fragmentation can be reduced when a scalar utilization baseline has no suitable action. S3 combines node reclamation and shape preservation. S5 isolates shape-aware eviction-candidate selection during a heterogeneous drain.
 
@@ -239,13 +238,13 @@ Finally, each run is validated for convergence and safety. The per-pass eviction
 \subsubsection{Node Reclamation}
 \label{sec:defrag_node_reclamation}
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Active Worker Nodes Before and After Descheduling}
     \label{tab:defrag_node_reclamation}
+    \small
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l c c c c}
+    \begin{tabular}{@{}l c c c c@{}}
         \hline
         \textbf{Scenario} & \textbf{HNU} & \textbf{Reclaimed} & \textbf{RD} & \textbf{Reclaimed} \\
         \hline
@@ -255,16 +254,15 @@ Finally, each run is validated for convergence and safety. The per-pass eviction
         S4 & \(5 \rightarrow 5\) & \(0\) & \(5 \rightarrow 4\) & \(\mathbf{1}\) \\
         S5 & \(4 \rightarrow 3\) & \(1\) & \(4 \rightarrow 3\) & \(1\) \\
         \hline
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.95\linewidth]{assets/pics/defrag/chart_active_nodes.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_active_nodes.png}
     \caption{Active worker Nodes per scenario after descheduling.}
     \label{fig:defrag_active_nodes}
-\end{figure}
+\end{figure*}
 
 ResourceDefragmentation reclaims four Nodes in S1 and three in S2, while HNU performs no eviction in either scenario, as shown in Figure \ref{fig:defrag_active_nodes}. HNU requires Nodes above its threshold to act as packing targets; uniformly low or uniformly fragmented layouts therefore produce no action. ResourceDefragmentation instead treats sparse Nodes and low bin-quality Nodes as resource-only consolidation sources, then uses \textit{predictSchedulerTarget} to choose Pods with feasible denser targets even when the baseline cannot form high- and low-utilization groups.
 
@@ -272,23 +270,22 @@ S3 is the only reclamation case won by HNU. Dense balanced targets already exist
 
 The consolidation effect is also visible in the density of the surviving Nodes. Figure \ref{fig:defrag_avg_utilization} reports the average active-Node utilization \(\bar{U}\) after descheduling: in the consolidation and fragmentation scenarios ResourceDefragmentation drives the retained Nodes to substantially higher density than HNU, confirming that the reclaimed capacity is absorbed rather than left uniformly sparse.
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.95\linewidth]{assets/pics/defrag/chart_avg_utilization.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_avg_utilization.png}
     \caption{Average utilization of active Nodes after descheduling (\(\bar{U}\)).}
     \label{fig:defrag_avg_utilization}
-\end{figure}
+\end{figure*}
 
 \subsubsection{Stranding Reduction}
 \label{sec:defrag_stranding_results}
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Cluster Stranding Score Before and After Descheduling}
     \label{tab:defrag_stranding}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l c c}
+    \begin{tabular}{@{}l c c@{}}
         \hline
         \textbf{Scenario} & \textbf{HighNodeUtilization} & \textbf{ResourceDefragmentation} \\
         \hline
@@ -298,16 +295,15 @@ The consolidation effect is also visible in the density of the surviving Nodes. 
         S4 & \(3.243 \rightarrow 3.243\) & \(3.243 \rightarrow \mathbf{1.112}\) \\
         S5 & \(1.338 \rightarrow 1.298\) & \(1.338 \rightarrow \mathbf{0.123}\) \\
         \hline
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.95\linewidth]{assets/pics/defrag/chart_stranding.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_stranding.png}
     \caption{Final cluster stranding score \(S\) per scenario (lower is better).}
     \label{fig:defrag_stranding}
-\end{figure}
+\end{figure*}
 
 As summarized in Figure \ref{fig:defrag_stranding}, the result separates node reclamation from dimensional defragmentation. S1 begins with little stranding, so packing four Nodes into two leaves \(S\) essentially unchanged. In S2 and S4, ResourceDefragmentation uses the predicted-target score to combine complementary shapes and reduces \(S\) by approximately \(74\%\) and \(66\%\), respectively; HNU does not act.
 
@@ -325,13 +321,12 @@ HNU also empties one Node, but it requires three evictions and only reduces \(S\
 \subsubsection{Headroom and Eviction Efficiency}
 \label{sec:defrag_headroom_efficiency}
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Balanced Headroom and Eviction Count}
     \label{tab:defrag_headroom_efficiency}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l c c c c}
+    \begin{tabular}{@{}l c c c c@{}}
         \hline
         \textbf{Scenario} & \textbf{HNU \(H_{balanced}\)} & \textbf{HNU Evict.} & \textbf{RD \(H_{balanced}\)} & \textbf{RD Evict.} \\
         \hline
@@ -341,39 +336,38 @@ HNU also empties one Node, but it requires three evictions and only reduces \(S\
         S4 & \(13\) & \(0\) & \(\mathbf{24}\) & \(5\) \\
         S5 & \(32\) & \(3\) & \(\mathbf{38}\) & \(\mathbf{2}\) \\
         \hline
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.95\linewidth]{assets/pics/defrag/chart_h_balanced.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_balanced.png}
     \caption{Balanced headroom \(H_{balanced}\) per scenario after descheduling.}
     \label{fig:defrag_h_balanced}
-\end{figure}
+\end{figure*}
 
 HNU retains higher distributed headroom in S1 because it leaves all six Nodes active; this is not a node reclamation success. In the fragmentation scenarios, ResourceDefragmentation exposes substantially more balanced headroom, as shown in Figure \ref{fig:defrag_h_balanced}. S5 is the strongest efficiency result: two ResourceDefragmentation evictions reclaim one Node, reduce \(S\) by \(1.215\), and leave headroom for 38 balanced reference Pods. HNU uses three evictions for the same reclamation, reduces \(S\) by only \(0.040\), and leaves headroom for 32 reference Pods.
 
 The eviction cost behind these gains is reported in Figure \ref{fig:defrag_evictions}. ResourceDefragmentation spends evictions only where consolidation or defragmentation is achievable, and in S3 and S5 it reaches an equal or better cluster state than HNU with fewer Pod movements.
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.95\linewidth]{assets/pics/defrag/chart_evictions.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_evictions.png}
     \caption{Total Pod evictions per scenario (\(E_{count}\)).}
     \label{fig:defrag_evictions}
-\end{figure}
+\end{figure*}
 
 \subsubsection{Shape-Specific Schedulability Yield}
 \label{sec:defrag_shape_headroom}
 
 Balanced headroom alone does not show \emph{which} kind of workload a defragmented layout can still admit. To make this explicit, the residual capacity is also probed with three skewed reference Pods: a CPU-skewed Pod, a memory-skewed Pod, and a large jumbo Pod (\(800\,m/324\,Mi\)). Table \ref{tab:defrag_shape_headroom} reports the resulting yields after descheduling.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Schedulability Yield by Reference-Pod Shape After Descheduling}
     \label{tab:defrag_shape_headroom}
+    \small
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
     \begin{tabular}{l cc cc cc}
         \hline
         & \multicolumn{2}{c}{\textbf{CPU-skewed}} & \multicolumn{2}{c}{\textbf{Memory-skewed}} & \multicolumn{2}{c}{\textbf{Jumbo}} \\
@@ -385,44 +379,42 @@ Balanced headroom alone does not show \emph{which} kind of workload a defragment
         S4 & \(4\)  & \(\mathbf{8}\)  & \(4\)  & \(\mathbf{7}\)  & \(3\) & \(\mathbf{4}\) \\
         S5 & \(\mathbf{12}\) & \(11\) & \(11\) & \(11\)          & \(6\) & \(\mathbf{7}\) \\
         \hline
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
 In the fragmentation scenarios, ResourceDefragmentation increases the yield for skewed and jumbo workloads where it matters most. In S2 and S4, where complementary CPU-heavy and memory-heavy Nodes are merged, it lifts memory-skewed yield (\(9 \to 11\) in S2, \(4 \to 7\) in S4) and restores jumbo capacity that the baseline cannot provide at all in S2 (\(0 \to 6\)), as shown in Figures \ref{fig:defrag_h_cpu_skewed}, \ref{fig:defrag_h_mem_skewed}, and \ref{fig:defrag_h_jumbo}. In S5 it matches or slightly exceeds the baseline on every shape while using fewer evictions.
 
 The two cases where HNU leads, CPU-skewed and jumbo yield in S3, reflect the same trade-off seen in the balanced headroom and stranding results: HNU empties an additional Node by greedily packing onto pre-dense targets, which leaves more whole-Pod slots free but at a slightly worse stranding score. ResourceDefragmentation instead preserves resource shape, so its remaining capacity is more evenly balanced across dimensions rather than concentrated on one emptied Node.
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.95\linewidth]{assets/pics/defrag/chart_h_cpu_skewed.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_cpu_skewed.png}
     \caption{CPU-skewed schedulability yield \(H_{cpu\text{-}skewed}\) per scenario after descheduling.}
     \label{fig:defrag_h_cpu_skewed}
-\end{figure}
+\end{figure*}
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.95\linewidth]{assets/pics/defrag/chart_h_mem_skewed.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_mem_skewed.png}
     \caption{Memory-skewed schedulability yield \(H_{mem\text{-}skewed}\) per scenario after descheduling.}
     \label{fig:defrag_h_mem_skewed}
-\end{figure}
+\end{figure*}
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.95\linewidth]{assets/pics/defrag/chart_h_jumbo.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/defrag/chart_h_jumbo.png}
     \caption{Jumbo (\(800\,m/324\,Mi\)) schedulability yield \(H_{jumbo}\) per scenario after descheduling.}
     \label{fig:defrag_h_jumbo}
-\end{figure}
+\end{figure*}
 
 \subsubsection{Convergence and Safety}
 \label{sec:defrag_convergence_safety}
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Representative Per-Pass Eviction Counts}
     \label{tab:defrag_convergence}
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l c c}
+    \begin{tabular}{@{}l c c@{}}
         \hline
         \textbf{Scenario} & \textbf{HighNodeUtilization} & \textbf{ResourceDefragmentation} \\
         \hline
@@ -432,9 +424,8 @@ The two cases where HNU leads, CPU-skewed and jumbo yield in S3, reflect the sam
         S4 & \(0\) & \(4, 1, 0\) \\
         S5 & \(3, 0\) & \(2, 0\) \\
         \hline
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
 Every scenario converges to a zero-eviction pass within two or three passes, with no oscillation. Across all repetitions, no after-snapshot contains a Pending Pod. All evicted Pods are controller-owned and eligible under the default evictor, infrastructure namespaces are excluded, and no eviction request remains outstanding. These observations validate the feasibility guard, target ceiling, and bounded execution loop.
 
@@ -503,12 +494,12 @@ The post-event capture for HNU and LNU uses \(45\,s\) to ensure replacement Pods
 
 The three pairs use layouts that expose the placement objective of each balancing strategy, as summarized in Table~\ref{tab:actualusage4_layouts}.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Strategy-Specific Layouts for Actual Usage Evaluation}
     \label{tab:actualusage4_layouts}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{l p{7.2cm} p{5.2cm}}
         \toprule
         \textbf{Pair} & \textbf{Initial layout} & \textbf{Intended strategy action} \\
@@ -519,7 +510,7 @@ The three pairs use layouts that expose the placement objective of each balancin
         \bottomrule
     \end{tabular}%
     }
-\end{table}
+\end{table*}
 
 HNU uses the \textit{NodeResourcesFit} scheduler plugin with \textit{MostAllocated} scoring so replacement Pods are packed onto the three destination Nodes. LNU uses the default \textit{LeastAllocated} scheduler so evicted Pods are distributed to the underutilized Nodes. The ResourceDefragmentation pair uses the request-space layout described below.
 
@@ -528,12 +519,12 @@ HNU uses the \textit{NodeResourcesFit} scheduler plugin with \textit{MostAllocat
 
 The initial layout is a modified variant of the S2 reducible-stranding scenario. Three CPU-skewed worker Nodes, two memory-skewed worker Nodes, and one source Node carry the twelve experiment Pods listed in Table~\ref{tab:actualusage4_layout}. The source Node (worker-6) is memory-skewed and hosts two Pods with the same CPU request but different memory requests. These are a user-facing API Pod and an idle memory-shaped worker Pod. This composition is the smallest layout in which \textit{ResourceDefragmentationC2} deterministically selects the API Pod first while still leaving a structurally valid fallback candidate on the same Node.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Initial Pod Placement for the Actual Usage Eviction Test}
     \label{tab:actualusage4_layout}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{l l l c c l}
         \hline
         \textbf{Node} & \textbf{Role} & \textbf{Pods} & \textbf{CPU frac} & \textbf{Mem frac} & \textbf{Traffic} \\
@@ -547,7 +538,7 @@ The initial layout is a modified variant of the S2 reducible-stranding scenario.
         \hline
     \end{tabular}%
     }
-\end{table}
+\end{table*}
 
 The API Pod is exposed by a dedicated NodePort Service whose selector matches only the API Deployment. The memory Pod has no Service. Traffic is therefore routed deterministically to the API Pod and is independent of \textit{kube-proxy} round-robin distribution. This layout satisfies three properties that are necessary for the experiment to be meaningful:
 
@@ -568,12 +559,12 @@ In HNU, the busy API occupies one of the three source Nodes that the strategy at
 %-----------------------------------------------------------------------------%
 Each pair differs only in whether the Actual Usage Evictor is registered after the Default Evictor, as shown in Table~\ref{tab:actualusage4_matrix}.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Actual Usage Evictor Comparison Systems}
     \label{tab:actualusage4_matrix}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{l l l l}
         \toprule
         \textbf{Run} & \textbf{Strategy} & \textbf{Pre-eviction filters} & \textbf{Load} \\
@@ -587,7 +578,7 @@ Each pair differs only in whether the Actual Usage Evictor is registered after t
         \bottomrule
     \end{tabular}%
     }
-\end{table}
+\end{table*}
 
 The zero-suffix systems are controls without runtime safety filtering. The one-suffix systems use CPU and memory usage thresholds of \(0.80\). All evaluated Pods declare positive CPU and memory requests, so both dimensions have valid request-relative denominators.
 
@@ -670,13 +661,13 @@ where each Node contributes its requested CPU or memory divided by its allocatab
 %-----------------------------------------------------------------------------%
 Table~\ref{tab:actualusage4_loaded} reports the ResourceDefragmentation pair. R0 evicts the busy API Pod and obtains the stronger defragmentation outcome. R1 blocks the API Pod, evicts the idle memory fallback, and preserves application availability.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Descheduler Behavior Under Sustained API Load}
     \label{tab:actualusage4_loaded}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l c c}
+    \small
+    \begin{tabular}{@{}l c c@{}}
         \toprule
         \textbf{Metric} & \textbf{R0 (no plugin)} & \textbf{R1 (with plugin)} \\
         \midrule
@@ -690,9 +681,8 @@ Table~\ref{tab:actualusage4_loaded} reports the ResourceDefragmentation pair. R0
         Stranding reduction                    & \(\mathbf{0.816}\)            & \(0.000\) \\
         Headroom change \(\Delta H_{\text{balanced}}\) & \(\mathbf{+4}\)       & \(+1\) \\
         \bottomrule
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
 \paragraph{Eviction Substitution and Application Protection}
 \label{subsubsec:actualusage4_substitution}
@@ -710,13 +700,13 @@ The protection benefit reduces the ResourceDefragmentation objective. R0 moves t
 \subsubsection{HighNodeUtilization Results}
 \label{subsec:actualusage4_hnu_results}
 %-----------------------------------------------------------------------------%
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{HighNodeUtilization Results}
     \label{tab:actualusage4_hnu}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l c c}
+    \small
+    \begin{tabular}{@{}l c c@{}}
         \toprule
         \textbf{Metric} & \textbf{H0 (no plugin)} & \textbf{H1 (with plugin)} \\
         \midrule
@@ -730,9 +720,8 @@ The protection benefit reduces the ResourceDefragmentation objective. R0 moves t
         Disruption duration \(D\)         & \(4.836\,s\)& \(\mathbf{0\,s}\) \\
         Original API Pod remained         & no          & yes \\
         \bottomrule
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
 HNU classifies workers 4--6 as underutilized sources in both runs. H0 evicts all three source Pods, including the busy API on worker-6. H1 allows the two idle source Pods but blocks the API at a CPU ratio of approximately \(10.02\). The filter therefore does not disable consolidation. It reduces the active-Node count from six to four instead of six to three.
 
@@ -742,13 +731,13 @@ H0 records \(40\) HTTP \(503\) responses and \(4.836\,s\) of disruption. H1 reco
 \subsubsection{LowNodeUtilization Results}
 \label{subsec:actualusage4_lnu_results}
 %-----------------------------------------------------------------------------%
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{LowNodeUtilization Results}
     \label{tab:actualusage4_lnu}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l c c}
+    \small
+    \begin{tabular}{@{}l c c@{}}
         \toprule
         \textbf{Metric} & \textbf{L0 (no plugin)} & \textbf{L1 (with plugin)} \\
         \midrule
@@ -763,9 +752,8 @@ H0 records \(40\) HTTP \(503\) responses and \(4.836\,s\) of disruption. H1 reco
         Disruption duration \(D\)         & \(4.873\,s\)          & \(\mathbf{0\,s}\) \\
         Original API Pod remained         & no                    & yes \\
         \bottomrule
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
 L0 evicts the busy API and one idle Pod from each of the other two sources. L1 blocks the API at a CPU ratio of approximately \(10.10\), then permits the idle fallback on worker-6. Both systems complete three successful evictions and produce the same final request distribution.
 
@@ -777,40 +765,40 @@ Memory request deviation falls from \(0.21639\) to \(0.03091\) in both runs, a r
 %-----------------------------------------------------------------------------%
 Figure~\ref{fig:actualusage4_failure_timeline} shows the request failures using the same event-aligned \(30\)-second post-event window for every run. Each cell counts HTTP \(503\) responses completed within a one-second interval. The dashed blue markers show the API eviction timestamps recorded in the Descheduler logs: \(1.891\,s\) in R0, \(3.647\,s\) in H0, and \(4.680\,s\) in L0. No marker appears in the treatment rows because the API eviction was blocked. Although the HNU and LNU experiments captured \(45\) seconds after the event, only the first \(30\) seconds are included for consistency with the ResourceDefragmentation experiments. Request timestamps represent completion time rather than generation time, so the number of completed responses can differ between runs despite the constant configured arrival rate of eight requests per second.
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=\linewidth]{assets/pics/actual-usage/failure_timeline_heatmap.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/actual-usage/failure_timeline_heatmap.png}
     \caption{Event-Aligned HTTP Failure Timeline and API Eviction Time over the Common \(30\)-Second Post-Event Window}
     \label{fig:actualusage4_failure_timeline}
-\end{figure}
+\end{figure*}
 
 The three control runs exhibit compact failure intervals after the Descheduler event, whereas the corresponding Actual Usage Evictor treatments contain no failed response. Figure~\ref{fig:actualusage4_failure_bar} summarizes the failure rates across all six systems. The control configurations consistently produce failure rates between \(16.67\%\) and \(17.24\%\), while every treatment records \(0\%\).
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.85\linewidth]{assets/pics/actual-usage/failure_rate_bar.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/actual-usage/failure_rate_bar.png}
     \caption{HTTP Failure Rate Comparison Across All Strategy Pairs}
     \label{fig:actualusage4_failure_bar}
-\end{figure}
+\end{figure*}
 
 Figure~\ref{fig:actualusage4_disruption_bar} shows the corresponding service disruption durations. All control runs exhibit approximately \(4.8\,s\) of disruption, while every treatment records \(0\,s\).
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \includegraphics[width=0.85\linewidth]{assets/pics/actual-usage/disruption_duration_bar.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/actual-usage/disruption_duration_bar.png}
     \caption{Service Disruption Duration Comparison Across All Strategy Pairs}
     \label{fig:actualusage4_disruption_bar}
-\end{figure}
+\end{figure*}
 
 Table~\ref{tab:actualusage4_cross_strategy} separates this common application effect from the strategy-specific placement cost. The failure-rate denominator is the number of requests completed within the common interval.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{Cross-Strategy Actual Usage Evictor Results}
     \label{tab:actualusage4_cross_strategy}
     \renewcommand{\arraystretch}{1.25}
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l p{5.2cm} p{6.8cm}}
+    \small
+    \begin{tabular}{@{}l p{5.2cm} p{6.8cm}@{}}
         \toprule
         \textbf{Pair} & \textbf{Availability result} & \textbf{Strategy-specific effect} \\
         \midrule
@@ -818,9 +806,8 @@ Table~\ref{tab:actualusage4_cross_strategy} separates this common application ef
         H0/H1 & Failure rate falls from \(16.67\%\) to \(0\%\). Disruption falls from \(4.836\,s\) to \(0\,s\). & H1 still reclaims two source Nodes, but active-Node reduction falls from three to two. \\
         L0/L1 & Failure rate falls from \(17.24\%\) to \(0\%\). Disruption falls from \(4.873\,s\) to \(0\,s\). & L1 completes the same three evictions and retains the \(85.7\%\) memory-deviation reduction. \\
         \bottomrule
-    \end{tabular}%
-    }
-\end{table}
+    \end{tabular}
+\end{table*}
 
 The Actual Usage Evictor consistently changes the decision for the busy API candidate while allowing idle candidates to pass. The placement cost depends on whether the remaining candidate can satisfy the active strategy. R1 retains movement but loses the strongest stranding improvement. H1 retains partial consolidation but cannot empty the protected source. L1 substitutes an idle Pod and retains the complete measured balancing result.
 
@@ -906,10 +893,15 @@ To capture and aggregate this data, a minimal installation of Prometheus was dep
 
 The Prometheus server instance was pinned to worker-6 (dedicated Prometheus node) using a targeted \emph{nodeSelector}. Its operational resource limits were tightly bounded to prevent memory leakage from exhausting the node's approximately 800 MiB allocatable ceiling:
 
-\lstinputlisting[
-    caption={Prometheus resources config for Latency and Defragmentation Trade-off Test},
-    label={lst:prometheus_config},
-]{assets/codes/pseudos/netaware/prometheusconfig.psu}
+\begin{figure*}[tbp]
+    \centering
+    \begin{minipage}{0.95\textwidth}
+    \lstinputlisting[
+        caption={Prometheus resources config for Latency and Defragmentation Trade-off Test},
+        label={lst:prometheus_config},
+    ]{assets/codes/pseudos/netaware/prometheusconfig.psu}
+    \end{minipage}
+\end{figure*}
 
 By expanding the global scrapeInterval to 45s and restricting data retention to a lean 6h window, the internal time-series indexing map remains small enough to sit safely in 800 MiB usable RAM. Telemetry target discovery is governed by a native PodMonitor custom resource deployed to the \emph{prom} namespace. This monitor hooks directly into the named container exposed in the Goldpinger daemon manifest, automatically mapping the scraping loop to target port 8080.
 
@@ -930,10 +922,10 @@ The query utilizes host name as its source indicator and peer name as its target
 %-----------------------------------------------------------------------------%
 The evaluation is split into three experimental testing scenario: LowNodeUtilization, HighNodeUtilization, and ResourceDefragmentation. For each scenario we test combination of strategies as shown in the experimental matrix defined below:
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
-       \begin{tabular}{lccc}
+    \small
+    \begin{tabular}{@{}lccc@{}}
             \toprule
             \textbf{Strategy / Scenario} & \textbf{Low Node Util.} & \textbf{High Node Util.} & \textbf{Imbalance Index Util.} \\
             \midrule
@@ -946,10 +938,9 @@ The evaluation is split into three experimental testing scenario: LowNodeUtiliza
             Latency L1 \& L2             & \checkmark              & \checkmark               & ---                            \\
             \midrule
         \end{tabular}
-    }
     \caption{Experimental Matrix Mapping for Latency and Defragmentation Trade-off Test}
     \label{tab:netaware4_experimentalmatrix}
-\end{table}
+\end{table*}
 
 We also configure specific plugin configuration for each scenario as follows:
 
@@ -988,9 +979,9 @@ The \textit{LowNodeUtilization} strategy resolves resource packing by spreading 
 
 Table \ref{tab:lownode_initial_state} details the exact state of the cluster prior to descheduler intervention.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c l l c c l}
         \toprule
         \textbf{Node} & \textbf{Zone} & \textbf{Pods} & \textbf{CPU Alloc.} & \textbf{Mem Alloc.} & \textbf{Status} \\
@@ -1005,7 +996,7 @@ Table \ref{tab:lownode_initial_state} details the exact state of the cluster pri
     }
     \caption{Resource Allocation: Initial State for LowNodeUtilization Strategy}
     \label{tab:lownode_initial_state}
-\end{table}
+\end{table*}
 
 This starting state tasks the descheduler with safely distributing the critical \textit{payment} pods to the empty healthy nodes while strictly avoiding the empty degraded zone.
 
@@ -1017,9 +1008,9 @@ Conversely, the \textit{HighNodeUtilization} strategy is designed to pack a frag
 
 Table \ref{tab:highnode_initial_state} details the exact state of the cluster prior to node reclamation.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c l l c c l}
         \toprule
         \textbf{Node} & \textbf{Zone} & \textbf{Pods} & \textbf{CPU Alloc.} & \textbf{Mem Alloc.} & \textbf{Status} \\
@@ -1034,7 +1025,7 @@ Table \ref{tab:highnode_initial_state} details the exact state of the cluster pr
     }
     \caption{Resource Allocation: Initial State for HighNodeUtilization Strategy}
     \label{tab:highnode_initial_state}
-\end{table}
+\end{table*}
 
 This starting state forces the descheduler to evict the \textit{payment} pods to pack the cluster. The challenge is preventing the \textit{kube-scheduler}'s default \textit{MostAllocated} strategy from blindly bin-packing these critical workloads into the overloaded, but network-degraded, nodes.
 
@@ -1048,9 +1039,9 @@ To evaluate this behavior, we construct a highly fragmented cluster environment 
 
 Table \ref{tab:resourcedefrag_initial_state} details the exact state of the cluster prior to defragmentation.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{llcccc}
         \toprule
         \textbf{Node} & \textbf{Zone} & \textbf{Pods} & \textbf{CPU Alloc.} & \textbf{Mem Alloc.} & \textbf{Status} \\
@@ -1065,7 +1056,7 @@ Table \ref{tab:resourcedefrag_initial_state} details the exact state of the clus
     }
     \caption{Resource Allocation: Initial State for ResourceDefragmentation Strategy}
     \label{tab:resourcedefrag_initial_state}
-\end{table}
+\end{table*}
 
 This starting state presents a mathematical trap for the descheduler. From a purely resource-optimizing perspective, moving the CPU-heavy \textit{payment} pods to the memory-heavy degraded nodes would perfectly resolve the cluster's fragmentation. The challenge is ensuring the network-aware filter intercepts this mathematically optimal, but network-destructive, decision.
 
@@ -1285,9 +1276,9 @@ The primary objective of the network-aware descheduler is to maintain optimal cl
 
 Table \ref{tab:low_node_results} presents the raw performances of the evaluation using the optimal configuration (\textbf{MinBetterPercentage = 75\%}).
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c c c r c}
         \toprule
         \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
@@ -1306,7 +1297,7 @@ Table \ref{tab:low_node_results} presents the raw performances of the evaluation
     }
     \caption{Descheduler Performance: LowNodeUtilization Scenario (MinBetterPercentage=75\%)}
     \label{tab:low_node_results}
-\end{table}
+\end{table*}
 
 As demonstrated in Table \ref{tab:low_node_results}, all evaluated strategies successfully reduced the CPU and Memory Standard Deviation across the cluster. This indicates that the core balancing objective of the descheduler was achieved, regardless of the filtering strategy applied.
 
@@ -1315,9 +1306,9 @@ As demonstrated in Table \ref{tab:low_node_results}, all evaluated strategies su
 \label{subsubsec:netaware4_resultanalysis1_tradeoff}
 %-----------------------------------------------------------------------------%
 While all strategies achieved equivalent resource balancing, their impact on network performance varied drastically. Figure \ref{fig:balance_vs_latency} illustrates this critical trade-off.
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}
         \pgfplotsset{
             width=12cm,
@@ -1382,15 +1373,15 @@ While all strategies achieved equivalent resource balancing, their impact on net
     }
     \caption{Cluster Balance vs. Network Performance.}
     \label{fig:balance_vs_latency}
-\end{figure}
+\end{figure*}
 
 The baseline and topology-aware strategies successfully balanced the cluster but caused a catastrophic increase in average latency (spiking from $\sim$4ms to over 60ms). In contrast, the latency-aware strategies (a5-a7) achieved near equal cluster balance while maintaining the latency ($\sim$3ms).
 
 The massive latency spikes observed in the topology-aware tests are primarily caused by the topology model's inability to detect actual network degradation. As visualized in Figure \ref{fig:topology_flaw}, the topology model only evaluates physical zone boundaries (e.g., Cross-Zone to Cross-Zone) and assumes all links are perfectly healthy, it considered degraded nodes as healthy one, resulting on lower or equal network cost calculation. The proposed latency-aware solved this issue by querying Prometheus for real-time metrics, correctly detecting the 160ms degradation and blocking the eviction.
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}
         \begin{axis}[
             ybar,
@@ -1413,7 +1404,7 @@ The massive latency spikes observed in the topology-aware tests are primarily ca
     }
     \caption{Number of sensitive pods placed into a network-degraded zone.}
     \label{fig:topology_flaw}
-\end{figure}
+\end{figure*}
 
 %-----------------------------------------------------------------------------%
 \paragraph{Limitations of Pre-Eviction Filtering (L1)}
@@ -1422,10 +1413,9 @@ The massive latency spikes observed in the topology-aware tests are primarily ca
 
 During testing, we also discovered that the global Pre-Eviction filter (L1) is highly sensitive to configuration heuristics. Table \ref{tab:minbetter_impact} compares the performance of the L1 filter under different \textit{MinBetterPercentage} thresholds against the strategy-embedded L2 filter.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l c c}
+    \begin{tabular}{@{}l c c@{}}
         \toprule
         \textbf{Configuration} & \textbf{Degraded Pods} & \textbf{Avg Latency (ms)} \\
         \midrule
@@ -1434,11 +1424,10 @@ During testing, we also discovered that the global Pre-Eviction filter (L1) is h
         \midrule
         L2 Strategy Filter (No Tuning Req.) & 0 & 3.017 ms\\
         \bottomrule
-    \end{tabular}%
-    }
+    \end{tabular}
     \caption{Impact of MinBetterPercentage on L1 Pre-Eviction Filters}
     \label{tab:minbetter_impact}
-\end{table}
+\end{table*}
 
 When the L1 filter was configured with a loose threshold (50\%), it evaluated all schedulable nodes in the cluster and determined that 2 out of the 4 available candidate nodes offered equal or better latency. Because this satisfied the 50\% minimum threshold requirement, the L1 filter allowed the eviction. However, when the pod was rescheduled, the \textit{kube-scheduler} utilized its default \textit{LeastAllocated} strategy. Since the degraded node in the cluster was also completely empty, the scheduler simply placed the pod there to balance CPU and memory resources, completely destroying the workload's latency.
 
@@ -1451,9 +1440,9 @@ To mitigate this global-filtering flaw, the L1 threshold had to be strictly tune
 The previous scenario included generic network-unaware pods, which provided the descheduler with a safe alternative to balance the node without touching the network sensitive workloads. To rigorously test the descheduler's logic, we executed a variant where the overutilized nodes were populated exclusively only by network-sensitive pods.
 
 Table \ref{tab:hard_tradeoff_results} presents the evaluation results when no network-unaware pods were available to be sacrificed.
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c c c r c}
         \toprule
         \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} &  \textbf{Avg Latency (ms)} & \textbf{Degraded Pods} \\
@@ -1468,15 +1457,15 @@ Table \ref{tab:hard_tradeoff_results} presents the evaluation results when no ne
     }
     \caption{Descheduler Performance: The "Hard Tradeoff" Scenario (No Network-Unaware Pods)}
     \label{tab:hard_tradeoff_results}
-\end{table}
+\end{table*}
 
 This scenario forces the descheduler to make a definitive choice between cluster symmetry and network performance. As shown in Table \ref{tab:hard_tradeoff_results}, the Baseline and Topology-Aware strategies blindly prioritized CPU balancing. They evicted 6 critical pods, successfully balancing the cluster by dropping the CPU and Memory Standard Deviation to $\sim$13\%. However, they placed 2 of those sensitive pods directly into the degraded zone, severely degrading the workload's performance (spiking average latency to $\sim$50ms).
 
 In contrast, the Latency-Aware strategies evaluated the critical pods, detected that evicting any of them would subject them to degraded network conditions, and strictly blocked all evictions (0 Evicted Pods). By intentionally refusing to evict, the Latency-Aware descheduler chose to leave the cluster imbalanced (StdDev remained at $\sim$21-23\%) to guarantee the network integrity of the application. This conclusively proves that the proposed implementation strictly prioritizes application latency over infrastructure symmetry.
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}
         \pgfplotsset{
             width=12cm,
@@ -1539,7 +1528,7 @@ In contrast, the Latency-Aware strategies evaluated the critical pods, detected 
     }
     \caption{Cluster Balance vs. Network Performance (No Network-Unaware Pods Scenario).}
     \label{fig:hard_tradeoff_latency}
-\end{figure}
+\end{figure*}
 
 
 %-----------------------------------------------------------------------------%
@@ -1549,9 +1538,9 @@ In contrast, the Latency-Aware strategies evaluated the critical pods, detected 
 \textit{HighNodeUtilization} scenario presents a unique challenge for the descheduler. Unlike \textit{LowNodeUtilization}, which spreads pods across the cluster, \textit{HighNodeUtilization} seeks to pack workloads by evicting pods from underutilized nodes and packing them onto overutilized ones. This relies heavily on the \textit{kube-scheduler}'s \textit{MostAllocated} scoring strategy, which creates a centered gravity to heavy load nodes when scheduling pod.
 
 Table \ref{tab:highnode_results} presents the raw performance of the descheduler when utilizing the strict (\textbf{MinBetterPercentage = 75\%}).
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{l c c c c r c}
         \toprule
         \textbf{Scenario} & \textbf{Evicted Pods} & \textbf{CPU StdDev (\%)} & \textbf{MEM StdDev (\%)} & \textbf{Active Nodes} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
@@ -1570,7 +1559,7 @@ Table \ref{tab:highnode_results} presents the raw performance of the descheduler
     }
     \caption{Descheduler Performance: HighNodeUtilization Scenario}
     \label{tab:highnode_results}
-\end{table}
+\end{table*}
 
 As we observe in Table \ref{tab:highnode_results}, the Baseline and Topology-Aware strategies successfully packed the cluster. By bin-packing the pods, they successfully emptied 2 machines (reducing active nodes from 5 to 3), which naturally caused the CPU and Memory Standard Deviations to increase. However, to achieve this node reclamation, they blindly placed 2 sensitive pods into the degraded zone, causing latency to spike to $\sim$130ms. In contrast, the Latency-Aware strategies successfully blocked the dangerous evictions. While this meant the cluster could not be fully packed (leaving 5 active nodes), it perfectly preserved the $\sim$3ms latency.
 
@@ -1579,9 +1568,9 @@ As we observe in Table \ref{tab:highnode_results}, the Baseline and Topology-Awa
 
 Because the descheduler cannot guarantee final placement, it must assess the statistical risk of the \textit{kube-scheduler}'s behavior. We best demonstrate the necessity of the strict 75\% threshold by analyzing the catastrophic failure of the Latency-Aware L2 filter when configured with a looser 50\% threshold.
 
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}
         % Left Y-Axis: Average Latency (Primary Axis)
         \begin{axis}[
@@ -1658,7 +1647,7 @@ Because the descheduler cannot guarantee final placement, it must assess the sta
     }
     \caption{Performance comparison of \textit{MinBetterCandidatePercent} Tuning}
     \label{fig:highnode_results}
-\end{figure}
+\end{figure*}
 
 As shown in Table \ref{tab:highnode_results}, both the L1 and L2 latency filters failed when configured with a loose 50\% threshold. When evaluating the L1 Pre-Eviction filter, it scanned 4 potential candidate nodes and found that 2 of them (worker-2 and worker-3) offered equal or better latency. Because this mathematically satisfied the 50\% threshold, L1 authorized the evictions. However, the \textit{kube-scheduler} subsequently placed one of the sensitive pods into the degraded zone, causing average latency to spike to $\sim$63ms.
 
@@ -1679,10 +1668,9 @@ Because this algorithm optimizes for the geometric "shape" of resource utilizati
 Prior to the descheduler execution, the cluster was forced into a highly fragmented state (Stranding Score: \textbf{2.535}), with nodes exhibiting massive orthogonal skews (e.g., 0.90 CPU vs 0.51 Mem, and 0.10 CPU vs 0.82 Mem).
 
 Table \ref{tab:resourcedefrag_results} presents the raw performance of the descheduler across the three filtering strategies.
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
-    \begin{tabular}{l c c r c}
+    \begin{tabular}{@{}l c c r c@{}}
         \toprule
         \textbf{Scenario} & \textbf{Evictions} & \textbf{Stranding Score} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
         \midrule
@@ -1692,11 +1680,10 @@ Table \ref{tab:resourcedefrag_results} presents the raw performance of the desch
         r2: Topology L1 & 2 & 0.995 & 165.783 ms & 2 \\
         r3: Latency L1 & 2 & 0.895 & 8.762 ms & 0 \\
         \bottomrule
-    \end{tabular}%
-    }
+    \end{tabular}
     \caption{Descheduler Performance: ResourceDefragmentation Scenario}
     \label{tab:resourcedefrag_results}
-\end{table}
+\end{table*}
 
 As shown in Table \ref{tab:resourcedefrag_results}, the baseline \textit{ResourceDefragmentation} plugin successfully identified the orthogonal CPU and Memory skews within the cluster and executed 2 evictions to aggressively balance the nodes (reducing the Stranding Score from 2.535 down to 0.995). However, because the Resource Defragmentation algorithm strictly optimizes for mathematical resource symmetry, it eagerly selected the network-sensitive \textit{payment} pods for eviction, predicting that moving them to the memory-heavy degraded nodes would perfectly resolve the cluster's resource skew. Consequently, the baseline strategy placed 2 critical pods directly into the network-degraded zone, causing a catastrophic latency spike to $\sim$167ms.
 
@@ -1710,9 +1697,9 @@ Because the Kube-Descheduler framework operates iteratively, blocking the \texti
 \label{subsubsec:netaware4_resultanalysis3_tradeoff}
 
 Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of the three filtering strategies, highlighting our Latency-Aware plugin's ability to decouple cluster resource balancing from network performance degradation.
-\begin{figure}[tbp]
+\begin{figure*}[tbp]
     \centering
-    \resizebox{\linewidth}{!}{%
+    \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}
         \pgfplotsset{
             width=12cm,
@@ -1771,7 +1758,7 @@ Figure \ref{fig:resourcedefrag_latency} visually summarizes the performance of t
     }
     \caption{Cluster Stranding Score ($S$) vs. Network Performance.}
     \label{fig:resourcedefrag_latency}
-\end{figure}
+\end{figure*}
 
 The results from the Resource Defragmentation scenario mathematically prove that our Latency-Aware plugin does not inherently compromise the core goal of the defragmentation algorithm. Instead of blindly moving critical workloads to satisfy a mathematical equation, the plugin intelligently evaluates network safety and blocks evictions that violate it. As demonstrated by the 0.895 final Stranding Score, the presence of these network-unaware pods allowed the steered approach to achieve a slightly superior geometric resource balance compared to the baseline. However, as established in our earlier Hard Tradeoff experiments, if no such network-unaware pods were available, the Latency-Aware plugin would actively choose to leave the cluster in a fragmented state (higher Stranding Score) to guarantee network integrity like showed in \ref{tab:hard_tradeoff_results}
 
@@ -1790,7 +1777,7 @@ The combined profile therefore represents a constrained optimization flow. \text
 
 The scenario uses six worker Nodes grouped into two topology zones. Nodes \textit{worker-1}, \textit{worker-2}, and \textit{worker-3} are labeled as \textit{zone-a} and act as CPU-skewed expected landing targets. Nodes \textit{worker-4} and \textit{worker-5} are memory-skewed background Nodes in \textit{zone-b}. The fragmented source Node is \textit{worker-6}, also in \textit{zone-b}. The aggregate initial placement is summarized in Table~\ref{tab:e2e_cluster_layout}.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{End-to-End Use Case: Aggregate Initial Cluster Placement}
     \label{tab:e2e_cluster_layout}
@@ -1809,11 +1796,11 @@ The scenario uses six worker Nodes grouped into two topology zones. Nodes \texti
         worker-6 & zone-b & Hosts API, chatty, cache, and safe-memory Pods with total requests $200\,m/760\,Mi$ & Fragmented source Node \\
         \bottomrule
     \end{tabular}
-\end{table}
+\end{table*}
 
 This layout creates complementary resource shapes across the cluster. The first three Nodes have high requested CPU with little requested memory, so they are suitable expected targets for a memory-shaped Pod from the source Node. The next two Nodes keep the cluster heterogeneous and prevent the example from becoming a simple empty-node drain. The source Node hosts four application Pods from the combined-plugin workload, as summarized in Table~\ref{tab:e2e_source_pods}.
 
-\begin{table}[tbp]
+\begin{table*}[tbp]
     \centering
     \caption{End-to-End Use Case: Source Node Pods}
     \label{tab:e2e_source_pods}
@@ -1834,7 +1821,7 @@ This layout creates complementary resource shapes across the cluster. The first 
         workload-mem-safe & $50\,m$ & $180\,Mi$ & Idle & No network group \\
         \bottomrule
     \end{tabular}
-\end{table}
+\end{table*}
 
 This placement makes the roles of the three mechanisms visible. From a resource-only perspective, \textit{workload-api} is the strongest memory-shaped candidate because it has the largest memory request on the source Node. \textit{workload-chatty} is also useful for resource defragmentation, but it belongs to the same checkout communication group as \textit{workload-cache}. \textit{workload-mem-safe} has a smaller memory request than the first two candidates, but it is idle and has no network dependency label.
 
