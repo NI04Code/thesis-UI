@@ -2,9 +2,9 @@ name: Build Thesis
 
 on:
   push:
-    branches: [ main ]
+    branches: [ journal-paper ]
   pull_request:
-    branches: [ main ]
+    branches: [ journal-paper ]
 
 jobs:
   build:
@@ -23,7 +23,7 @@ jobs:
 
       - name: Generate PDF
         run: |
-          latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode -halt-on-error" thesis.tex
+          latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode -halt-on-error" journal_paper.tex
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

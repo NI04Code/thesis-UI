@@ -1,0 +1,75 @@
+\documentclass[10pt,journal,compsoc]{IEEEtran}
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+
+% From uithesis.sty
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{multirow}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Implementation and Evaluation of Multi-Dimensional Defragmentation and Network-Aware Filtering Policies for Kubernetes Descheduler}
+
+\author{
+    \IEEEauthorblockN{Naufal Ichsan\IEEEauthorrefmark{1}, Muhammad Raihan Akbar\IEEEauthorrefmark{2}, Matthew Hotmaraja Johan Turnip\IEEEauthorrefmark{3}, and Made Harta Dwijaksara\IEEEauthorrefmark{4}}\\
+    \IEEEauthorblockA{Faculty of Computer Science, Universitas Indonesia, Depok 16424, Indonesia}\\
+    \IEEEauthorblockA{\IEEEauthorrefmark{1}naufal.ichsan@ui.ac.id}
+}
+
+\markboth{Journal Paper Draft}%
+{Ichsan \MakeLowercase{\textit{et al.}}: Implementation and Evaluation of Multi-Dimensional Defragmentation}
+
+\IEEEtitleabstractindextext{%
+\begin{abstract}
+Dynamic Kubernetes clusters accumulate multi-dimensional resource fragmentation that strands capacity, while compute-focused consolidation may disrupt busy workloads or move dependent microservices across degraded network links. This study presents a Kubernetes Descheduler architecture that combines resource defragmentation with actual-usage and network-aware eviction safeguards. The proposed \textit{ResourceDefragmentation} policy evaluates CPU-memory shape using the Resource Imbalance Index (RII), Free-Space Index (FSI), and bin scores, then selects evictions based on feasible predicted scheduler targets. Actual-usage and network-aware filters respectively protect busy Pods and block movements toward latency-degrading destinations. Across five request-based resource scenarios, the policy reclaimed four Nodes in the underutilized scenario and three Nodes in the fragmented scenario. In the heterogeneous-drain scenario, it reduced Mean Absolute RII from the low-20\% range to around 2\% using two evictions. In the controlled single-replica workload, the actual-usage filter protected the busy API Pod by redirecting eviction to an idle candidate, preventing the failures observed when the API Pod was evicted. In the network-aware evaluation, the baseline ResourceDefragmentation behavior balanced compute resources but evicted sensitive workloads, causing latency spikes of up to $\sim$167ms. In contrast, the latency-aware filter intercepted these network-degrading actions, maintained baseline latency at $\sim$8ms, and still reduced Mean Absolute RII from the 50\% range to around 17\% by steering eviction toward non-critical Pods. Overall, the proposed architecture improves resource utilization while protecting active and network-sensitive workloads.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Kubernetes, Descheduler, Resource Defragmentation, Runtime Resource Usage, Network Latency, Microservices
+\end{IEEEkeywords}}
+
+\maketitle
+\IEEEdisplaynontitleabstractindextext
+\IEEEpeerreviewmaketitle
+
+\input{src/paper-body/bab1}
+\input{src/paper-body/bab2}
+\input{src/paper-body/bab3}
+\input{src/paper-body/bab4}
+\input{src/paper-body/bab5}
+
+\appendices
+\section{Resource Defragmentation Balance Filter Algorithm}
+\label{appendix:resource_defrag}
+\lstinputlisting[
+    label={lst:resource_defrag},
+]{assets/codes/pseudos/resource-defrag.psu}
+
+\section{Actual Usage Pre-Eviction Filter Algorithm}
+\label{appendix:actualusage_algorithm}
+\lstinputlisting[
+    label={lst:actualusage_algorithm},
+]{assets/codes/pseudos/actualusage/unifiedalgo.psu}
+
+\section{Network-Aware Pre-Eviction Filter Algorithm}
+\label{appendix:netaware_unified_algorithm}
+\lstinputlisting[
+    label={lst:netaware_unified_algorithm},
+]{assets/codes/pseudos/netaware/unifiedalgo.psu}
+
+
+\bibliographystyle{IEEEtran}
+\bibliography{config/references}
+
+\end{document}
