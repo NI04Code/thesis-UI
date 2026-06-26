@@ -165,12 +165,7 @@ For candidate Pod \(p\), let \(t_p\) be its predicted target and \(B'_{t_p}\) th
 
 This is the only eviction-candidate selection criterion after target feasibility is checked. It directly prefers a movement that produces the best projected CPU-memory shape at the expected destination. Candidates without a feasible target are excluded. After a successful eviction, the local source and predicted-target snapshots are updated before the next decision. Predicted targets are marked as bins so the same pass does not subsequently drain a Node that has just received packed workload.
 
-Listing~\ref{lst:resource_defrag} summarizes the complete execution flow.
-
-\lstinputlisting[
-    caption={ResourceDefragmentation eviction loop with predicted-target bin-score selection.},
-    label={lst:resource_defrag},
-]{assets/codes/pseudos/resource-defrag.psu}
+Appendix~\ref{appendix:resource_defrag} summarizes the complete execution flow.
 
 \subsection{Plugin Configuration}
 \label{sec:resource_defrag_config}
@@ -193,10 +188,12 @@ Listing~\ref{lst:resource_defrag} summarizes the complete execution flow.
     \end{tabular}
 \end{table}
 
+\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Request-based ResourceDefragmentation configuration using the ResourceDefragmentationC2 plugin.},
     label={lst:resource_defrag_config_requests},
 ]{assets/codes/pseudos/resource-defrag-config-requests.psu}
+\end{minipage}
 
 \section{Actual Usage Evictor Policy Design}
 \label{sec:actualusage_policydesign}
@@ -263,12 +260,7 @@ With the default \textit{Allow} policy, a missing dimension is skipped and contr
 \subsection{Eviction Decision Workflow and Algorithm}
 \label{sec:actualusage_algorithm}
 
-Listing~\ref{lst:actualusage_algorithm} summarizes the Actual Usage Evictor decision workflow. The algorithm first checks whether the candidate Pod is inside the configured namespace and label scope. Pods outside the scope are allowed immediately because the plugin is not responsible for protecting them.
-
-\lstinputlisting[
-    caption={Actual Usage Evictor pre-eviction filtering algorithm.},
-    label={lst:actualusage_algorithm},
-]{assets/codes/pseudos/actualusage/unifiedalgo.psu}
+Appendix~\ref{appendix:actualusage_algorithm} summarizes the Actual Usage Evictor decision workflow. The algorithm first checks whether the candidate Pod is inside the configured namespace and label scope. Pods outside the scope are allowed immediately because the plugin is not responsible for protecting them.
 
 For scoped Pods, the plugin retrieves the latest Pod metrics from the metrics client and matches them with every regular container in the Pod specification. Missing or incomplete metrics block the eviction. For each resource, the plugin separately determines whether every container has an effective request. A complete dimension is aggregated and compared with its configured threshold. An incomplete request dimension is not divided by a partial aggregate request and is instead resolved using \textit{missingRequestPolicy}. Eviction is blocked when either the CPU or memory dimension reports \(\mathrm{busy}=\mathrm{true}\). Otherwise, the Pod passes the filter and the Descheduler may continue with the next pre-eviction filter or the final eviction request.
 
@@ -303,10 +295,12 @@ Missing requests follow \textit{missingRequestPolicy} instead of the metrics fai
     \end{tabular}
 \end{table}
 
+\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Actual Usage Evictor configuration as a global pre-eviction filter.},
     label={lst:actualusage_config},
 ]{assets/codes/pseudos/actualusage/config.psu}
+\end{minipage}
 
 \section{Network-Aware Evictor Policy Design}
 \label{sec:netaware_policydesign}
@@ -421,12 +415,7 @@ The network-aware eviction decision workflow is implemented within the chaining 
 
 The first stage is the built-in \textit{DefaultEvictor} plugin provided by the Kubernetes descheduler framework. This component evaluates several default eviction constraints such as pod state validation, scheduling constraints and node fit requirements to ensure that the pod is eligible for eviction \citep{k8s_descheduler_docs}. If any of these constraints is violated the eviction procedure is cancelled and the pod is skipped. Otherwise the eviction candidate continues to the next phase.
 
-After passing the default pre-eviction filtering stage, our proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Listing \ref{lst:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster.
-
-\lstinputlisting[
-    caption={Network-Aware algorithm},
-    label={lst:netaware_unified_algorithm},
-]{assets/codes/pseudos/netaware/unifiedalgo.psu}
+After passing the default pre-eviction filtering stage, our proposed Network-Aware Evictor plugin conducts an additional network-aware evaluation, as seen in Appendix~\ref{appendix:netaware_unified_algorithm}. This stage determines whether the eviction is expected to preserve or improve the efficiency of network connectivity in the cluster.
 
 During the network-aware evaluation phase, the system first initializes the network cost provider used for communication cost computation. If latency metrics are configured, the plugin queries Prometheus to obtain node-to-node latency measurements and constructs a latency-based cost provider. Otherwise, the system falls back to the topology-based cost provider, which estimates communication cost using predefined topology distances such as zone and region locality.
 
@@ -434,23 +423,23 @@ When the strategy-level component is enabled, the system additionally classifies
 
 For each selected eviction candidate pod, the algorithm first checks whether the pod contains the configured dependency label. If no dependency label is present, the eviction is immediately permitted because no communication dependency needs to be preserved. Otherwise, the system identifies all dependent pods belonging to the same communication group using the \textit{FindDependencyPods} function shown in Listing \ref{lst:netaware_finddeppods_algo}.
 
+\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
-    caption={Network-Aware algorithm: \textit{FindDependencyPods} function},
+    caption={Network-Aware algorithm: \textit{FindDependencyPods} and \textit{HasSameOwner} functions},
     label={lst:netaware_finddeppods_algo},
 ]{assets/codes/pseudos/netaware/finddeppods.psu}
-\lstinputlisting[
-    caption={\textit{HasSameOwner} function},
-    label={lst:netaware_hasowner_algo},
-]{assets/codes/pseudos/netaware/hasowner.psu}
+\end{minipage}
 
-The \textit{FindDependencyPods} function discovers communication dependencies by examining all pods across cluster nodes and comparing their configured dependency labels. Pods sharing the same dependency label are considered part of the same communication group. During this process, the algorithm excludes the evaluated pod itself and may optionally exclude pods managed by the same controller, such as replicas belonging to the same Deployment, StatefulSet, or ReplicaSet by evaluating \textit{HasSameOwner} function shown in Listing \ref{lst:netaware_hasowner_algo}. This behavior is controlled through the \textit{excludeSameOwner} configuration parameter. The ownership relationship is determined by comparing Kubernetes owner references between pods.
+The \textit{FindDependencyPods} function discovers communication dependencies by examining all pods across cluster nodes and comparing their configured dependency labels. Pods sharing the same dependency label are considered part of the same communication group. During this process, the algorithm excludes the evaluated pod itself and may optionally exclude pods managed by the same controller, such as replicas belonging to the same Deployment, StatefulSet, or ReplicaSet by evaluating the \textit{HasSameOwner} helper function (also shown in Listing \ref{lst:netaware_finddeppods_algo}). This behavior is controlled through the \textit{excludeSameOwner} configuration parameter. The ownership relationship is determined by comparing Kubernetes owner references between pods.
 
 After dependency discovery, the algorithm computes the communication cost between the evaluated pod and all dependency pods using the \textit{ComputePlacementCost} procedure shown in Listing \ref{lst:netaware_computeplacement_algo}. This procedure evaluates the communication cost for both the current node placement and all candidate destination nodes. The set of evaluated candidate nodes depends on the architectural layer being used. The global filtering layer evaluates all scheduleable nodes in the cluster, whereas the strategy-level layer evaluates only the nodes selected by the balancing strategy.
 
+\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Network-Aware algorithm: \textit{ComputePlacementCost} function},
     label={lst:netaware_computeplacement_algo},
 ]{assets/codes/pseudos/netaware/computecost.psu}
+\end{minipage}
 
 Given a candidate pod $P$ residing on node $n$, the total communication cost is calculated as the summation of network costs between node $n$ and the nodes hosting all dependency pods $d \in D$, formally defined as follows:
 
@@ -480,10 +469,12 @@ This threshold-based mechanism is intended to balance workload redistribution ob
 %----------------------------------------------------------------------------- %%
 The configuration structure of our proposed Network-Aware Descheduler policy consists of two independent configuration corresponding to the two layers architectural components discussed in Section \ref{sec:netaware_sysoverview} and \ref{sec:netaware_arcdesign}. The first layer configures the global \textit{NetworkCostEvictor} plugin operating at the \textit{PreEvictionFilter} phases, while the second layer extends node utilization balancing strategies with network-aware evaluation capabilities.
 
+\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
-    caption={Network-Aware Layer 1: Global preEvictionFilter configuration},
+    caption={Network-Aware Layer 1: Global \textit{PreEvictionFilter} configuration},
     label={lst:netaware_l1config},
 ]{assets/codes/pseudos/netaware/configL1.psu}
+\end{minipage}
 
 Listing \ref{lst:netaware_l1config} show the \textit{NetworkCostEvictor} configuration that defines the behavior of the global network-aware filtering mechanism. This component evaluates candidate pod evictions against all scheduleable nodes in the cluster before the eviction is permitted. The configuration includes parameters for dependency identification, minimum threshold percentage, pods ownership filtering flag, and optional latency-based cost evaluation through Prometheus metrics.
 
@@ -491,10 +482,12 @@ The \textit{networkGroupLabelKey} parameter specifies the label key used to iden
 
 The optional \textit{latencyMetrics} section enables latency-based communication cost evaluation using Prometheus metrics. The configuration defines the PromQL query used to retrieve node-to-node latency measurements together with the source and destination node label mappings required to construct the latency matrix used during cost evaluation.
 
+\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Network-Aware Layer 2: NodeUtilization extended configuration},
     label={lst:netaware_l2config},
 ]{assets/codes/pseudos/netaware/configL2.psu}
+\end{minipage}
 
 The second configuration \ref{lst:netaware_l2config} extends node utilization strategies such as \textit{LowNodeUtilization} and \textit{HighNodeUtilization} with network-aware filtering capabilities. In addition to the standard resource balancing parameters such as \textit{thresholds} and \textit{targetThresholds}, the strategy exposes an optional \textit{networkAware} configuration block. When this block is removed, the strategy behaves identically to the default Kubernetes descheduler implementation without network-aware evaluation.
 

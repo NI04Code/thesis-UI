@@ -882,10 +882,12 @@ To capture and aggregate this data, a minimal installation of Prometheus was dep
 
 The Prometheus server instance was pinned to worker-6 (dedicated Prometheus node) using a targeted \emph{nodeSelector}. Its operational resource limits were tightly bounded to prevent memory leakage from exhausting the node's approximately 800 MiB allocatable ceiling:
 
+\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Prometheus resources config for Latency and Defragmentation Trade-off Test},
     label={lst:prometheus_config},
 ]{assets/codes/pseudos/netaware/prometheusconfig.psu}
+\end{minipage}
 
 By expanding the global scrapeInterval to 45s and restricting data retention to a lean 6h window, the internal time-series indexing map remains small enough to sit safely in 800 MiB usable RAM. Telemetry target discovery is governed by a native PodMonitor custom resource deployed to the \emph{prom} namespace. This monitor hooks directly into the named container exposed in the Goldpinger daemon manifest, automatically mapping the scraping loop to target port 8080.
 
