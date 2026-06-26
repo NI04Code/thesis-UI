@@ -1,12 +1,27 @@
-\documentclass[10pt,journal,compsoc]{IEEEtran}
+\documentclass[12pt,a4paper]{article}
 
-\usepackage{cite}
+\usepackage[
+    a4paper,
+    top=3cm,
+    bottom=3cm,
+    left=2.22cm,
+    right=2.11cm,
+    columnsep=1.27cm
+]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{tgpagella}
+\usepackage{microtype}
+\usepackage[round,authoryear]{natbib}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{algorithmic}
 \usepackage{graphicx}
 \usepackage{textcomp}
+\usepackage{caption}
+\usepackage{titlesec}
+\usepackage{dblfloatfix}
+\usepackage[hidelinks]{hyperref}
 
-% From uithesis.sty
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{float}
@@ -19,37 +34,84 @@
 \usetikzlibrary{positioning}
 \usetikzlibrary{chains}
 \usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\setlength{\parindent}{0.5in}
+\setlength{\parskip}{0pt}
+\linespread{1.0}
+\raggedbottom
+\emergencystretch=2em
+
+\titleformat{\section}
+    {\centering\normalfont\bfseries}
+    {\thesection.}
+    {0.5em}
+    {\MakeUppercase}
+\titleformat{\subsection}
+    {\normalfont\bfseries}
+    {\thesubsection}
+    {0.5em}
+    {}
+\titleformat{\subsubsection}
+    {\normalfont\bfseries}
+    {\thesubsubsection}
+    {0.5em}
+    {}
+\titlespacing*{\section}{0pt}{1.2\baselineskip}{0.6\baselineskip}
+\titlespacing*{\subsection}{0pt}{0.9\baselineskip}{0.35\baselineskip}
+\titlespacing*{\subsubsection}{0pt}{0.7\baselineskip}{0.25\baselineskip}
+
+\captionsetup{
+    font=small,
+    labelfont=bf,
+    labelsep=period,
+    justification=centering
+}
+
+\lstset{
+    basicstyle=\scriptsize\ttfamily,
+    breaklines=true,
+    breakatwhitespace=true,
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false,
+    frame=single,
+    captionpos=b,
+    numbers=left,
+    numberstyle=\tiny,
+    xleftmargin=1.0em,
+    framexleftmargin=0.6em,
+    breakindent=0pt,
+    postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space}
+}
+
+\let\cite\citep
 
 \newcommand{\func}[2]{\text{#1}\left(#2\right)}
 
-\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
-    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
-
 \begin{document}
 
-\title{Implementation and Evaluation of Multi-Dimensional Defragmentation and Network-Aware Filtering Policies for Kubernetes Descheduler}
+\begin{center}
+    {\Large\bfseries Implementation and Evaluation of Multi-Dimensional Defragmentation and Network-Aware Filtering Policies for Kubernetes Descheduler\par}
+    \vspace{0.75\baselineskip}
+    {\normalsize Naufal Ichsan, Muhammad Raihan Akbar, Matthew Hotmaraja Johan Turnip, and Made Harta Dwijaksara\par}
+    \vspace{0.25\baselineskip}
+    {\small Faculty of Computer Science, Universitas Indonesia, Depok 16424, Indonesia\par}
+    {\small naufal.ichsan@ui.ac.id\par}
+\end{center}
 
-\author{
-    \IEEEauthorblockN{Naufal Ichsan\IEEEauthorrefmark{1}, Muhammad Raihan Akbar\IEEEauthorrefmark{2}, Matthew Hotmaraja Johan Turnip\IEEEauthorrefmark{3}, and Made Harta Dwijaksara\IEEEauthorrefmark{4}}\\
-    \IEEEauthorblockA{Faculty of Computer Science, Universitas Indonesia, Depok 16424, Indonesia}\\
-    \IEEEauthorblockA{\IEEEauthorrefmark{1}naufal.ichsan@ui.ac.id}
-}
-
-\markboth{Journal Paper Draft}%
-{Ichsan \MakeLowercase{\textit{et al.}}: Implementation and Evaluation of Multi-Dimensional Defragmentation}
-
-\IEEEtitleabstractindextext{%
-\begin{abstract}
+\vspace{0.75\baselineskip}
+\begin{center}
+    {\bfseries ABSTRACT}
+\end{center}
+\noindent
 Dynamic Kubernetes clusters accumulate multi-dimensional resource fragmentation that strands capacity, while compute-focused consolidation may disrupt busy workloads or move dependent microservices across degraded network links. This study presents a Kubernetes Descheduler architecture that combines resource defragmentation with actual-usage and network-aware eviction safeguards. The proposed \textit{ResourceDefragmentation} policy evaluates CPU-memory shape using the Resource Imbalance Index (RII), Free-Space Index (FSI), and bin scores, then selects evictions based on feasible predicted scheduler targets. Actual-usage and network-aware filters respectively protect busy Pods and block movements toward latency-degrading destinations. Across five request-based resource scenarios, the policy reclaimed four Nodes in the underutilized scenario and three Nodes in the fragmented scenario. In the heterogeneous-drain scenario, it reduced Mean Absolute RII from the low-20\% range to around 2\% using two evictions. In the controlled single-replica workload, the actual-usage filter protected the busy API Pod by redirecting eviction to an idle candidate, preventing the failures observed when the API Pod was evicted. In the network-aware evaluation, the baseline ResourceDefragmentation behavior balanced compute resources but evicted sensitive workloads, causing latency spikes of up to $\sim$167ms. In contrast, the latency-aware filter intercepted these network-degrading actions, maintained baseline latency at $\sim$8ms, and still reduced Mean Absolute RII from the 50\% range to around 17\% by steering eviction toward non-critical Pods. Overall, the proposed architecture improves resource utilization while protecting active and network-sensitive workloads.
-\end{abstract}
 
-\begin{IEEEkeywords}
-Kubernetes, Descheduler, Resource Defragmentation, Runtime Resource Usage, Network Latency, Microservices
-\end{IEEEkeywords}}
+\vspace{0.5\baselineskip}
+\noindent\textit{Keywords: Kubernetes, Descheduler, Resource Defragmentation, Runtime Resource Usage, Network Latency, Microservices}
 
-\maketitle
-\IEEEdisplaynontitleabstractindextext
-\IEEEpeerreviewmaketitle
+\clearpage
+\twocolumn
 
 \input{src/paper-body/bab1}
 \input{src/paper-body/bab2}
@@ -57,7 +119,7 @@ Kubernetes, Descheduler, Resource Defragmentation, Runtime Resource Usage, Netwo
 \input{src/paper-body/bab4}
 \input{src/paper-body/bab5}
 
-\appendices
+\appendix
 \section{Resource Defragmentation Balance Filter Algorithm}
 \label{appendix:resource_defrag}
 \lstinputlisting[
@@ -77,7 +139,7 @@ Kubernetes, Descheduler, Resource Defragmentation, Runtime Resource Usage, Netwo
 ]{assets/codes/pseudos/netaware/unifiedalgo.psu}
 
 
-\bibliographystyle{IEEEtran}
+\bibliographystyle{apalike}
 \bibliography{config/references}
 
 \end{document}

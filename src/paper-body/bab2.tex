@@ -3,7 +3,7 @@
 \label{bab:2}
 %----------------------------------------------------------------------------- %%
 
-This chapter reviews the theoretical concepts and prior work that form the foundation of this study. Section 2.1 outlines the Kubernetes architecture and its resource management principles. Section 2.2 defines the resource fragmentation problem within dynamic clusters. Section 2.3 details resource defragmentation and multi-resource bin packing. Section 2.4 describes the Kubernetes Descheduler and its current limitations. Section 2.5 explains predicted-target eviction-candidate selection. Section 2.6 discusses runtime load-aware eviction guarding. Section 2.7 discusses communication-aware and network-aware scheduling approaches. This chapter concludes with Section 2.8, which identifies the current approaches and the resulting research gap.
+This section reviews the theoretical concepts and prior work that form the foundation of this study, including Kubernetes resource management, resource fragmentation, Descheduler mechanisms, predicted-target eviction selection, runtime load-aware eviction guarding, and communication-aware placement.
 
 \subsection{Kubernetes Architecture and Resource Management}
 \label{sec:kubernetesArchitecture}
@@ -35,7 +35,7 @@ The Kubernetes Descheduler evicts Pods that violate a policy or contribute to an
 
 An eviction policy must nevertheless account for the scheduler boundary. Deleting a Pod does not guarantee that it moves to a useful Node; it may become Pending, return to its origin, or land on a target that worsens fragmentation. A node reclamation-oriented policy therefore benefits from predicting feasible non-origin targets and rejecting movements that exceed a configured ceiling or pack downward.
 
-Upstream utilization policies provide important baselines. \textit{HighNodeUtilization} packs by draining low-utilization Nodes toward more utilized Nodes, but it does not explicitly optimize CPU-memory stranding. This distinction is central to the evaluation in Chapter~\ref{bab:4}.
+Upstream utilization policies provide important baselines. \textit{HighNodeUtilization} packs by draining low-utilization Nodes toward more utilized Nodes, but it does not explicitly optimize CPU-memory stranding. This distinction is central to the evaluation in Section~\ref{bab:4}.
 
 \subsection{Predicted-Target Eviction-Candidate Selection}
 \label{sec:predictedTargetSelection}

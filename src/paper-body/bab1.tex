@@ -2,7 +2,7 @@
 \section{Introduction}
 \label{bab:1}
 %----------------------------------------------------------------------------- %%
-This chapter provides the main background and challenges that drive this thesis. Section 1.1 outlines the research background, highlighting the motivation behind addressing resource fragmentation and network locality in Kubernetes clusters. Section 1.2 defines the problem statement, specifying the main research questions and limitations. Section 1.3 enumerates the objectives of the thesis, while Section 1.4 describes the anticipated research contributions. Section 1.5 positions this work within relevant academic domains. Section 1.6 summarizes the principal steps taken during the research. This chapter concludes with Section 1.7, which presents the thesis outline.
+This section introduces the background, research problems, objectives, contributions, and research position for the proposed Kubernetes Descheduler extensions.
 
 \subsection{Research Background}
 \label{sec:researchBackground}
@@ -102,15 +102,4 @@ The research position can be summarized as follows:
     \item Evaluate the individual safety trade-offs of the Actual-Usage and Network-Aware pre-eviction filters using runtime demand and latency-sensitive workloads.
     \item Conduct a realistic end-to-end scenario to evaluate the combined workflow of all three components operating as a single unified pipeline.
     \item Analyze the overall outcomes, including node reclamation, stranded capacity reduction, service disruption avoidance, and network-latency preservation.
-\end{enumerate}
-
-\subsection{Thesis Outline}
-\label{sec:sistematikaPenulisan}
-
-\begin{enumerate}
-    \item \textbf{Chapter 1} introduces the problem, questions, objectives, and contributions.
-    \item \textbf{Chapter 2} reviews Kubernetes resource management, fragmentation, node reclamation, Descheduler mechanisms, and network-aware placement.
-    \item \textbf{Chapter 3} presents the end-to-end workflow, the \textit{ResourceDefragmentation} pipeline, the Actual Usage filter, and the Network-Aware Evictor design.
-    \item \textbf{Chapter 4} evaluates node reclamation, defragmentation, safety, network-latency trade-offs, and an end-to-end use case.
-    \item \textbf{Chapter 5} summarizes the findings and future work.
 \end{enumerate}

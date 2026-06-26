@@ -3,7 +3,7 @@
 \label{bab:3}
 %----------------------------------------------------------------------------- %%
 
-This chapter presents the design and implementation of the Descheduler components developed in this research. Section 3.1 summarizes the proposed descheduler schemes and their positions within the Kubernetes Descheduler eviction workflow. Section 3.2 describes the defragmentation-focused \textit{ResourceDefragmentation} policy. Section 3.3 describes the Actual Usage Evictor, a runtime-usage-based pre-eviction filter. Section 3.4 describes the Network-Aware Evictor and its topology and latency-based cost models.
+This section presents the design and implementation of the Descheduler components developed in this research: the defragmentation-focused \textit{ResourceDefragmentation} policy, the Actual Usage Evictor runtime pre-eviction filter, and the Network-Aware Evictor with topology-based and latency-based cost models.
 
 Several components are implemented as descheduler \textit{EvictorPlugin} extensions. In this framework, the \textit{Filter} stage performs candidate filtering, while the \textit{PreEvictionFilter} stage is executed immediately before an eviction request is submitted. Pre-eviction filters can be chained, therefore a candidate Pod must pass all enabled filters before the descheduler performs the eviction. This mechanism is used by both the Actual Usage Evictor and the Network-Aware Evictor as safety gates around strategy-driven eviction decisions.
 
@@ -14,9 +14,9 @@ This section summarizes the proposed descheduler schemes and explains how they r
 
 This research proposes three descheduler extensions that operate at different points of the Kubernetes Descheduler eviction decision flow. The extensions are designed as independent components rather than as a tightly coupled pipeline. Each component can be enabled separately according to the cluster operator's objective, and multiple components can be combined within the same descheduler profile when resource defragmentation, runtime-safety protection, and network-locality protection are required together.
 
-\begin{figure}[H]
+\begin{figure}[tbp]
     \centering
-    \includegraphics[width=\textwidth]{assets/pics/kube-descheduler-extension-position.png}
+    \includegraphics[width=\linewidth]{assets/pics/kube-descheduler-extension-position.png}
     \caption{Proposed independent descheduler extensions and their extension points within the Kubernetes Descheduler eviction workflow.}
     \label{fig:e2e_architecture_workflow}
 \end{figure}
@@ -45,9 +45,9 @@ In the first phase, the plugin scans every worker Node. Control-plane Nodes are 
 
 In the second phase, the plugin iterates over the ordered candidates. The loop stops once the per-sweep eviction budget is reached. A Node already marked as a bin, that is, a recent eviction target, is skipped so the same sweep does not drain a Node it has just packed. Otherwise the plugin selects the Pod whose predicted scheduler target has the highest projected bin score; if a feasible target exists the Pod is evicted and the local cache and bin set are updated, and if not the Node is skipped. The remaining subsections formalize each stage: Section~\ref{sec:defrag_node_metrics} defines the Node-state metrics, Section~\ref{sec:defrag_drain_candidates} the drain-candidate detection and ordering, Section~\ref{sec:defrag_target_prediction} the predicted scheduler target, and Section~\ref{sec:defrag_victim_selection} the eviction-candidate selection.
 
-\begin{figure}[H]
+\begin{figure}[tbp]
     \centering
-    \includegraphics[width=\textwidth]{assets/pics/defrag/highlevel_defrag.png}
+    \includegraphics[width=\linewidth]{assets/pics/defrag/highlevel_defrag.png}
     \caption{High-level control flow of the \textit{ResourceDefragmentation} plugin, from Node assessment and drain-candidate ordering to the bounded predicted-target eviction loop.}
     \label{fig:defrag_highlevel}
 \end{figure}
@@ -134,14 +134,17 @@ For every evictable Pod \(p\) on source Node \(s\), the plugin examines each non
     u'_{t,m} = \frac{R_{t,m} + r_{p,m}}{C_{t,m}}.
 \]
 
-A non-origin Node \(t\) is admissible only if it is schedulable and \(p\) tolerates its taints. An admissible Node is a feasible target when it additionally satisfies the request-fit, utilization-ceiling, and pack-upward conditions:
+A non-origin Node \(t\) is admissible only if it is schedulable and \(p\) tolerates its taints. An admissible Node is a feasible target when it additionally satisfies the request-fit, utilization-ceiling, and pack-upward conditions, respectively:
 
 \[
-\begin{aligned}
-    R_{t,c} + r_{p,c} \leq C_{t,c} \;\;\text{and}\;\; R_{t,m} + r_{p,m} &\leq C_{t,m} && \text{(request fit)}, \\
-    u'_{t,c} \leq \theta \;\;\text{and}\;\; u'_{t,m} &\leq \theta && \text{(utilization ceiling)}, \\
-    \min\!\left(u'_{t,c}, u'_{t,m}\right) &\geq \min\!\left(u_{s,c}, u_{s,m}\right) && \text{(pack-upward guard)},
-\end{aligned}
+\begin{array}{@{}l@{}}
+    R_{t,c} + r_{p,c} \leq C_{t,c},\quad
+    R_{t,m} + r_{p,m} \leq C_{t,m},\\
+    u'_{t,c} \leq \theta,\quad
+    u'_{t,m} \leq \theta,\\
+    \min\!\left(u'_{t,c}, u'_{t,m}\right)
+    \geq \min\!\left(u_{s,c}, u_{s,m}\right).
+\end{array}
 \]
 
 where \(\theta\) is the configured target-utilization ceiling, and \(u_{s,c}\) and \(u_{s,m}\) are the current CPU and memory utilization of source Node \(s\). The request-fit condition ensures that the projected requests do not exceed allocatable capacity in either dimension. The utilization-ceiling condition caps the projected utilization so that consolidation does not overload a target. The pack-upward guard requires the least-utilized dimension of the target to be at least as loaded as the least-utilized dimension of the source, which prevents an eviction from merely relocating a Pod to an emptier Node.
@@ -170,11 +173,12 @@ Appendix~\ref{appendix:resource_defrag} summarizes the complete execution flow.
 \subsubsection{Plugin Configuration}
 \label{sec:resource_defrag_config}
 
-\begin{table}[H]
+\begin{table}[tbp]
     \centering
     \caption{ResourceDefragmentation Plugin Arguments}
     \label{tab:resource_defrag_args}
     \renewcommand{\arraystretch}{1.25}
+    \resizebox{\linewidth}{!}{%
     \begin{tabular}{l l l p{7.0cm}}
         \hline
         \textbf{Parameter} & \textbf{Type} & \textbf{Experiment} & \textbf{Purpose} \\
@@ -185,15 +189,14 @@ Appendix~\ref{appendix:resource_defrag} summarizes the complete execution flow.
         \textit{usageMode} & string & \textit{requests} & Pins the experiment to declared requests so all compared policies use the same signal. \\
         \textit{namespaces} & object & exclude system & Restricts candidate Pods and excludes infrastructure namespaces. \\
         \hline
-    \end{tabular}
+    \end{tabular}%
+    }
 \end{table}
 
-\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Request-based ResourceDefragmentation configuration using the ResourceDefragmentationC2 plugin.},
     label={lst:resource_defrag_config_requests},
 ]{assets/codes/pseudos/resource-defrag-config-requests.psu}
-\end{minipage}
 
 \subsection{Actual Usage Evictor Policy Design}
 \label{sec:actualusage_policydesign}
@@ -211,9 +214,9 @@ The plugin can be scoped using namespace rules and a Kubernetes label selector. 
 
 For Pods inside the configured scope, the plugin reads Pod metrics through the descheduler metrics collector and the Kubernetes Metrics API. The metrics of all containers in the Pod are matched against the Pod specification and aggregated before the usage ratios are calculated.
 
-\begin{figure}[H]
+\begin{figure}[tbp]
     \centering
-    \includegraphics[width=\textwidth]{assets/pics/actual-usage/sysoverview-diagram.png}
+    \includegraphics[width=\linewidth]{assets/pics/actual-usage/sysoverview-diagram.png}
     \caption{Actual Usage Evictor pre-eviction filtering flow.}
     \label{fig:actualusage_sysoverview}
 \end{figure}
@@ -276,12 +279,13 @@ Missing requests follow \textit{missingRequestPolicy} instead of the metrics fai
 \subsubsection{Plugin Configuration}
 \label{sec:actualusage_config}
 
-\begin{table}[H]
+\begin{table}[tbp]
     \centering
     \caption{Actual Usage Evictor Plugin Arguments}
     \label{tab:actualusage_args}
     \renewcommand{\arraystretch}{1.25}
     \small
+    \resizebox{\linewidth}{!}{%
     \begin{tabular}{l l l p{7.0cm}}
         \hline
         \textbf{Parameter} & \textbf{Type} & \textbf{Default} & \textbf{Purpose} \\
@@ -292,15 +296,14 @@ Missing requests follow \textit{missingRequestPolicy} instead of the metrics fai
         \textit{namespaces} & object & optional & Restricts the Pods evaluated by this plugin using namespace include or exclude rules. \\
         \textit{labelSelector} & object & optional & Restricts the Pods evaluated by this plugin using Kubernetes label matching. \\
         \hline
-    \end{tabular}
+    \end{tabular}%
+    }
 \end{table}
 
-\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Actual Usage Evictor configuration as a global pre-eviction filter.},
     label={lst:actualusage_config},
 ]{assets/codes/pseudos/actualusage/config.psu}
-\end{minipage}
 
 \subsection{Network-Aware Evictor Policy Design}
 \label{sec:netaware_policydesign}
@@ -313,9 +316,9 @@ The system has a two-layers plugin architecture. The first layer is a global Pre
 \subsubsection{System Overview}
 \label{sec:netaware_sysoverview}
 %----------------------------------------------------------------------------- %%
-\begin{figure}
+\begin{figure}[tbp]
 	\centering
-	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/sysoverview-diagram.png}
+	\includegraphics[width=1.0\linewidth]{assets/pics/network-aware/sysoverview-diagram.png}
 	\caption{Network-Aware plugin high-level design.}
 	\label{fig:netaware_sysoverview}
 \end{figure}
@@ -334,9 +337,9 @@ Finally, the eviction decision is made by comparing this count against a thresho
 \subsubsection{Architecture Design}
 \label{sec:netaware_arcdesign}
 %----------------------------------------------------------------------------- %%
-\begin{figure}
+\begin{figure}[tbp]
 	\centering
-	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/sysarc-diagram.png}
+	\includegraphics[width=1.0\linewidth]{assets/pics/network-aware/sysarc-diagram.png}
 	\caption{Network-Aware plugin architecture design.}
 	\label{fig:netaware_arcdesign}
 \end{figure}
@@ -356,7 +359,7 @@ To balance between network latency and resource defragmentation goals, an evicti
 \subsubsection{Network Cost Model}
 \label{sec:netaware_costmodel}
 %----------------------------------------------------------------------------- %%
-To accommodate various deployment situations and accuracy levels, we design our Network Cost Model to have two distinct methodologies for cost computation: a topology-based cost model and a latency-based cost model. Both methodologies are encompassed inside the Cost Provider abstraction and can be chosen via configuration, as detailed in Chapter \ref{sec:netaware_arcdesign}. The topology-based model offers a lightweight and static assessment, whereas the latency-based model facilitates a dynamic and measurement-driven evaluation grounded in real-time network conditions.
+To accommodate various deployment situations and accuracy levels, we design our Network Cost Model to have two distinct methodologies for cost computation: a topology-based cost model and a latency-based cost model. Both methodologies are encompassed inside the Cost Provider abstraction and can be chosen via configuration, as detailed in Section~\ref{sec:netaware_arcdesign}. The topology-based model offers a lightweight and static assessment, whereas the latency-based model facilitates a dynamic and measurement-driven evaluation grounded in real-time network conditions.
 \paragraph{Topology Base Cost Model}
 \label{sec:netaware_topologycostmodel}
 %----------------------------------------------------------------------------- %%
@@ -375,9 +378,9 @@ The latency-based cost model computes the network cost according to the observed
 
 To support this capability the system is integrated with a Prometheus based monitoring infrastructure that provides the latency metrics. The user must provide a Prometheus endpoint and a query for fetching node-to-node latency details. Latency numbers are usually derived from aggregated data across a certain time window (e.g. the average response time between nodes).
 
-\begin{figure}
+\begin{figure}[tbp]
 	\centering
-	\includegraphics[width=1.0\textwidth]{assets/pics/network-aware/prometheus-scrape.png}
+	\includegraphics[width=1.0\linewidth]{assets/pics/network-aware/prometheus-scrape.png}
 	\caption{Prometheus scraping architecture for inter-node latency metrics via GoldenPinger DaemonSets.}
 	\label{fig:netaware_prometheusscrape}
 \end{figure}
@@ -404,9 +407,9 @@ If any inconsistency is detected in the cost model configuration, the system per
 \subsubsection{Eviction Decision Workflow and Algorithm}
 \label{sec:netaware_algorithm}
 %----------------------------------------------------------------------------- %%
-\begin{figure}
+\begin{figure}[tbp]
 	\centering
-	\includegraphics[width=0.3\textwidth]{assets/pics/network-aware/preevict-chaining.png}
+	\includegraphics[width=0.3\linewidth]{assets/pics/network-aware/preevict-chaining.png}
 	\caption{PreEviction filter chaining.}
 	\label{fig:netaware_preevictchaining}
 \end{figure}
@@ -423,23 +426,19 @@ When the strategy-level component is enabled, the system additionally classifies
 
 For each selected eviction candidate pod, the algorithm first checks whether the pod contains the configured dependency label. If no dependency label is present, the eviction is immediately permitted because no communication dependency needs to be preserved. Otherwise, the system identifies all dependent pods belonging to the same communication group using the \textit{FindDependencyPods} function shown in Listing \ref{lst:netaware_finddeppods_algo}.
 
-\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Network-Aware algorithm: \textit{FindDependencyPods} and \textit{HasSameOwner} functions},
     label={lst:netaware_finddeppods_algo},
 ]{assets/codes/pseudos/netaware/finddeppods.psu}
-\end{minipage}
 
 The \textit{FindDependencyPods} function discovers communication dependencies by examining all pods across cluster nodes and comparing their configured dependency labels. Pods sharing the same dependency label are considered part of the same communication group. During this process, the algorithm excludes the evaluated pod itself and may optionally exclude pods managed by the same controller, such as replicas belonging to the same Deployment, StatefulSet, or ReplicaSet by evaluating the \textit{HasSameOwner} helper function (also shown in Listing \ref{lst:netaware_finddeppods_algo}). This behavior is controlled through the \textit{excludeSameOwner} configuration parameter. The ownership relationship is determined by comparing Kubernetes owner references between pods.
 
 After dependency discovery, the algorithm computes the communication cost between the evaluated pod and all dependency pods using the \textit{ComputePlacementCost} procedure shown in Listing \ref{lst:netaware_computeplacement_algo}. This procedure evaluates the communication cost for both the current node placement and all candidate destination nodes. The set of evaluated candidate nodes depends on the architectural layer being used. The global filtering layer evaluates all scheduleable nodes in the cluster, whereas the strategy-level layer evaluates only the nodes selected by the balancing strategy.
 
-\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Network-Aware algorithm: \textit{ComputePlacementCost} function},
     label={lst:netaware_computeplacement_algo},
 ]{assets/codes/pseudos/netaware/computecost.psu}
-\end{minipage}
 
 Given a candidate pod $P$ residing on node $n$, the total communication cost is calculated as the summation of network costs between node $n$ and the nodes hosting all dependency pods $d \in D$, formally defined as follows:
 
@@ -451,12 +450,10 @@ The \textit{ComputePlacementCost} procedure iterates through all dependency pods
 
 After computing the communication cost for the current placement and all candidate nodes, the algorithm evaluates whether the eviction satisfies the configured threshold condition. For each candidate node, the computed candidate cost is compared against the current placement cost. The system then counts the number of candidate nodes whose communication cost is lower than or equal to the current placement cost.
 
-The eviction decision is determined using the threshold condition defined in below equation:
+Let \(K\) denote the number of candidate Nodes whose communication cost is no worse than the current placement, \(M\) the number of total candidates, and \(\rho_{\min}\) the configured \textit{MinBetterCandidatesPercent}. The eviction decision is determined using the threshold condition defined in the equation below:
 
 \[
-{\text{Count}(\text{Cost}(C, P) \leq \text{Cost}(a, P))}
-\geq
-{\text{TotalCandidates}} \cdot \text{MinBetterCandidatesPercent}
+K \geq M \rho_{\min}.
 \]
 
 An eviction is permitted only if the number of candidate nodes satisfying the condition exceeds the minimum threshold defined by \textit{MinBetterCandidatesPercent}, which defaults to 50\%. Otherwise, the eviction is rejected.
@@ -469,12 +466,10 @@ This threshold-based mechanism is intended to balance workload redistribution ob
 %----------------------------------------------------------------------------- %%
 The configuration structure of our proposed Network-Aware Descheduler policy consists of two independent configuration corresponding to the two layers architectural components discussed in Section \ref{sec:netaware_sysoverview} and \ref{sec:netaware_arcdesign}. The first layer configures the global \textit{NetworkCostEvictor} plugin operating at the \textit{PreEvictionFilter} phases, while the second layer extends node utilization balancing strategies with network-aware evaluation capabilities.
 
-\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Network-Aware Layer 1: Global \textit{PreEvictionFilter} configuration},
     label={lst:netaware_l1config},
 ]{assets/codes/pseudos/netaware/configL1.psu}
-\end{minipage}
 
 Listing \ref{lst:netaware_l1config} show the \textit{NetworkCostEvictor} configuration that defines the behavior of the global network-aware filtering mechanism. This component evaluates candidate pod evictions against all scheduleable nodes in the cluster before the eviction is permitted. The configuration includes parameters for dependency identification, minimum threshold percentage, pods ownership filtering flag, and optional latency-based cost evaluation through Prometheus metrics.
 
@@ -482,12 +477,10 @@ The \textit{networkGroupLabelKey} parameter specifies the label key used to iden
 
 The optional \textit{latencyMetrics} section enables latency-based communication cost evaluation using Prometheus metrics. The configuration defines the PromQL query used to retrieve node-to-node latency measurements together with the source and destination node label mappings required to construct the latency matrix used during cost evaluation.
 
-\noindent\begin{minipage}{\linewidth}
 \lstinputlisting[
     caption={Network-Aware Layer 2: NodeUtilization extended configuration},
     label={lst:netaware_l2config},
 ]{assets/codes/pseudos/netaware/configL2.psu}
-\end{minipage}
 
 The second configuration \ref{lst:netaware_l2config} extends node utilization strategies such as \textit{LowNodeUtilization} and \textit{HighNodeUtilization} with network-aware filtering capabilities. In addition to the standard resource balancing parameters such as \textit{thresholds} and \textit{targetThresholds}, the strategy exposes an optional \textit{networkAware} configuration block. When this block is removed, the strategy behaves identically to the default Kubernetes descheduler implementation without network-aware evaluation.
 
