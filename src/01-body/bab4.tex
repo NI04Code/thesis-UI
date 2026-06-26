@@ -656,8 +656,8 @@ Table~\ref{tab:actualusage4_loaded} reports the ResourceDefragmentation pair. R0
     \caption{Descheduler Behavior Under Sustained API Load}
     \label{tab:actualusage4_loaded}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l c c}
+    \small
+    \begin{tabular}{@{}l c c@{}}
         \toprule
         \textbf{Metric} & \textbf{R0 (no plugin)} & \textbf{R1 (with plugin)} \\
         \midrule
@@ -671,8 +671,7 @@ Table~\ref{tab:actualusage4_loaded} reports the ResourceDefragmentation pair. R0
         Stranding reduction                    & \(\mathbf{0.816}\)            & \(0.000\) \\
         Headroom change \(\Delta H_{\text{balanced}}\) & \(\mathbf{+4}\)       & \(+1\) \\
         \bottomrule
-    \end{tabular}%
-    }
+    \end{tabular}
 \end{table}
 
 \subsubsection{Eviction Substitution and Application Protection}
@@ -696,8 +695,8 @@ The protection benefit reduces the ResourceDefragmentation objective. R0 moves t
     \caption{HighNodeUtilization Results}
     \label{tab:actualusage4_hnu}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l c c}
+    \small
+    \begin{tabular}{@{}l c c@{}}
         \toprule
         \textbf{Metric} & \textbf{H0 (no plugin)} & \textbf{H1 (with plugin)} \\
         \midrule
@@ -711,8 +710,7 @@ The protection benefit reduces the ResourceDefragmentation objective. R0 moves t
         Disruption duration \(D\)         & \(4.836\,s\)& \(\mathbf{0\,s}\) \\
         Original API Pod remained         & no          & yes \\
         \bottomrule
-    \end{tabular}%
-    }
+    \end{tabular}
 \end{table}
 
 HNU classifies workers 4--6 as underutilized sources in both runs. H0 evicts all three source Pods, including the busy API on worker-6. H1 allows the two idle source Pods but blocks the API at a CPU ratio of approximately \(10.02\). The filter therefore does not disable consolidation. It reduces the active-Node count from six to four instead of six to three.
@@ -728,8 +726,8 @@ H0 records \(40\) HTTP \(503\) responses and \(4.836\,s\) of disruption. H1 reco
     \caption{LowNodeUtilization Results}
     \label{tab:actualusage4_lnu}
     \renewcommand{\arraystretch}{1.2}
-    \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l c c}
+    \small
+    \begin{tabular}{@{}l c c@{}}
         \toprule
         \textbf{Metric} & \textbf{L0 (no plugin)} & \textbf{L1 (with plugin)} \\
         \midrule
@@ -744,8 +742,7 @@ H0 records \(40\) HTTP \(503\) responses and \(4.836\,s\) of disruption. H1 reco
         Disruption duration \(D\)         & \(4.873\,s\)          & \(\mathbf{0\,s}\) \\
         Original API Pod remained         & no                    & yes \\
         \bottomrule
-    \end{tabular}%
-    }
+    \end{tabular}
 \end{table}
 
 L0 evicts the busy API and one idle Pod from each of the other two sources. L1 blocks the API at a CPU ratio of approximately \(10.10\), then permits the idle fallback on worker-6. Both systems complete three successful evictions and produce the same final request distribution.
@@ -769,7 +766,7 @@ The three control runs exhibit compact failure intervals after the Descheduler e
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{assets/pics/actual-usage/failure_rate_bar.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/actual-usage/failure_rate_bar.png}
     \caption{HTTP Failure Rate Comparison Across All Strategy Pairs}
     \label{fig:actualusage4_failure_bar}
 \end{figure}
@@ -778,7 +775,7 @@ Figure~\ref{fig:actualusage4_disruption_bar} shows the corresponding service dis
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{assets/pics/actual-usage/disruption_duration_bar.png}
+    \includegraphics[width=0.95\textwidth]{assets/pics/actual-usage/disruption_duration_bar.png}
     \caption{Service Disruption Duration Comparison Across All Strategy Pairs}
     \label{fig:actualusage4_disruption_bar}
 \end{figure}
@@ -790,8 +787,8 @@ Table~\ref{tab:actualusage4_cross_strategy} separates this common application ef
     \caption{Cross-Strategy Actual Usage Evictor Results}
     \label{tab:actualusage4_cross_strategy}
     \renewcommand{\arraystretch}{1.25}
-    \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l p{5.2cm} p{6.8cm}}
+    \small
+    \begin{tabular}{@{}l p{5.2cm} p{6.8cm}@{}}
         \toprule
         \textbf{Pair} & \textbf{Availability result} & \textbf{Strategy-specific effect} \\
         \midrule
@@ -799,8 +796,7 @@ Table~\ref{tab:actualusage4_cross_strategy} separates this common application ef
         H0/H1 & Failure rate falls from \(16.67\%\) to \(0\%\). Disruption falls from \(4.836\,s\) to \(0\,s\). & H1 still reclaims two source Nodes, but active-Node reduction falls from three to two. \\
         L0/L1 & Failure rate falls from \(17.24\%\) to \(0\%\). Disruption falls from \(4.873\,s\) to \(0\,s\). & L1 completes the same three evictions and retains the \(85.7\%\) memory-deviation reduction. \\
         \bottomrule
-    \end{tabular}%
-    }
+    \end{tabular}
 \end{table}
 
 The Actual Usage Evictor consistently changes the decision for the busy API candidate while allowing idle candidates to pass. The placement cost depends on whether the remaining candidate can satisfy the active strategy. R1 retains movement but loses the strongest stranding improvement. H1 retains partial consolidation but cannot empty the protected source. L1 substitutes an idle Pod and retains the complete measured balancing result.
@@ -907,8 +903,8 @@ The evaluation is split into three experimental testing scenario: LowNodeUtiliza
 
 \begin{table}[H]
     \centering
-    \resizebox{\textwidth}{!}{%
-       \begin{tabular}{lccc}
+    \small
+    \begin{tabular}{@{}lccc@{}}
             \toprule
             \textbf{Strategy / Scenario} & \textbf{Low Node Util.} & \textbf{High Node Util.} & \textbf{Imbalance Index Util.} \\
             \midrule
@@ -921,7 +917,6 @@ The evaluation is split into three experimental testing scenario: LowNodeUtiliza
             Latency L1 \& L2             & \checkmark              & \checkmark               & ---                            \\
             \midrule
         \end{tabular}
-    }
     \caption{Experimental Matrix Mapping for Latency and Defragmentation Trade-off Test}
     \label{tab:netaware4_experimentalmatrix}
 \end{table}
@@ -1394,8 +1389,7 @@ During testing, we also discovered that the global Pre-Eviction filter (L1) is h
 
 \begin{table}[H]
     \centering
-    \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l c c}
+    \begin{tabular}{@{}l c c@{}}
         \toprule
         \textbf{Configuration} & \textbf{Degraded Pods} & \textbf{Avg Latency (ms)} \\
         \midrule
@@ -1404,8 +1398,7 @@ During testing, we also discovered that the global Pre-Eviction filter (L1) is h
         \midrule
         L2 Strategy Filter (No Tuning Req.) & 0 & 3.017 ms\\
         \bottomrule
-    \end{tabular}%
-    }
+    \end{tabular}
     \caption{Impact of MinBetterPercentage on L1 Pre-Eviction Filters}
     \label{tab:minbetter_impact}
 \end{table}
@@ -1647,8 +1640,7 @@ Prior to the descheduler execution, the cluster was forced into a highly fragmen
 Table \ref{tab:resourcedefrag_results} presents the raw performance of the descheduler across the three filtering strategies.
 \begin{table}[H]
     \centering
-    \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l c c r c}
+    \begin{tabular}{@{}l c c r c@{}}
         \toprule
         \textbf{Scenario} & \textbf{Evictions} & \textbf{Stranding Score} & \textbf{Avg Latency} & \textbf{Degraded Pods} \\
         \midrule
@@ -1658,8 +1650,7 @@ Table \ref{tab:resourcedefrag_results} presents the raw performance of the desch
         r2: Topology L1 & 2 & 0.995 & 165.783 ms & 2 \\
         r3: Latency L1 & 2 & 0.895 & 8.762 ms & 0 \\
         \bottomrule
-    \end{tabular}%
-    }
+    \end{tabular}
     \caption{Descheduler Performance: ResourceDefragmentation Scenario}
     \label{tab:resourcedefrag_results}
 \end{table}
