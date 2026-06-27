@@ -96,8 +96,7 @@
 }
 
 \let\cite\citep
-
-\renewcommand{\refname}{DAFTAR PUSTAKA}
+\renewcommand{\refname}{References}
 
 \fancypagestyle{uiarticle}{
     \fancyhf{}
@@ -433,6 +432,9 @@ network-sensitive workloads.%
 \input{src/paper-body/bab4}
 \input{src/paper-body/bab5}
 
+\bibliographystyle{apalike}
+\bibliography{config/references}
+
 \clearpage
 \onecolumn
 \appendix
@@ -453,8 +455,5 @@ network-sensitive workloads.%
 \lstinputlisting[
     label={lst:netaware_unified_algorithm},
 ]{assets/codes/pseudos/netaware/unifiedalgo.psu}
-
-\bibliographystyle{apalike}
-\bibliography{config/references}
 
 \end{document}
