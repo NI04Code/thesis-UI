@@ -1,0 +1,398 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[
+    a4paper,
+    top=3cm,
+    bottom=3cm,
+    left=4cm,
+    right=3cm,
+    columnsep=1.27cm,
+    footskip=0.5cm
+]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{newtxtext,newtxmath}
+\usepackage{helvet}
+\usepackage{setspace}
+\usepackage{microtype}
+\usepackage[round,authoryear]{natbib}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{caption}
+\usepackage{titlesec}
+\usepackage{dblfloatfix}
+\usepackage[hidelinks,hypertexnames=false]{hyperref}
+\usepackage{fancyhdr}
+
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usetikzlibrary{chains}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\newcommand{\Var}[2]{\gdef#1{#2}}
+\input{config/settings}
+\renewcommand{\judul}{Implementation and Evaluation of a Network-Aware Filtering Policy for Kubernetes Descheduler}
+\setlength{\parindent}{0.5in}
+\setlength{\parskip}{0pt}
+\setlength{\columnsep}{1.27cm}
+\setlength{\headheight}{15pt}
+\raggedbottom
+\emergencystretch=2em
+
+\titleformat{\section}
+    {\normalfont\bfseries}
+    {\thesection}
+    {1em}
+    {\MakeUppercase}
+\titleformat{\subsection}
+    {\normalfont\bfseries}
+    {\thesubsection}
+    {1em}
+    {}
+\titleformat{\subsubsection}
+    {\normalfont\bfseries}
+    {\thesubsubsection}
+    {1em}
+    {}
+\titlespacing*{\section}{0pt}{1.2\baselineskip}{0.4\baselineskip}
+\titlespacing*{\subsection}{0pt}{0.9\baselineskip}{0.25\baselineskip}
+\titlespacing*{\subsubsection}{0pt}{0.7\baselineskip}{0.2\baselineskip}
+
+\captionsetup{
+    font=small,
+    labelfont=bf,
+    labelsep=period,
+    justification=centering
+}
+
+\lstset{
+    basicstyle=\scriptsize\ttfamily,
+    breaklines=true,
+    breakatwhitespace=true,
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false,
+    frame=single,
+    captionpos=b,
+    numbers=left,
+    numberstyle=\tiny,
+    xleftmargin=1.0em,
+    framexleftmargin=0.6em,
+    breakindent=0pt,
+    postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space}
+}
+
+\let\cite\citep
+\renewcommand{\refname}{References}
+
+\fancypagestyle{uiarticle}{
+    \fancyhf{}
+    \fancyhead[R]{\thepage}
+    \fancyfoot[R]{\fontsize{10}{12}\selectfont\sffamily\bfseries Universitas Indonesia}
+    \renewcommand{\headrulewidth}{0pt}
+    \renewcommand{\footrulewidth}{0pt}
+}
+
+\newcommand{\journalAuthors}{%
+    \penulisSatu, \penulisDua, \penulisTiga, and Made Harta Dwijaksara%
+}
+
+\newcommand{\studentIdentityLines}{%
+    \textbf{\penulisSatu~/ \npmSatu~/ \programSatu}\\
+    \textbf{\penulisDua~/ \npmDua~/ \programDua}\\
+    \textbf{\penulisTiga~/ \npmTiga~/ \programTiga}%
+}
+
+\newcommand{\frontHeading}[1]{%
+    \begin{center}
+        \bfseries\MakeUppercase{#1}
+    \end{center}
+}
+
+\newcommand{\makeOuterCover}{%
+    \begin{titlepage}
+        \thispagestyle{empty}
+        \begin{singlespace}
+        \begin{center}
+            \includegraphics[width=2.5cm]{assets/pics/makara_kuning.png}\par
+            \vspace{0.25cm}
+            {\large\bfseries UNIVERSITAS INDONESIA\par}
+            \vspace{1.0cm}
+            {\large\bfseries\MakeUppercase{\judul}\par}
+            \vspace{2.5cm}
+            {\large\bfseries\MakeUppercase{\type}\par}
+            \vspace{2.5cm}
+            \studentIdentityLines\par
+            \vfill
+            {\large\bfseries
+                FAKULTAS \MakeUppercase{\fakultas}\\
+                PROGRAM STUDI \MakeUppercase{\programSatu}\\
+                DEPOK\\
+                \MakeUppercase{\bulanTahun}
+            \par}
+        \end{center}
+        \end{singlespace}
+    \end{titlepage}
+}
+
+\newcommand{\makeInnerTitlePage}{%
+    \begin{titlepage}
+        \thispagestyle{empty}
+        \begin{singlespace}
+        \begin{center}
+            \includegraphics[width=2.5cm]{assets/pics/makara_kuning.png}\par
+            \vspace{0.25cm}
+            {\large\bfseries UNIVERSITAS INDONESIA\par}
+            \vspace{1.0cm}
+            {\large\bfseries\MakeUppercase{\judul}\par}
+            \vspace{2.2cm}
+            {\large\bfseries\MakeUppercase{\type}\par}
+            \vspace{0.5cm}
+            Diajukan sebagai salah satu syarat untuk memperoleh gelar\\
+            \gelar\par
+            \vspace{2.0cm}
+            \studentIdentityLines\par
+            \vfill
+            {\large\bfseries
+                FAKULTAS \MakeUppercase{\fakultas}\\
+                PROGRAM STUDI \MakeUppercase{\programSatu}\\
+                DEPOK\\
+                \MakeUppercase{\bulanTahun}
+            \par}
+        \end{center}
+        \end{singlespace}
+    \end{titlepage}
+}
+
+\newcommand{\makeOriginalityPage}{%
+    \clearpage
+    \thispagestyle{plain}
+    \frontHeading{Halaman Pernyataan Orisinalitas}
+    \vspace{1.8cm}
+    \begin{center}
+        \onehalfspacing
+        \textbf{\type~ini adalah hasil karya kami sendiri,}\\
+        \textbf{dan semua sumber baik yang dikutip maupun dirujuk}\\
+        \textbf{telah kami nyatakan dengan benar.}
+
+        \vspace{2.4cm}
+        \begin{tabular}{l c l}
+            \textbf{Nama Penulis 1} & : & \textbf{\penulisSatu}\\
+            \textbf{NPM Penulis 1} & : & \textbf{\npmSatu}\\
+            \textbf{Tanda Tangan Penulis 1} & : & \\
+            &&\\[0.6cm]
+            \textbf{Nama Penulis 2} & : & \textbf{\penulisDua}\\
+            \textbf{NPM Penulis 2} & : & \textbf{\npmDua}\\
+            \textbf{Tanda Tangan Penulis 2} & : & \\
+            &&\\[0.6cm]
+            \textbf{Nama Penulis 3} & : & \textbf{\penulisTiga}\\
+            \textbf{NPM Penulis 3} & : & \textbf{\npmTiga}\\
+            \textbf{Tanda Tangan Penulis 3} & : & \\
+            &&\\[0.6cm]
+            \textbf{Tanggal} & : & \textbf{\tanggalSiapSidang}\\
+        \end{tabular}
+    \end{center}
+}
+
+\newcommand{\makeApprovalPage}{%
+    \clearpage
+    \thispagestyle{plain}
+    \frontHeading{Halaman Pengesahan}
+    \vspace{0.4cm}
+    \noindent\begin{tabular}{ll p{8.0cm}}
+        \type~ini diajukan oleh & : & \\
+        \textbf{Penulis 1} & & \\
+        Nama & : & \penulisSatu\\
+        NPM & : & \npmSatu\\
+        Program Studi & : & \programSatu\\[0.15cm]
+        \textbf{Penulis 2} & & \\
+        Nama & : & \penulisDua\\
+        NPM & : & \npmDua\\
+        Program Studi & : & \programDua\\[0.15cm]
+        \textbf{Penulis 3} & & \\
+        Nama & : & \penulisTiga\\
+        NPM & : & \npmTiga\\
+        Program Studi & : & \programTiga\\[0.15cm]
+        Judul \type & : & \judul\\
+    \end{tabular}
+
+    \vspace{0.7cm}
+    \noindent\textbf{Telah berhasil dipertahankan di hadapan Dewan Penguji
+    dan diterima sebagai bagian persyaratan yang diperlukan untuk memperoleh
+    gelar \jenjang~pada Program Studi \programSatu, Fakultas \fakultas,
+    Universitas Indonesia.}
+
+    \vspace{0.7cm}
+    \begin{center}
+        \textbf{DEWAN PENGUJI}
+    \end{center}
+
+    \vspace{0.2cm}
+    \begin{tabular}{l l p{6.6cm} l}
+        Pembimbing & : & \pembimbingSatu & (\hspace{2.6cm})\\[0.35cm]
+        Penguji & : & \pengujiSatu & (\hspace{2.6cm})\\[0.35cm]
+        Penguji & : & \pengujiDua & (\hspace{2.6cm})\\
+    \end{tabular}
+
+    \vfill
+    \begin{tabular}{ll l}
+        Ditetapkan di & : & Depok\\
+        Tanggal & : & \tanggalLulus\\
+    \end{tabular}
+}
+
+\newcommand{\makePublicationApprovalPage}{%
+    \clearpage
+    \thispagestyle{plain}
+    \frontHeading{Halaman Pernyataan Persetujuan Publikasi\\Tugas Akhir untuk Kepentingan Akademis}
+    \vspace{0.4cm}
+    \onehalfspacing
+    \noindent Sebagai sivitas akademik Universitas Indonesia, kami yang bertanda
+    tangan di bawah ini:
+
+    \vspace{0.2cm}
+    \noindent\begin{tabular}{p{3.4cm} l p{8.6cm}}
+        \textbf{Penulis 1} & & \\
+        Nama & : & \penulisSatu\\
+        NPM & : & \npmSatu\\
+        Program Studi & : & \programSatu\\[0.1cm]
+        \textbf{Penulis 2} & & \\
+        Nama & : & \penulisDua\\
+        NPM & : & \npmDua\\
+        Program Studi & : & \programDua\\[0.1cm]
+        \textbf{Penulis 3} & & \\
+        Nama & : & \penulisTiga\\
+        NPM & : & \npmTiga\\
+        Program Studi & : & \programTiga\\
+        Fakultas & : & \fakultas\\
+        Jenis karya & : & \type\\
+    \end{tabular}
+
+    \vspace{0.2cm}
+    \noindent demi pengembangan ilmu pengetahuan, menyetujui untuk memberikan
+    kepada Universitas Indonesia \textbf{Hak Bebas Royalti Noneksklusif
+    (\textit{Non-exclusive Royalty Free Right})} atas karya ilmiah kami yang
+    berjudul:
+
+    \begin{center}
+        \judul
+    \end{center}
+
+    \noindent beserta perangkat yang ada (jika diperlukan). Dengan Hak Bebas
+    Royalti Noneksklusif ini Universitas Indonesia berhak menyimpan,
+    mengalihmedia/formatkan, mengelola dalam bentuk pangkalan data
+    (\textit{database}), merawat, dan memublikasikan tugas akhir kami selama
+    tetap mencantumkan nama kami sebagai penulis/pencipta dan sebagai pemilik
+    Hak Cipta.
+
+    \vspace{0.2cm}
+    \noindent Demikian pernyataan ini kami buat dengan sebenarnya.
+
+    \vfill
+    \begin{center}
+        \begin{tabular}{lll}
+            Dibuat di & : & Depok\\
+            Pada tanggal & : & \tanggalSiapSidang\\
+        \end{tabular}\\[0.4cm]
+        Yang menyatakan
+
+        \vspace{1.2cm}
+        \begin{tabular}{ccc}
+            (\penulisSatu) & (\penulisDua) & (\penulisTiga)
+        \end{tabular}
+    \end{center}
+}
+
+\newcommand{\abstractIndonesian}{%
+Klaster Kubernetes yang dinamis mengakumulasi fragmentasi sumber daya, yang sering memicu kebijakan konsolidasi descheduler. Namun, konsolidasi yang murni berbasis komputasi dapat memindahkan layanan mikro yang saling bergantung melalui jaringan terdegradasi. Penelitian ini menyajikan arsitektur Kubernetes Descheduler yang menggabungkan pengamanan penggusuran berbasis kondisi jaringan. Kebijakan ini mengevaluasi bentuk penggunaan dan memilih penggusuran, sementara filter sadar latensi mencegat tindakan yang merusak jaringan. Pada evaluasi sadar jaringan, perilaku descheduler standar menyeimbangkan sumber daya komputasi tetapi menggusur beban kerja sensitif, sehingga menyebabkan lonjakan latensi hingga $\sim$167ms. Sebaliknya, filter sadar latensi mencegat tindakan yang merusak jaringan tersebut, mempertahankan latensi dasar pada $\sim$8ms, dan tetap mengarahkan penggusuran ke \textit{Pod} non-kritis. Secara keseluruhan, arsitektur yang diusulkan meningkatkan utilisasi sumber daya sekaligus melindungi beban kerja sensitif terhadap jaringan.%
+}
+
+\newcommand{\abstractEnglish}{%
+Dynamic Kubernetes clusters accumulate resource fragmentation that triggers descheduler consolidation policies. However, compute-focused consolidation may move dependent microservices across degraded network links. This study presents a Kubernetes Descheduler architecture featuring a network-aware eviction safeguard. The policy selects evictions based on feasible predicted scheduler targets, while a network-aware filter blocks movements toward latency-degrading destinations. In the network-aware evaluation, the baseline descheduler behavior balanced compute resources but evicted sensitive workloads, causing latency spikes of up to $\sim$167ms. In contrast, the latency-aware filter intercepted these network-degrading actions, maintained baseline latency at $\sim$8ms, and still achieved balance by steering eviction toward non-critical Pods. Overall, the proposed architecture improves resource utilization while protecting network-sensitive workloads.%
+}
+
+\newcommand{\makeArticleAbstract}{%
+    \clearpage
+    \newgeometry{top=3cm,bottom=3cm,left=2.38cm,right=3cm}
+    \pagenumbering{arabic}
+    \setcounter{page}{1}
+    \pagestyle{uiarticle}
+    \singlespacing
+    \begin{center}
+        {\bfseries\MakeUppercase{\judul}\par}
+        \vspace{0.6\baselineskip}
+        {\journalAuthors\par}
+        \vspace{0.25\baselineskip}
+        {Program Studi \programSatu, Fakultas \fakultas, Universitas Indonesia\par}
+    \end{center}
+
+    \vspace{0.7\baselineskip}
+    \frontHeading{Abstrak}
+    \noindent\abstractIndonesian
+
+    \vspace{0.5\baselineskip}
+    \noindent\textit{Kata kunci: Kubernetes, Descheduler, Resource Defragmentation, Penggunaan Sumber Daya Aktual, Latensi Jaringan, Microservices}
+
+    \vspace{0.9\baselineskip}
+    \frontHeading{Abstract}
+    \noindent\abstractEnglish
+
+    \vspace{0.5\baselineskip}
+    \noindent\textit{Keywords: Kubernetes, Descheduler, Resource Defragmentation, Runtime Resource Usage, Network Latency, Microservices}
+}
+
+\begin{document}
+
+\makeOuterCover
+\pagenumbering{roman}
+\setcounter{page}{1}
+\makeInnerTitlePage
+\makeOriginalityPage
+\makeApprovalPage
+\makePublicationApprovalPage
+\makeArticleAbstract
+
+\clearpage
+\newgeometry{
+    top=3cm,
+    bottom=3cm,
+    left=2.22cm,
+    right=2.11cm,
+    columnsep=1.27cm
+}
+\twocolumn
+\onehalfspacing
+\pagestyle{uiarticle}
+
+\input{src/paper-netaware/bab1}
+\input{src/paper-netaware/bab2}
+\input{src/paper-netaware/bab3}
+\input{src/paper-netaware/bab4}
+\input{src/paper-netaware/bab5}
+
+\bibliographystyle{apalike}
+\bibliography{config/references}
+
+\clearpage
+\onecolumn
+\appendix
+\section{Network-Aware Pre-Eviction Filter Algorithm}
+\label{appendix:netaware_unified_algorithm}
+\lstinputlisting[
+    label={lst:netaware_unified_algorithm},
+]{assets/codes/pseudos/netaware/unifiedalgo.psu}
+
+\end{document}

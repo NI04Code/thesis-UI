@@ -2,9 +2,9 @@ name: Build Thesis
 
 on:
   push:
-    branches: [ journal-paper ]
+    branches: [ journal-netaware ]
   pull_request:
-    branches: [ journal-paper ]
+    branches: [ journal-netaware ]
 
 jobs:
   build:
@@ -23,10 +23,10 @@ jobs:
 
       - name: Generate PDF
         run: |
-          latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode -halt-on-error" journal_paper.tex
+          latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode -halt-on-error" paper-netaware.tex
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: journal-pdf
-          path: journal_paper.pdf
+          name: paper-netaware-pdf
+          path: paper-netaware.pdf
