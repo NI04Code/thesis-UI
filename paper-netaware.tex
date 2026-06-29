@@ -7,7 +7,7 @@
     left=4cm,
     right=3cm,
     columnsep=1.27cm,
-    footskip=0.5cm
+    footskip=1.2cm
 ]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -131,7 +131,7 @@
             \vspace{0.25cm}
             {\large\bfseries UNIVERSITAS INDONESIA\par}
             \vspace{1.0cm}
-            {\large\bfseries\MakeUppercase{\judul}\par}
+            {\large\bfseries \judul\par}
             \vspace{2.5cm}
             {\large\bfseries\MakeUppercase{\type}\par}
             \vspace{2.5cm}
@@ -157,7 +157,7 @@
             \vspace{0.25cm}
             {\large\bfseries UNIVERSITAS INDONESIA\par}
             \vspace{1.0cm}
-            {\large\bfseries\MakeUppercase{\judul}\par}
+            {\large\bfseries \judul\par}
             \vspace{2.2cm}
             {\large\bfseries\MakeUppercase{\type}\par}
             \vspace{0.5cm}
@@ -332,7 +332,7 @@ Dynamic Kubernetes clusters accumulate resource fragmentation that triggers desc
     \pagestyle{uiarticle}
     \singlespacing
     \begin{center}
-        {\bfseries\MakeUppercase{\judul}\par}
+        {\bfseries \judul\par}
         \vspace{0.6\baselineskip}
         {\journalAuthors\par}
         \vspace{0.25\baselineskip}
@@ -371,10 +371,11 @@ Dynamic Kubernetes clusters accumulate resource fragmentation that triggers desc
     bottom=3cm,
     left=2.22cm,
     right=2.11cm,
-    columnsep=1.27cm
+    columnsep=1.27cm,
+    footskip=1.2cm
 }
 \twocolumn
-\onehalfspacing
+\singlespacing
 \pagestyle{uiarticle}
 
 \input{src/paper-netaware/bab1}

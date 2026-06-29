@@ -1,37 +1,55 @@
 %----------------------------------------------------------------------------- %%
-\section{Proposed Descheduler Design}
+\section{Descheduler Design}
 \label{bab:3}
 %----------------------------------------------------------------------------- %%
 
-This section presents the design and implementation of the Network-Aware Evictor, developed as a Kubernetes Descheduler extension. The plugin incorporates topology-based and latency-based cost models to safeguard network locality during cluster consolidation. The component is implemented as a descheduler \textit{PreEvictionFilter} extension. In this framework, the filter is executed immediately before an eviction request is submitted. Pre-eviction filters can be chained; therefore, a candidate Pod must pass the network-aware filter before the descheduler performs the eviction. This mechanism is used as a safety gate around standard strategy-driven eviction decisions.
-
-The system features a global \textit{PreEvictionFilter} which acts as a safety device to prevent evictions that would increase the total network cost across all candidate nodes. It can optionally be incorporated directly into node utilization strategies, offering a more targeted filtering mechanism by only analyzing the destination nodes selected by the strategy.
-
-\subsection{System Overview}
-As illustrated in Figure \ref{fig:netaware_arcdesign}, the system utilizes a two-layer plugin architecture that abstracts the Network Cost Model into a Cost Provider. When an eviction candidate is evaluated, the process operates as a sequence of decision gates. First, the plugin inspects the candidate pod to determine if a network dependency label (e.g., \textit{network-group}) exists. If no defined dependencies exist, the plugin immediately allows the eviction. If a dependency label is found, the plugin discovers all related dependency pods and calculates the baseline network cost by computing the communication overhead between the candidate pod's current node and all nodes hosting its dependencies. Next, it retrieves potential candidate destination nodes and computes the hypothetical network cost that would occur if the pod were rescheduled to that location. The algorithm counts the number of candidate nodes whose resulting network cost is less than or equal to the baseline cost of the current node. Finally, the eviction is allowed only if this count exceeds a configured threshold percentage of the total candidates.
-
-\begin{figure*}[tbp]
+\begin{figure*}[t!]
 	\centering
 	\includegraphics[width=0.95\textwidth]{assets/pics/network-aware/sysarc-diagram.png}
 	\caption{Network-Aware plugin architecture design.}
 	\label{fig:netaware_arcdesign}
 \end{figure*}
 
+This section presents the design and implementation of the Network-Aware Evictor, developed as a Kubernetes Descheduler extension. The plugin incorporates topology-based and latency-based cost models to safeguard network locality during cluster consolidation. The component is implemented as a descheduler \texttt{PreEvictionFilter} extension. In this framework, the filter is executed immediately before an eviction request is submitted. Pre-eviction filters can be chained; therefore, a candidate Pod must pass the network-aware filter before the descheduler performs the eviction. This mechanism is used as a safety gate around standard strategy-driven eviction decisions.
+
+As a safety device, the system features a global \texttt{PreEvictionFilter} to prevent evictions that would increase the total network cost across all candidate nodes. It can optionally be incorporated directly into node utilization strategies, offering a more targeted filtering mechanism by only analyzing the destination nodes selected by the strategy.
+
+\subsection{System Overview}
+As illustrated in Figure \ref{fig:netaware_arcdesign}, the system utilizes a two-layer plugin architecture that abstracts the Network Cost Model into a Cost Provider. When an eviction candidate is evaluated, the process operates as a sequence of decision gates. First, the plugin inspects the candidate pod to determine if a network dependency label (e.g., \texttt{network-group}) exists. If no defined dependencies exist, the plugin immediately allows the eviction. If a dependency label is found, the plugin discovers all related dependency pods and calculates the baseline network cost by computing the communication overhead between the candidate pod's current node and all nodes hosting its dependencies. Next, it retrieves potential candidate destination nodes and computes the hypothetical network cost that would occur if the pod were rescheduled to that location. The algorithm counts the number of candidate nodes whose resulting network cost is less than or equal to the baseline cost of the current node. Finally, the eviction is allowed only if this count exceeds a configured threshold percentage of the total candidates.
+
+
 \subsection{Network Cost Model}
 To accommodate various deployment situations, the Network Cost Model supports two methodologies. The topology-based cost model calculates the network cost based on the node locality information (zone and region). It assigns specified costs based on relative position, assuming that latency rises with logical distance (e.g., same-zone=1, same-region=5, cross-region=10). This model is lightweight and requires no external monitoring. Alternatively, the latency-based cost model computes the network cost according to observed node-to-node communication performance, adapting to dynamic cluster conditions. This requires integration with a Prometheus-based monitoring infrastructure (such as Goldenpinger) to scrape real-time latency measurements between nodes. Both layers of the plugin must use consistent configurations to prevent conflicting eviction decisions.
 
 \subsection{Eviction Decision Workflow}
-The network-aware eviction workflow operates after the built-in \textit{DefaultEvictor} confirms basic scheduling constraints. The algorithm identifies dependent pods using Kubernetes owner references and label matching, and computes the pairwise communication cost for the current placement and all candidate nodes using the procedure detailed in Listing \ref{lst:netaware_computeplacement_algo}. An eviction is permitted only if the number of candidate nodes satisfying the condition exceeds the minimum threshold (defaulting to 50\%). This threshold-based mechanism balances workload redistribution with communication efficiency, increasing the likelihood that the scheduler will subsequently place the evicted pod onto a node that preserves network locality.
+The network-aware eviction workflow operates after the built-in \texttt{DefaultEvictor} confirms basic scheduling constraints. The algorithm identifies dependent pods using Kubernetes owner references and label matching, and computes the pairwise communication cost for the current placement and all candidate nodes using the procedure detailed in Algorithm 1.
 
-\begin{figure*}[tbp]
-    \centering
-    \begin{minipage}{0.95\textwidth}
-    \lstinputlisting[
-        caption={Network-Aware algorithm: \textit{ComputePlacementCost} function},
-        label={lst:netaware_computeplacement_algo},
-    ]{assets/codes/pseudos/netaware/computecost.psu}
-    \end{minipage}
-\end{figure*}
+\vspace{0.5em}
+\noindent\rule{\linewidth}{0.4pt}
+\textbf{Algorithm 1:} Compute Placement Cost algorithm
+\vspace{-0.5em}
+
+\noindent\rule{\linewidth}{0.4pt}
+\textbf{Input:} \textit{candidateNode, D, nodesMap, costProvider} \\
+\textbf{Output:} \textit{totalCost}
+\vspace{-0.5em}
+\begin{algorithmic}[1]
+\STATE \textit{totalCost} $\leftarrow 0$
+\FOR{\textbf{each} pod $d \in D$}
+    \STATE \textit{depNode} $\leftarrow$ \textit{nodesMap}[$d$.\textit{nodeName}]
+    \IF{\textit{depNode} \textbf{not found}}
+        \STATE \textbf{continue}
+    \ENDIF
+    \STATE \textit{totalCost} $\leftarrow$ \textit{totalCost} $+$ 
+    \STATE \hspace{1em} \textit{Cost}(\textit{candidateNode}, \textit{depNode})
+\ENDFOR
+\RETURN \textit{totalCost}
+\end{algorithmic}
+\vspace{-0.5em}
+\noindent\rule{\linewidth}{0.4pt}
+\vspace{0.5em}
+
+An eviction is permitted only if the number of candidate nodes satisfying the condition exceeds the minimum threshold (defaulting to 50\%). This threshold-based mechanism balances workload redistribution with communication efficiency, increasing the likelihood that the scheduler will subsequently place the evicted pod onto a node that preserves network locality.
 
 \subsection{Plugin Configuration}
-The Network-Aware policy is configured through two layers. The global \textit{NetworkCostEvictor} configures parameters for dependency identification, minimum threshold percentage, pods ownership filtering, and optional latency-based cost evaluation. The second configuration extends existing node utilization strategies (like \textit{HighNodeUtilization}) with identical network-aware blocks, ensuring consistent filtering behavior but potentially applying different levels of strictness via the threshold parameter.
+The Network-Aware policy is configured through two layers. The global \texttt{NetworkCostEvictor} configures parameters for dependency identification, minimum threshold percentage, pods ownership filtering, and optional latency-based cost evaluation. The second configuration extends existing node utilization strategies (like \texttt{HighNodeUtilization}) with identical network-aware blocks, ensuring consistent filtering behavior but potentially applying different levels of strictness via the threshold parameter.
