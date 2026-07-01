@@ -22,6 +22,6 @@
             avg_over_time(goldpinger_peers_response_time_s_sum[5m])
             /
             avg_over_time(goldpinger_peers_response_time_s_count[5m])
-          sourceNodeLabel: "goldpinger_host_name"   # Default: "goldpinger_host_name"
-          targetNodeLabel: "goldpinger_peer_name"   # Default: "goldpinger_peer_name"
+          sourceNodeLabel: "host_name"   # Default: "goldpinger_host_name"
+          targetNodeLabel: "peer_name"   # Default: "goldpinger_peer_name"
 
