@@ -1,0 +1,76 @@
+\section{Background and Related Work}
+\label{sec:background}
+
+\subsection{Kubernetes Resource Semantics}
+
+A container may declare CPU and memory requests, limits, both, or neither.
+Requests form the scheduler's placement baseline: a Pod is feasible on a Node
+only when its effective requests fit the Node's remaining allocatable
+resources. Limits instead define enforcement ceilings used by the kubelet and
+container runtime \citep{k8s_resource_management}. A namespace
+\textit{LimitRange} may insert defaults during admission, and those effective
+values are visible in the stored Pod specification
+\citep{k8s_limit_range}.
+
+Requests and limits also contribute to Pod Quality of Service classification,
+but QoS is not a direct proxy for current work. A \textit{Burstable} Pod can
+legitimately consume far more CPU than its request when its limit permits it,
+while a Pod with a large request can be idle
+\citep{k8s_pod_qos}. Runtime protection therefore requires an observation of
+current consumption as well as a baseline against which to interpret it.
+
+Metrics Server exposes recent CPU and memory usage through the Kubernetes
+Metrics API \citep{k8s_metrics_server}. CPU usage is represented in cores or
+millicores and memory in bytes. These observations are point-in-time,
+best-effort signals rather than reservations, so unavailable or incomplete
+measurements require an explicit safety policy.
+
+\subsection{Descheduling and Runtime Awareness}
+
+The Descheduler runs after initial placement and proposes Pod evictions
+according to a configured strategy. Before the eviction request reaches the
+Kubernetes API, evictor plugins can enforce general eligibility and
+pre-eviction checks. Multiple pre-eviction filters may be chained, so every
+enabled filter must permit the candidate
+\citep{k8s_descheduler_docs}. This extension point allows runtime protection
+to remain independent of candidate ordering and the strategy's placement
+objective.
+
+Runtime telemetry has been used to revise Kubernetes placement at several
+decision stages. The closest work combines load-aware scheduler scoring with a
+custom Descheduler evictor that uses CPU, memory, network, and disk telemetry
+to select the Pod with the greatest positive placement-score improvement
+\citep{marchese2025enhancing}. An earlier network-aware scheduler and
+Descheduler operator similarly uses measured latency and inter-service traffic
+to evict a Pod when another Node offers a better score
+\citep{marchese2022network}. Kinitos uses policy-specific scheduler and
+Descheduler plugins to identify violated network dependencies and trigger
+rescheduling, retaining the current placement when no feasible destination
+exists \citep{tsokov2025kinitos}. Outside the Descheduler framework, Nautilus
+uses runtime QoS and resource pressure to select and migrate a microservice
+through a scale-out-before-delete workflow \citep{fu2022adaptive}. These
+systems use telemetry for scoring, candidate selection, destination selection,
+or managed migration. The Actual Usage Evictor operates at a narrower stage:
+after a host strategy selects a candidate and immediately before eviction, its
+global \textit{PreEvictionFilter} only permits or blocks that candidate. It
+does not select, rank, place, or migrate Pods; it compares live CPU and memory
+with effective requests and fails closed when metrics are unavailable or
+incomplete.
+
+The objective also differs from kubelet node-pressure eviction. Under resource
+pressure, the kubelet ranks Pods to reclaim a scarce Node resource using Pod
+Priority, whether usage exceeds requests, and usage relative to requests
+\citep{k8s_node_pressure_eviction}. The Actual Usage Evictor is not a
+reclamation mechanism for an unhealthy Node. It protects a busy candidate from
+a voluntary, strategy-driven Descheduler eviction.
+
+\subsection{Research Gap}
+
+Prior work demonstrates that runtime telemetry can define or repair placement
+through scoring, candidate selection, destination selection, and migration.
+The architectural gap addressed here is a strategy-independent, global
+pre-eviction veto that leaves candidate ordering and placement objectives to
+the host Descheduler strategy. The Actual Usage Evictor occupies this narrower
+boundary by checking request-relative live usage immediately before eviction
+and defining fail-closed behavior when the required runtime evidence is
+unavailable or incomplete.

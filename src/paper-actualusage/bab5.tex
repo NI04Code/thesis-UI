@@ -1,0 +1,31 @@
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+
+This paper implemented an Actual Usage Evictor as a global pre-eviction safety
+gate for Kubernetes Descheduler. The plugin preserves the candidate ordering
+and placement objective of the active strategy, but checks live CPU and memory
+usage immediately before eviction. The implementation supports CPU and memory
+ratios, while the present CPU-bound experiments empirically validate only the
+CPU decision path. Request-relative thresholds distinguish currently active
+Pods from idle candidates, while conservative handling of unavailable or
+incomplete metrics prevents eviction without adequate runtime evidence.
+
+In the evaluated single-replica API scenarios, each represented by one
+independent run, the filter blocked the busy API and allowed idle candidates
+to remain eligible. Controls produced failure rates of \(16.67\%\) and
+\(17.24\%\) and observed failure spans of approximately \(4.8\,s\); both
+treatments recorded no failed response. HNU retained one additional active
+Node because no fallback existed on the protected source. LNU substituted an
+idle Pod, completed the same three evictions, and retained the full \(85.7\%\)
+memory-deviation reduction. For these CPU-bound workloads and tested layouts,
+runtime filtering protected the original API instance while preserving
+strategy progress when a compatible alternative candidate was available.
+
+Future work should evaluate threshold sensitivity across differently
+calibrated requests, incorporate temporal smoothing or multiple consecutive
+samples into the filter itself, and study the trade-off between responsiveness
+and stale observations. Evaluation should also cover replicated, stateful, and
+production-derived workloads; heterogeneous Nodes; longer requests; and
+additional Descheduler strategies. Finally, exposing block reasons and recent
+usage ratios as metrics would improve operator visibility and support
+workload-specific threshold tuning.

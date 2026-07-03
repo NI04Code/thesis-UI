@@ -1,0 +1,66 @@
+\begin{tikzpicture}[
+    font=\sffamily\small,
+    flow/.style={
+        rectangle,
+        rounded corners=2pt,
+        draw=black,
+        line width=0.7pt,
+        align=center,
+        minimum height=1.1cm,
+        text width=2.8cm,
+        fill=blue!5
+    },
+    decision/.style={
+        diamond,
+        aspect=2.0,
+        draw=black,
+        line width=0.7pt,
+        align=center,
+        inner sep=1.5pt,
+        text width=2.3cm,
+        fill=orange!10
+    },
+    terminal/.style={
+        ellipse,
+        draw=black,
+        line width=0.7pt,
+        align=center,
+        minimum height=0.9cm,
+        text width=1.8cm,
+        fill=green!10
+    },
+    block/.style={
+        ellipse,
+        draw=black,
+        line width=0.7pt,
+        align=center,
+        minimum height=0.9cm,
+        text width=1.8cm,
+        fill=red!10
+    },
+    arrow/.style={-{Latex[length=2.4mm]}, line width=0.7pt},
+    label/.style={font=\sffamily\scriptsize, fill=white, inner sep=1pt}
+]
+
+\node[flow] (candidate) {Strategy-selected\\candidate Pod};
+\node[decision, right=0.8cm of candidate] (scope) {Inside configured scope?};
+\node[decision, right=0.95cm of scope] (metrics) {Metrics available and complete?};
+\node[flow, right=0.9cm of metrics] (aggregate) {Aggregate per-container usage and effective requests};
+\node[flow, below=1.0cm of aggregate] (evaluate) {Evaluate CPU and memory independently, applying missing-request policy};
+\node[decision, left=1.0cm of evaluate] (busy) {Either dimension busy?};
+\node[terminal, left=1.0cm of busy] (allow) {Allow eviction};
+\node[block, below=0.8cm of busy] (deny) {Block eviction};
+\node[terminal, above=1.0cm of scope] (outscope) {Allow eviction};
+\node[block, above=1.0cm of metrics] (nometrics) {Block eviction};
+
+\draw[arrow] (candidate) -- (scope);
+\draw[arrow] (scope) -- node[label, above] {yes} (metrics);
+\draw[arrow] (metrics) -- node[label, above] {yes} (aggregate);
+\draw[arrow] (aggregate) -- (evaluate);
+\draw[arrow] (evaluate) -- (busy);
+\draw[arrow] (busy) -- node[label, above] {no} (allow);
+\draw[arrow] (busy) -- node[label, right] {yes} (deny);
+\draw[arrow] (scope) -- node[label, right] {no} (outscope);
+\draw[arrow] (metrics) -- node[label, right] {no} (nometrics);
+
+\end{tikzpicture}

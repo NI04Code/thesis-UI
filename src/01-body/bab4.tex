@@ -458,7 +458,7 @@ Every comparison uses six worker Nodes and a singleton API Pod exposed through a
 
 The Descheduler is triggered only after two consecutive Metrics API samples show that the API Pod's CPU usage exceeds the configured ratio of \(0.80\). The decision-time ratios are \(11.98\) in R1, approximately \(10.02\) in H1, and approximately \(10.10\) in L1. These values confirm that the candidate is busy relative to its request. The CPU limit allows the container to burst above \(50\,m\), but it is not a denominator in the Actual Usage Evictor decision.
 
-Application results are normalized to the first \(30\) seconds after the recorded Descheduler event. R0 and R1 use a \(30\)-second post-event capture. The longer HNU and LNU captures are truncated to the same event-aligned interval. Failure-rate denominators therefore contain only requests completed within this common window.
+Application results are measured during the \(30\) seconds after the recorded Descheduler event. Failure-rate denominators contain only requests completed within this event-aligned window.
 
 \subsubsection{Experiment Execution Procedure}
 \label{subsubsec:actualusage4_procedure}
@@ -473,12 +473,12 @@ Each experiment run follows a common ten-step procedure. The steps are identical
     \item \textbf{Threshold gate.} The Kubernetes Metrics API is polled every \(10\,s\) until two consecutive samples confirm the API Pod's CPU usage-to-request ratio exceeds \(0.80\).
     \item \textbf{Event timestamp.} The current time is persisted as \(t_{\text{event}}\).
     \item \textbf{Descheduler execution.} The Descheduler runs as a single-shot Kubernetes Job with the system's policy.
-    \item \textbf{Post-event capture.} The script sleeps for the configured post-event duration (\(30\,s\) for R0/R1, \(45\,s\) for H0/H1 and L0/L1) while \textit{k6} and the lifecycle watcher continue recording.
+    \item \textbf{Post-event capture.} The script records \textit{k6} output and Pod lifecycle events for \(30\,s\) after the event.
     \item \textbf{After snapshot.} The same cluster metrics are captured again.
-    \item \textbf{Shutdown and summarization.} Load generation is stopped and the \textit{k6} JSON output is filtered to the \(30\,s\) event-aligned window for metric computation.
+    \item \textbf{Shutdown and summarization.} Load generation is stopped and the \textit{k6} JSON output from the \(30\,s\) event-aligned window is used for metric computation.
 \end{enumerate}
 
-The post-event capture for HNU and LNU uses \(45\,s\) to ensure replacement Pods reach the Ready state before the after-snapshot. During analysis, only the first \(30\,s\) of \textit{k6} data after \(t_{\text{event}}\) are retained so that failure-rate denominators are comparable across all six systems.
+The same \(30\,s\) post-event observation window is used across all six systems so that failure-rate denominators are directly comparable.
 
 \subsubsection{Strategy-Specific Cluster Layouts}
 \label{subsubsec:actualusage4_layouts}
@@ -756,7 +756,7 @@ Memory request deviation falls from \(0.21639\) to \(0.03091\) in both runs, a r
 \subsection{Cross-Strategy Discussion}
 \label{subsec:actualusage4_cross_strategy}
 %-----------------------------------------------------------------------------%
-Figure~\ref{fig:actualusage4_failure_timeline} shows the request failures using the same event-aligned \(30\)-second post-event window for every run. Each cell counts HTTP \(503\) responses completed within a one-second interval. The dashed blue markers show the API eviction timestamps recorded in the Descheduler logs: \(1.891\,s\) in R0, \(3.647\,s\) in H0, and \(4.680\,s\) in L0. No marker appears in the treatment rows because the API eviction was blocked. Although the HNU and LNU experiments captured \(45\) seconds after the event, only the first \(30\) seconds are included for consistency with the ResourceDefragmentation experiments. Request timestamps represent completion time rather than generation time, so the number of completed responses can differ between runs despite the constant configured arrival rate of eight requests per second.
+Figure~\ref{fig:actualusage4_failure_timeline} shows the request failures using the same event-aligned \(30\)-second post-event window for every run. Each cell counts HTTP \(503\) responses completed within a one-second interval. The dashed blue markers show the API eviction timestamps recorded in the Descheduler logs: \(1.891\,s\) in R0, \(3.647\,s\) in H0, and \(4.680\,s\) in L0. No marker appears in the treatment rows because the API eviction was blocked. Request timestamps represent completion time rather than generation time, so the number of completed responses can differ between runs despite the constant configured arrival rate of eight requests per second.
 
 \begin{figure}[H]
     \centering

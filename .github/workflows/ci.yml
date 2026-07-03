@@ -1,8 +1,8 @@
-name: Build Thesis
+name: Build Actual Usage Paper
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, journal-actualusg ]
   pull_request:
     branches: [ main ]
 
@@ -23,10 +23,10 @@ jobs:
 
       - name: Generate PDF
         run: |
-          latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode -halt-on-error" thesis.tex
+          latexmk -pdf -pdflatex="pdflatex -interaction=nonstopmode -halt-on-error" paper-actualusage.tex
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: thesis-pdf
-          path: thesis.pdf
+          name: paper-actualusage-pdf
+          path: paper-actualusage.pdf

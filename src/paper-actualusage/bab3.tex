@@ -1,0 +1,123 @@
+\begin{figure*}[t]
+    \centering
+    \resizebox{\textwidth}{!}{%
+        \input{assets/codes/figures/actualusage-workflow}
+    }
+    \caption{Actual Usage Evictor pre-eviction decision flow. Request dimensions
+    are evaluated independently, while unavailable or incomplete runtime
+    metrics block the eviction.}
+    \label{fig:actualusage_workflow}
+\end{figure*}
+
+\section{Actual Usage Evictor Implementation}
+\label{sec:implementation}
+
+\subsection{Plugin Position and Scope}
+
+The Actual Usage Evictor implements the Descheduler \textit{EvictorPlugin}
+interface. Its general \textit{Filter} method is a no-op that returns true;
+runtime usage is evaluated only in \textit{PreEvictionFilter}. Candidate
+selection therefore remains the responsibility of the active strategy. The
+plugin observes the selected Pod immediately before eviction and either allows
+the pipeline to continue or rejects that candidate.
+
+\begin{table*}[t]
+    \centering
+    \caption{Actual Usage Evictor Parameters}
+    \label{tab:actualusage_parameters}
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}p{3.9cm}p{1.5cm}p{1.6cm}p{7.9cm}@{}}
+        \toprule
+        \textbf{Parameter} & \textbf{Type} & \textbf{Default} & \textbf{Behavior} \\
+        \midrule
+        \textit{cpuUsageThreshold} & float & \(0.80\) &
+        Blocks when actual CPU divided by effective requested CPU reaches the threshold. \\
+        \textit{memoryUsageThreshold} & float & \(0.80\) &
+        Blocks when actual memory divided by effective requested memory reaches the threshold. \\
+        \textit{missingRequestPolicy} & string & Allow &
+        Skips a missing request dimension under \textit{Allow}; rejects it under \textit{Block}. \\
+        \textit{namespaces} & object & optional &
+        Restricts evaluation with namespace include or exclude rules. \\
+        \textit{labelSelector} & object & optional &
+        Restricts evaluation using Kubernetes label matching. \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+Operators can restrict protection with namespace include or exclude rules and
+a Kubernetes label selector. A Pod outside the configured scope passes without
+a metrics query. When both controls are present, both must match for the
+runtime check to run. This permits targeted protection of user-facing or
+latency-sensitive workloads while leaving batch workloads unaffected.
+
+Figure~\ref{fig:actualusage_workflow} shows the decision flow. For an in-scope
+Pod, the plugin reads Pod metrics and matches each regular container in the
+metric response with the Pod specification. Usage and effective requests are
+aggregated only after every container has a complete CPU and memory
+observation.
+
+\subsection{Request-Relative Usage Model}
+
+For Pod \(p\), let \(A_{p,c}\) and \(A_{p,m}\) denote aggregate actual CPU and
+memory usage. Let \(R_{p,c}\) and \(R_{p,m}\) denote effective CPU and memory
+requests aggregated across all regular containers. For a dimension in which
+every container has a request, the ratios are
+
+\[
+\rho_{p,c}=\frac{A_{p,c}}{R_{p,c}},
+\qquad
+\rho_{p,m}=\frac{A_{p,m}}{R_{p,m}}.
+\]
+
+CPU is aggregated in millicores and memory in bytes. Effective requests are
+read from the admitted Pod object, so defaults inserted by a
+\textit{LimitRange} are included without a separate lookup.
+
+Given CPU threshold \(\theta_c\) and memory threshold \(\theta_m\), the filter
+blocks the eviction when either dimension reaches its threshold:
+
+\[
+\mathrm{Block}(p)
+\iff
+\rho_{p,c}\geq\theta_c
+\;\lor\;
+\rho_{p,m}\geq\theta_m.
+\]
+
+Consequently, both ratios must be below their thresholds for the candidate to
+pass. The default \(\theta_c=\theta_m=0.80\) classifies activity relative to
+the request baseline; it does not mean that the container is at \(80\%\) of
+its runtime limit. A Pod with a \(50\,m\) CPU request and \(1000\,m\) limit can
+produce a ratio far above one while legitimately bursting below its limit.
+Limits are deliberately excluded because proximity to throttling or an
+out-of-memory boundary is a different decision from activity relative to the
+scheduler baseline.
+
+The implementation applies this decision to both CPU and memory. The
+experiments in Section~\ref{sec:evaluation}, however, generate foreground CPU
+work and trigger the event from CPU samples; they validate the CPU decision
+path only. The memory path was not evaluated independently.
+
+\subsection{Missing Data and Safety Behavior}
+
+Missing runtime evidence and missing request baselines have different
+semantics. The plugin fails closed when the metrics client is unavailable,
+Pod metrics cannot be read, or any regular container lacks a CPU or memory
+observation. In these cases it cannot establish that eviction is safe.
+
+If a container lacks an effective request for one resource, the entire
+Pod-level dimension is marked missing rather than dividing by a partial
+denominator. The dimension is then resolved using
+\textit{missingRequestPolicy}. The default \textit{Allow} skips only that
+dimension; the other dimension can still block through the OR condition.
+\textit{Block} treats the missing dimension as busy. Thus, \textit{Allow} does
+not claim that a request-less Pod is idle---it states that request-relative
+busyness cannot be inferred for that dimension.
+
+\subsection{Configuration}
+
+Table~\ref{tab:actualusage_parameters} summarizes the public plugin arguments.
+The complete decision procedure and an example policy are provided in
+Appendices~\ref{appendix:actualusage_algorithm}
+and~\ref{appendix:actualusage_config}.

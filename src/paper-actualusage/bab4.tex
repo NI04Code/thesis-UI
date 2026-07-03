@@ -1,0 +1,249 @@
+\section{Evaluation Methodology}
+\label{sec:evaluation}
+
+\subsection{Experimental Setup and Procedure}
+
+The testbed runs in an AWS Academy environment with one control-plane Node and
+six \textit{t3.micro} worker Nodes. Each worker instance provides \(1\,GiB\) of
+physical memory. After system and Kubernetes reservations, the recorded
+allocatable capacity is approximately \(809\,Mi\) of memory and two CPU cores
+per worker.
+
+\begin{table*}[t]
+    \centering
+    \caption{Recorded Experimental Setup}
+    \label{tab:experimental_setup}
+    \small
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.1cm}
+        >{\raggedright\arraybackslash}p{12.4cm}@{}}
+        \toprule
+        \textbf{Item} & \textbf{Recorded configuration} \\
+        \midrule
+        Environment & AWS Academy; one control-plane Node and six
+        \textit{t3.micro} workers, each with \(1\,GiB\) physical memory.
+        Kubernetes allocatable capacity was two CPU cores and approximately
+        \(809\,Mi\) memory per worker. \\
+        Runtime components & Kubernetes cluster, Metrics Server through the
+        Kubernetes Metrics API, a single-shot Descheduler Job, and
+        \textit{k6} running outside the workload Pod through a NodePort. \\
+        API workload & \textit{workload-api} Deployment with one replica Pod;
+        \(50\,m\) CPU request, \(1000\,m\) CPU limit, \(700\,Mi\) memory limit;
+        memory request \(240\,Mi\) (HNU) or \(200\,Mi\) (LNU). \\
+        Traffic & Constant-arrival-rate at \(8\) requests/s to the API only.
+        Each request executes a deterministic CPU-bound loop; the experiment
+        does not generate memory load. \\
+        Actual Usage policy & CPU and memory thresholds \(0.80\);
+        \textit{missingRequestPolicy=Allow}; namespace
+        \textit{actual-usage-exp}; label
+        \textit{experiment=actual-usage-evictor}. \\
+        Timing & \(30\,s\) stabilization; two consecutive CPU samples at least
+        \(10\,s\) apart above threshold; \(30\,s\) post-event observation and
+        analysis window \([0,30)\,s\). \\
+        Experimental runs and reset & One independent run for each of H0, H1, L0,
+        and L1. Each runner cleans previous state and rebuilds and validates
+        the layout before its run. \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+Every run uses a \textit{workload-api} Deployment configured with one replica
+Pod and exposed through a dedicated NodePort Service. A \textit{k6}
+constant-arrival-rate workload sends approximately eight requests per second
+only to this Service. Each request performs fixed CPU work. The API container
+declares a \(50\,m\) CPU request, a \(1000\,m\) CPU limit, and a \(700\,Mi\)
+memory limit; its memory request is \(240\,Mi\) in HNU and \(200\,Mi\) in LNU.
+Other experiment Pods receive no foreground traffic.
+
+The system stabilizes under load for \(30\,s\). The Kubernetes Metrics API is
+then polled every \(10\,s\), and the Descheduler is triggered only after two
+consecutive samples place the API CPU usage above the configured
+\(0.80\) request-relative threshold. The decision-time CPU ratios are
+approximately \(10.02\) in H1 and \(10.10\) in L1.
+
+Immediately before the single-shot Descheduler Job starts, the experiment
+records an event timestamp. Load generation and Pod lifecycle observation
+continue for a \(30\,s\) post-event period. Application metrics are calculated
+from requests completed in the event-aligned interval \([0,30)\,s\).
+
+Table~\ref{tab:experimental_setup} summarizes values recorded by the runners,
+policies, plans, and run artifacts. H0, H1, L0, and L1 are each one independent
+run, not repeated trials. Before each run, the runner deletes prior experiment
+state and recreates and validates the intended layout.
+
+\subsection{Comparison Systems and Layouts}
+
+The paired layouts are designed to compare filter behavior while holding the
+workload, host strategy, traffic, and intended initial placement constant.
+Each pair differs in whether the Actual Usage Evictor is registered after the
+Default Evictor. Table~\ref{tab:comparison_systems} summarizes the four
+configurations.
+
+\begin{table*}[t]
+    \centering
+    \caption{H0, H1, L0, and L1 Configurations}
+    \label{tab:comparison_systems}
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}l>{\raggedright\arraybackslash}p{2.4cm}
+        >{\raggedright\arraybackslash}p{1.5cm}
+        >{\raggedright\arraybackslash}p{4.3cm}
+        >{\raggedright\arraybackslash}p{2.3cm}
+        >{\raggedright\arraybackslash}p{3.5cm}@{}}
+        \toprule
+        \textbf{Run} & \textbf{Host / scheduler} &
+        \textbf{Filter} & \textbf{Intended initial layout} &
+        \textbf{Thresholds} & \textbf{Outcome} \\
+        \midrule
+        H0 & HNU / MostAllocated & Disabled &
+        Three dense destinations; three one-Pod sources, with API alone on one source. &
+        HNU CPU/memory \(40\%\) & Evictions, active Nodes, API identity,
+        failures, failure span. \\
+        H1 & HNU / MostAllocated & Enabled &
+        Same intended layout as H0. &
+        HNU \(40\%\); Actual Usage CPU/memory \(0.80\) & Same as H0 plus
+        Actual Usage blocks. \\
+        L0 & LNU / LeastAllocated & Disabled &
+        Three underutilized destinations; three overutilized sources; API and
+        idle fallback share one source. &
+        LNU low \(20\%\), target \(50\%\) & Evictions, request deviation, API
+        identity, failures, failure span. \\
+        L1 & LNU / LeastAllocated & Enabled &
+        Same intended layout as L0. &
+        LNU \(20/50\%\); Actual Usage CPU/memory \(0.80\) & Same as L0 plus
+        Actual Usage blocks. \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\textit{HighNodeUtilization} (HNU) uses \textit{MostAllocated} scoring to pack
+replacement Pods. In H0, the strategy can evict all three source Pods and
+empty their Nodes. In H1, protecting the API prevents worker-6 from becoming
+empty, but the two idle source Pods remain eligible.
+
+\textit{LowNodeUtilization} (LNU) uses the default
+\textit{LeastAllocated} scheduler. In both runs, the strategy attempts one
+movement from each overutilized source. On worker-6 the busy API is considered
+before an idle fallback. Therefore, L1 can reject the API and continue with
+the fallback without reducing the successful eviction count.
+
+\subsection{Metrics}
+
+The Actual Usage Block Count \(B\) counts candidate rejections caused by a CPU
+or memory ratio reaching its threshold. HTTP Failure Rate \(F\) is
+
+\[
+F=
+\frac{N_{\mathrm{fail,post}}}
+     {N_{\mathrm{completed,post}}},
+\]
+
+where a failure is a completed non-\(2xx\) response in the common post-event
+window. Observed Failure Span \(S_f\) is the elapsed time from the first to the
+last failed response:
+
+\[
+S_f=
+\begin{cases}
+t_{\mathrm{last\ fail}}-t_{\mathrm{first\ fail}},
+    & N_{\mathrm{fail,post}}>0,\\
+0, & N_{\mathrm{fail,post}}=0.
+\end{cases}
+\]
+
+This quantity describes the temporal spread of observed failures, not the full
+period of service unavailability or time to recovery. It is zero both when no
+failure is observed and when only one failure occurs.
+
+The evaluation also records successful eviction count, evicted Pod identity,
+and whether the original API instance remains. For HNU, placement progress is
+the reduction in active Nodes hosting non-DaemonSet application workloads.
+For LNU, it is the reduction in the population deviation of normalized CPU
+and memory requests across Nodes. Successful-request tail latency is treated
+as secondary because individual runs contain transient bursts before and
+after the event; failure rate and observed failure span are the primary
+availability evidence.
+
+\section{Results and Discussion}
+\label{sec:results}
+
+\begin{table*}[t]
+    \centering
+    \caption{Consolidated Actual Usage Evictor Results}
+    \label{tab:consolidated_results}
+    \small
+    \renewcommand{\arraystretch}{1.18}
+    \begin{tabular}{@{}lccccp{6.0cm}@{}}
+        \toprule
+        \textbf{Run} & \textbf{Evictions} & \textbf{Blocks} &
+        \textbf{Failure rate} & \textbf{Failure span} &
+        \textbf{Strategy-specific outcome} \\
+        \midrule
+        H0 & 3 & 0 & \(40/240=16.67\%\) & \(4.836\,s\) &
+        Active Nodes \(6\to3\); busy API evicted. \\
+        H1 & 2 & 1 & \(0/240=0\%\) & \(0\,s\) &
+        Active Nodes \(6\to4\); original API retained. \\
+        L0 & 3 & 0 & \(40/232=17.24\%\) & \(4.873\,s\) &
+        Memory deviation reduced \(85.7\%\); busy API evicted. \\
+        L1 & 3 & 1 & \(0/240=0\%\) & \(0\,s\) &
+        Same \(85.7\%\) reduction via idle fallback; original API retained. \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\subsection{HighNodeUtilization}
+
+H0 evicts all three source Pods, including the busy API, and reduces the
+active-Node count from six to three. H1 allows both idle source Pods but
+observes an API CPU ratio of approximately \(10.02\), blocks that candidate,
+and reduces the active-Node count from six to four. The filter therefore does
+not disable consolidation; it trades one additional reclaimable Node for
+preserving the active service instance.
+
+H0 completes \(240\) responses in the common window and returns \(40\) HTTP
+\(503\) responses, a \(16.67\%\) failure rate. Those failures have an observed
+span of \(4.836\,s\). H1 completes \(240\) responses without failure.
+
+\subsection{LowNodeUtilization}
+
+L0 evicts the busy API and one idle Pod from each of the other sources. L1
+observes an API CPU ratio of approximately \(10.10\), rejects that candidate,
+then permits the idle fallback on the same Node. Both configurations complete
+three successful evictions and produce the same final request distribution.
+
+Memory request deviation falls from \(0.21639\) to \(0.03091\) in both runs,
+a reduction of \(0.18548\), or \(85.7\%\). CPU deviation is unchanged because
+the layout creates imbalance through memory requests while candidate CPU
+requests are equal. L0 completes \(232\) responses and returns \(40\) HTTP
+\(503\) responses, a \(17.24\%\) failure rate with an observed failure span of
+\(4.873\,s\). L1 completes \(240\) responses with no failure.
+
+\subsection{Cross-Strategy Interpretation}
+
+The treatment changes the decision for the busy API without making idle Pods
+ineligible. The placement cost is determined by what the host strategy can do
+next. HNU has no substitute on the protected one-Pod source, so that Node
+remains active and consolidation is partial. LNU has an idle candidate on the
+same source; it substitutes that candidate and preserves the complete measured
+balancing result. Runtime protection and placement progress are therefore not
+inherently opposed. They conflict only when the host strategy lacks a
+compatible idle alternative.
+
+\subsection{Limitations}
+
+The experiments use controlled six-Node layouts, synthetic CPU-bound demand,
+a single API replica, one traffic pattern, one threshold value, and one
+independent run per configuration. The paired layouts support a direct
+behavioral comparison but do not represent every workload mix or failure
+recovery mechanism. A replicated service might mask instance replacement,
+while stateful, memory-bound, or long-running requests could exhibit a
+different failure profile.
+
+The \(0.80\) threshold is evaluated as a decision setting, not optimized.
+Metrics API observations are sampled rather than continuous and can lag rapid
+load changes. Finally, only two upstream strategies are evaluated. They cover
+opposing consolidation and redistribution objectives, but broader strategy
+and scheduler combinations are needed before generalizing the placement-cost
+results to production clusters.
+
+\clearpage

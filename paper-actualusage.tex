@@ -1,0 +1,194 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[
+    a4paper,
+    top=3cm,
+    bottom=3cm,
+    left=2.22cm,
+    right=2.11cm,
+    columnsep=1.27cm,
+    footskip=1.2cm
+]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{newtxtext,newtxmath}
+\usepackage{helvet}
+\usepackage{setspace}
+\usepackage{microtype}
+\usepackage[round,authoryear]{natbib}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{titlesec}
+\usepackage{dblfloatfix}
+\usepackage{cuted}
+\usepackage{placeins}
+\usepackage[hidelinks,hypertexnames=false]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+
+\newcommand{\paperTitle}{Implementation and Evaluation of an Actual-Usage Pre-Eviction Filter for Kubernetes Descheduler}
+\newcommand{\paperAuthors}{Matthew Hotmaraja Johan Turnip and Made Harta Dwijaksara}
+\newcommand{\paperAffiliation}{Faculty of Computer Science, Universitas Indonesia}
+
+\setlength{\parindent}{0.5in}
+\setlength{\parskip}{0pt}
+\setlength{\columnsep}{1.27cm}
+\setlength{\headheight}{15pt}
+\raggedbottom
+\emergencystretch=2em
+
+\titleformat{\section}
+    {\normalfont\bfseries}
+    {\thesection}
+    {1em}
+    {\MakeUppercase}
+\titleformat{\subsection}
+    {\normalfont\bfseries}
+    {\thesubsection}
+    {1em}
+    {}
+\titleformat{\subsubsection}
+    {\normalfont\bfseries}
+    {\thesubsubsection}
+    {1em}
+    {}
+\titlespacing*{\section}{0pt}{1.2\baselineskip}{0.4\baselineskip}
+\titlespacing*{\subsection}{0pt}{0.9\baselineskip}{0.25\baselineskip}
+\titlespacing*{\subsubsection}{0pt}{0.7\baselineskip}{0.2\baselineskip}
+
+\captionsetup{
+    font=small,
+    labelfont=bf,
+    labelsep=period,
+    justification=centering
+}
+
+\lstset{
+    basicstyle=\scriptsize\ttfamily,
+    breaklines=true,
+    breakatwhitespace=true,
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false,
+    frame=single,
+    captionpos=b,
+    numbers=left,
+    numberstyle=\tiny,
+    xleftmargin=1.0em,
+    framexleftmargin=0.6em,
+    breakindent=0pt,
+    escapeinside={(*}{*)},
+    postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space}
+}
+
+\let\cite\citep
+\renewcommand{\refname}{References}
+
+\fancypagestyle{uiarticle}{
+    \fancyhf{}
+    \fancyhead[R]{\thepage}
+    \fancyfoot[R]{\fontsize{10}{12}\selectfont\sffamily\bfseries Universitas Indonesia}
+    \renewcommand{\headrulewidth}{0pt}
+    \renewcommand{\footrulewidth}{0pt}
+}
+
+\newcommand{\makeArticleFront}{%
+    \newgeometry{top=3cm,bottom=3cm,left=2.38cm,right=3cm}
+    \pagenumbering{arabic}
+    \setcounter{page}{1}
+    \pagestyle{uiarticle}
+    \singlespacing
+    \begin{center}
+        {\bfseries \paperTitle\par}
+        \vspace{0.6\baselineskip}
+        {\paperAuthors\par}
+        \vspace{0.25\baselineskip}
+        {\paperAffiliation\par}
+    \end{center}
+
+    \vspace{0.8\baselineskip}
+    \begin{center}
+        \bfseries\MakeUppercase{Abstract}
+    \end{center}
+    \noindent
+    Kubernetes Descheduler strategies select Pods using declared resources and
+    placement state, but a selected Pod may be serving high live demand when
+    eviction is attempted. This paper implements an Actual Usage Evictor as a
+    global pre-eviction filter that compares live CPU and memory consumption
+    with each Pod's effective resource requests. The filter blocks eviction
+    when either request-relative usage ratio reaches a configurable threshold
+    and fails closed when runtime metrics are unavailable or incomplete. We
+    evaluate the implementation with two upstream strategies that pursue
+    opposing placement objectives: \textit{HighNodeUtilization} for
+    consolidation and \textit{LowNodeUtilization} for load redistribution.
+    Four controlled systems, each represented by one independent run, are
+    tested under sustained traffic to a single-replica, CPU-bound API. Without
+    runtime filtering, evicting the busy API causes HTTP failure rates of
+    \(16.67\%\) and \(17.24\%\), with observed failure spans of \(4.836\,s\)
+    and \(4.873\,s\). With the filter enabled, both evaluated treatments retain
+    the original API Pod and record no failed request.
+    The placement cost depends on fallback availability:
+    \textit{HighNodeUtilization} reduces the active-Node count by two instead
+    of three, whereas \textit{LowNodeUtilization} substitutes an idle candidate,
+    completes the same three evictions, and preserves the measured
+    \(85.7\%\) memory-deviation reduction. These results show that a
+    request-relative runtime guard can protect application availability while
+    allowing the host strategy to continue whenever a compatible idle
+    candidate exists in these tested layouts.
+
+    \vspace{0.6\baselineskip}
+    \noindent\textit{Keywords: Kubernetes, Descheduler, Pre-Eviction Filtering,
+    Runtime Resource Usage, Service Availability}
+}
+
+\begin{document}
+
+\makeArticleFront
+
+\clearpage
+\restoregeometry
+\twocolumn
+\singlespacing
+\pagestyle{uiarticle}
+
+\input{src/paper-actualusage/bab1}
+\input{src/paper-actualusage/bab2}
+\input{src/paper-actualusage/bab3}
+\input{src/paper-actualusage/bab4}
+\input{src/paper-actualusage/bab5}
+
+\bibliographystyle{apalike}
+\bibliography{config/references}
+
+\clearpage
+\onecolumn
+\appendix
+
+\section{Actual Usage Pre-Eviction Filter Algorithm}
+\label{appendix:actualusage_algorithm}
+\lstinputlisting[
+    caption={Unified Actual Usage Evictor decision workflow.},
+    label={lst:actualusage_algorithm}
+]{assets/codes/pseudos/actualusage/unifiedalgo.psu}
+
+\section{Actual Usage Evictor Configuration}
+\label{appendix:actualusage_config}
+\lstinputlisting[
+    caption={Example Descheduler configuration with the Actual Usage Evictor.},
+    label={lst:actualusage_config}
+]{assets/codes/pseudos/actualusage/config.psu}
+
+\end{document}

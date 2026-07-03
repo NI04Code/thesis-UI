@@ -21,3 +21,15 @@
 **/*.fdb_latexmk
 **/*.fls
 thesis.pdf
+
+# paper-actualusage compilation artifact
+paper-actualusage.pdf
+
+# actual-usage images (already tracked in main; not committed in this branch)
+assets/pics/actual-usage/
+
+# scratch/temp directory
+tmp/
+
+# research notes (local only)
+notes/

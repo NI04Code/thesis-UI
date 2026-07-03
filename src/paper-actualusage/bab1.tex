@@ -1,0 +1,55 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Kubernetes places a Pod by filtering feasible Nodes and scoring the remaining
+alternatives. CPU and memory requests determine placement feasibility, while
+resource limits constrain runtime consumption after placement. Once bound, a
+running Pod normally remains on its Node until it terminates or is recreated.
+The Kubernetes Descheduler complements this behavior by evicting selected Pods
+and allowing the kube-scheduler to place their replacements
+\citep{k8s_descheduler_docs,larsson_klein_elmroth_2023}.
+
+Placement information alone does not describe the operational cost of an
+eviction. A Pod that is an attractive candidate under a consolidation or
+load-balancing objective may be processing substantial live demand at the
+moment the Descheduler acts. Eviction terminates that instance, after which a
+replacement must be scheduled, started, marked Ready, and reattached to
+traffic. For a single-replica service, this interval can directly become a
+user-visible outage. In this paper, ``single-replica'' specifically means that
+the \textit{workload-api} Deployment has one replica Pod behind its Service.
+
+Runtime usage and scheduler feasibility answer different questions. Declared
+requests determine where a replacement can fit, whereas current usage
+indicates whether disrupting the selected instance is likely to remove active
+service capacity. Replacing request-based strategy logic with instantaneous
+usage would blur these concerns and make placement decisions sensitive to
+short-lived measurements. A more composable approach is to retain the strategy
+decision and add a runtime safety gate immediately before eviction.
+
+This paper addresses the following research questions:
+
+\begin{description}
+    \item[\textbf{RQ1.}] Does the Actual Usage Evictor prevent
+    eviction-induced application failure when a strategy selects a busy
+    single-replica API Pod?
+    \item[\textbf{RQ2.}] What placement cost does this protection impose under
+    consolidation and load-redistribution objectives?
+\end{description}
+
+It makes three contributions:
+
+\begin{itemize}
+    \item an implementation of the Actual Usage Evictor as a global
+    \textit{PreEvictionFilter}, independently composable with Descheduler
+    strategies;
+    \item a CPU-memory decision model with explicit handling for incomplete
+    metrics and missing request baselines; and
+    \item a controlled, CPU-path evaluation across the opposing objectives of
+    \textit{HighNodeUtilization} and \textit{LowNodeUtilization}, separating
+    application protection from strategy-specific placement cost.
+\end{itemize}
+
+The evaluation focuses on filter behavior rather than selecting an optimal
+threshold. It compares controls using the Default Evictor with treatments that
+add the Actual Usage Evictor while holding workload, layout, and host strategy
+constant.
