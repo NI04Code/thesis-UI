@@ -44,6 +44,8 @@ notes/
 scripts/generate_actual_usage_disruption_bar.py
 scripts/generate_actual_usage_failure_bar.py
 scripts/generate_actual_usage_failure_heatmap.py
+# generates unused HNU/LNU figures (also gitignored)
+scripts/generate_actual_usage_journal_figures.py
 
 # thesis entry point
 thesis.tex
