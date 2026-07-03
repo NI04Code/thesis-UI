@@ -40,6 +40,11 @@ notes/
 # part of this journal-actualusage branch.
 # ============================================================
 
+# thesis-origin scripts (generate images that are gitignored)
+scripts/generate_actual_usage_disruption_bar.py
+scripts/generate_actual_usage_failure_bar.py
+scripts/generate_actual_usage_failure_heatmap.py
+
 # thesis entry point
 thesis.tex
 
