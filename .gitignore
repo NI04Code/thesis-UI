@@ -25,7 +25,7 @@ thesis.pdf
 # paper-actualusage compilation artifact
 paper-actualusage.pdf
 
-# actual-usage images (already tracked in main; not committed in this branch)
+# actual-usage images (tracked in main; not committed in this branch)
 assets/pics/actual-usage/
 
 # scratch/temp directory
@@ -33,3 +33,55 @@ tmp/
 
 # research notes (local only)
 notes/
+
+# ============================================================
+# Files below are from main branch (thesis template).
+# They remain locally for thesis compilation but are not
+# part of this journal-actualusage branch.
+# ============================================================
+
+# thesis entry point
+thesis.tex
+
+# thesis source chapters and front/back matter
+src/00-frontMatter/
+src/01-body/bab1.tex
+src/01-body/bab2.tex
+src/01-body/bab3.tex
+src/01-body/bab5.tex
+src/99-backMatter/
+
+# thesis internal style files
+_internals/
+_attributions/
+
+# thesis-specific config
+config/settings.tex
+config/istilah.tex
+
+# thesis-only assets
+assets/codes/2-sample-python2.py
+assets/codes/2-sample-python3.py
+assets/codes/2-sample.java
+assets/codes/tutorial/
+assets/codes/pseudos/netaware/
+assets/codes/pseudos/resource-defrag-config-requests.psu
+assets/codes/pseudos/resource-defrag.psu
+assets/pdfs/
+assets/pics/creative_commons.png
+assets/pics/defrag/
+assets/pics/e2e-workflow.png
+assets/pics/kube-descheduler-extension-position.png
+assets/pics/makara.png
+assets/pics/makara_kuning.png
+assets/pics/mark.png
+assets/pics/network-aware/
+assets/pics/research_concept_map.drawio
+assets/pics/research_concept_map.png
+assets/pics/tablesgenerator-dot-com.png
+assets/pics/tanda_tangan_wikipedia.png
+
+# misc dotfiles from template
+.DS_Store
+.all-contributorsrc
+.editorconfig
