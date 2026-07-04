@@ -1,0 +1,27 @@
+%----------------------------------------------------------------------------- %%
+\section{Introduction}
+\label{bab:1}
+%----------------------------------------------------------------------------- %%
+
+Kubernetes schedules Pods by filtering feasible Nodes and scoring the remaining alternatives. This process is effective for initial placement, but running Pods normally remain bound to their Nodes until they terminate or are recreated. As workloads scale and change, free CPU and memory can become scattered into incompatible shapes. Aggregate capacity may be sufficient while no individual Node can accommodate a new Pod, a condition commonly described as resource fragmentation.
+
+Fragmentation affects schedulability, utilization, and infrastructure cost. A Node may retain CPU without enough memory, while another retains memory without enough CPU. These asymmetric residuals strand capacity because the two dimensions cannot be allocated independently~\cite{xiao2013dynamic,guo2025joint}. Directed Pod eviction can repair such placement states and reduce the number of Nodes required by the same workload~\cite{larsson_klein_elmroth_2023}.
+
+The Kubernetes Descheduler provides a post-placement correction mechanism by evicting selected Pods and allowing the kube-scheduler to place their replacements~\cite{k8s_descheduler_docs}. For node reclamation, the important question is not merely whether a source Node is lightly utilized, but whether an evicted Pod has a feasible target that produces denser and better-shaped packing. This requires source-node assessment, target prediction, and an eviction budget that limits disruption. To remain mathematically aligned with the kube-scheduler, a defragmentation policy must evaluate Nodes primarily through their static declared resource requests rather than actual usage, because these static requests dictate placement feasibility and bin-packing shape.
+
+This research develops \textit{ResourceDefragmentation}, a defragmentation-focused Descheduler \textit{Balance} policy that operates purely on declared CPU and memory requests. It identifies drain candidates using utilization and CPU-memory shape, orders them with a Resource Imbalance Index (RII) and Free-Space Index (FSI), predicts feasible scheduler targets, and chooses the Pod whose predicted landing Node has the strongest projected CPU-memory bin score. The kube-scheduler remains responsible for final binding.
+
+This paper addresses the following research questions:
+
+\begin{description}
+    \item[\textbf{RQ1.}] How can a Descheduler policy identify and correct CPU-memory fragmentation through directed Pod eviction, and how effectively does it reclaim Nodes and reduce stranded capacity compared to a utilization-based baseline?
+    \item[\textbf{RQ2.}] Does predicted-target, bin-score-based eviction-candidate selection improve packing quality and eviction efficiency relative to that baseline?
+\end{description}
+
+It makes the following contributions:
+
+\begin{itemize}
+    \item an implementation of \textit{ResourceDefragmentation} as a request-based \textit{Balance} plugin that repairs post-placement scatter without replacing the kube-scheduler;
+    \item a Node-state model combining average utilization, a density-and-balance bin score, RII, and FSI to detect and order fragmented drain candidates; and
+    \item a controlled evaluation across five node-reclamation and fragmentation scenarios, comparing the policy with the upstream \textit{HighNodeUtilization} strategy on node reclamation, dimensional stranding, schedulability headroom, and eviction cost.
+\end{itemize}

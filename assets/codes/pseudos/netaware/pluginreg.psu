@@ -1,5 +1,0 @@
-plugins:
-  preEvictionFilter:
-    enabled: ["DefaultEvictor", "NetworkCostEvictor"]
-  balance:
-    enabled: ["LowNodeUtilization"]

@@ -1,0 +1,23 @@
+%-----------------------------------------------------------------------------%
+\section{Conclusion and Future Work}
+\label{bab:5}
+%-----------------------------------------------------------------------------%
+
+This research designed and evaluated \textit{ResourceDefragmentation}, a request-based Kubernetes Descheduler \textit{Balance} policy that repairs post-placement CPU-memory fragmentation without replacing the kube-scheduler.
+
+\textbf{Identifying fragmented Nodes.} \textit{ResourceDefragmentation} identifies fragmented Nodes directly from their request-space resource shape, without relying on runtime usage or a single utilization threshold. It selects drain candidates from average utilization and CPU-memory bin quality, orders them by the Resource Imbalance Index (RII) and Free-Space Index (FSI), and then evicts the Pod whose predicted landing Node, found through \textit{predictSchedulerTarget}, has the best projected bin score. A target ceiling and pack-upward guard prevent overfilling a Node or relocating a workload to an emptier one. This single predicted-target criterion is sufficient to drive effective packing and defragmentation.
+
+\textbf{Effectiveness against the baseline.} ResourceDefragmentation reclaimed four Nodes in S1, three in S2, and one in S4, all cases where \textit{HighNodeUtilization} performed no eviction. It cut stranding by roughly \(74\%\) in S2 (\(3.727 \to 0.971\)) and \(66\%\) in S4 (\(3.243 \to 1.112\)), and by \(91\%\) in the heterogeneous-drain S5 (\(1.338 \to 0.123\)) while reclaiming the source Node with only two evictions against the baseline's three. It also preserved or increased balanced headroom in every fragmentation scenario, every run converged to a zero-eviction pass within three passes, and no run left a Pod Pending.
+
+Overall, the results support a simple conclusion: selecting eviction candidates by the balance of their predicted landing Nodes is enough to drive useful Node reclamation and dimensional defragmentation when combined with request feasibility, bounded utilization, and pack-upward behavior.
+
+\subsection{Future Work}
+\label{sec:future_works}
+
+\begin{itemize}
+    \item \textbf{Broader Resource Dimensions:} Extend the framework to additional resource dimensions, including storage and GPU, so that target prediction and bin-quality scoring can handle workloads beyond CPU and memory.
+    \item \textbf{Scheduler Coordination:} Establish and evaluate scheduler coordination mechanisms that expose the predicted target, or a compatible scoring signal, to the kube-scheduler, ensuring that predicted-target placements align with actual scheduling decisions and eliminating the misalignment that currently bounds maximum defragmentation precision.
+    \item \textbf{Pending-Pod Awareness:} Introduce Pending-pod awareness into the eviction pipeline so that drain candidates are selected with knowledge of already-unschedulable workloads, ensuring evictions free the right resource type on the right Node to unblock Pending Pods rather than delaying them further.
+    \item \textbf{Threshold Sensitivity Analysis:} Conduct a sensitivity analysis of the drain threshold, target ceiling, and related parameters across various workloads and cluster types to characterize their effect on node reclamation, stranding reduction, and convergence stability.
+    \item \textbf{Broader Generalizability Evaluation:} Evaluate the plugin across broader cluster shapes, node heterogeneity, and workload mixes to assess generalizability beyond the five scenarios studied.
+\end{itemize}

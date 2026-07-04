@@ -44,6 +44,7 @@
 
 \newcommand{\Var}[2]{\gdef#1{#2}}
 \input{config/settings}
+\renewcommand{\judul}{Implementation and Evaluation of a Multi-Dimensional Resource Defragmentation Policy for the Kubernetes Descheduler}
 
 \setlength{\parindent}{0.5in}
 \setlength{\parskip}{0pt}
@@ -107,7 +108,7 @@
 }
 
 \newcommand{\journalAuthors}{%
-    \penulisSatu, \penulisDua, \penulisTiga, and Made Harta Dwijaksara%
+    \penulisDua, and Made Harta Dwijaksara%
 }
 
 \newcommand{\studentIdentityLines}{%
@@ -318,59 +319,53 @@
 
 \newcommand{\abstractIndonesian}{%
 Klaster Kubernetes yang dinamis mengakumulasi fragmentasi sumber daya
-multidimensi yang menimbulkan kapasitas terdampar, sedangkan konsolidasi
-berbasis komputasi dapat mengganggu beban kerja sibuk atau memindahkan layanan
-mikro yang saling bergantung melalui jaringan terdegradasi. Penelitian ini
-menyajikan arsitektur Kubernetes Descheduler yang menggabungkan defragmentasi
-sumber daya dengan pengamanan penggusuran berbasis penggunaan aktual dan kondisi
-jaringan. Kebijakan \textit{ResourceDefragmentation} mengevaluasi bentuk
-penggunaan CPU-memori menggunakan \textit{Resource Imbalance Index} (RII),
-\textit{Free-Space Index} (FSI), dan \textit{bin score}, kemudian memilih
-penggusuran berdasarkan prediksi target penjadwal yang layak. Filter berbasis
-penggunaan aktual dan kondisi jaringan masing-masing melindungi \textit{Pod}
-yang sibuk dan memblokir perpindahan menuju tujuan yang memperburuk latensi.
-Pada lima skenario sumber daya berbasis \textit{request}, kebijakan mereklamasi
-empat \textit{Node} pada skenario utilisasi rendah dan tiga \textit{Node} pada
-skenario terfragmentasi. Pada skenario pengosongan heterogen, kebijakan
-menurunkan Mean Absolute RII dari kisaran rendah 20\% menjadi sekitar 2\% dengan
-dua penggusuran. Pada beban kerja satu replika yang terkontrol, filter
-penggunaan aktual melindungi \textit{Pod} API yang sibuk dengan mengalihkan
-penggusuran ke kandidat yang menganggur, sehingga mencegah kegagalan yang
-terjadi ketika \textit{Pod} API tersebut digusur. Pada evaluasi sadar jaringan,
-perilaku dasar ResourceDefragmentation menyeimbangkan sumber daya komputasi
-tetapi menggusur beban kerja sensitif, sehingga menyebabkan lonjakan latensi
-hingga $\sim$167ms. Sebaliknya, filter sadar latensi mencegat tindakan yang
-merusak jaringan tersebut, mempertahankan latensi dasar pada $\sim$8ms, dan
-tetap menurunkan Mean Absolute RII dari kisaran 50\% menjadi sekitar 17\% dengan
-mengarahkan penggusuran ke \textit{Pod} non-kritis. Secara keseluruhan,
-arsitektur yang diusulkan meningkatkan utilisasi sumber daya sekaligus
-melindungi beban kerja aktif dan sensitif terhadap jaringan.%
+multidimensi yang menimbulkan kapasitas terdampar: CPU dan memori tersedia
+secara agregat tetapi tersebar dalam bentuk yang tidak dapat dipakai oleh
+\textit{Pod} baru. Penelitian ini menyajikan \textit{ResourceDefragmentation},
+sebuah kebijakan \textit{Balance} pada Kubernetes Descheduler yang bekerja murni
+berdasarkan \textit{request} sumber daya yang dideklarasikan, tanpa penggunaan
+aktual. Kebijakan ini mengevaluasi bentuk penggunaan CPU-memori menggunakan
+\textit{Resource Imbalance Index} (RII), \textit{Free-Space Index} (FSI), dan
+\textit{bin score}, mengurutkan \textit{Node} sumber, lalu menggusur \textit{Pod}
+yang \textit{Node} tujuan prediksinya memiliki \textit{bin score} proyeksi
+tertinggi. \textit{Predictor} target penjadwal memastikan setiap penggusuran
+memiliki tujuan yang layak, sementara batas utilisasi dan \textit{guard}
+\textit{pack-upward} mencegah pengisian berlebih maupun perpindahan ke
+\textit{Node} yang lebih kosong. Pada lima skenario sumber daya berbasis
+\textit{request}, kebijakan ini mereklamasi empat \textit{Node} pada skenario
+utilisasi rendah dan tiga \textit{Node} pada skenario terfragmentasi, sementara
+\textit{HighNodeUtilization} tidak melakukan penggusuran sama sekali. Pada
+skenario pengosongan heterogen, kebijakan menurunkan skor \textit{stranding}
+dari 1,338 menjadi 0,123 (sekitar 91\%) hanya dengan dua penggusuran, sekaligus
+mempertahankan atau meningkatkan \textit{headroom} penjadwalan yang seimbang.
+Setiap eksekusi konvergen menuju \textit{pass} tanpa penggusuran tanpa
+menyisakan \textit{Pod} berstatus \textit{Pending}. Secara keseluruhan, memilih
+kandidat penggusuran berdasarkan keseimbangan \textit{Node} tujuan prediksinya
+sudah cukup untuk mendorong reklamasi \textit{Node} dan defragmentasi
+dimensional yang efektif.%
 }
 
 \newcommand{\abstractEnglish}{%
 Dynamic Kubernetes clusters accumulate multi-dimensional resource fragmentation
-that strands capacity, while compute-focused consolidation may disrupt busy
-workloads or move dependent microservices across degraded network links. This
-study presents a Kubernetes Descheduler architecture that combines resource
-defragmentation with actual-usage and network-aware eviction safeguards. The
-proposed \textit{ResourceDefragmentation} policy evaluates CPU-memory shape using
-the Resource Imbalance Index (RII), Free-Space Index (FSI), and bin scores, then
-selects evictions based on feasible predicted scheduler targets. Actual-usage and
-network-aware filters respectively protect busy Pods and block movements toward
-latency-degrading destinations. Across five request-based resource scenarios,
-the policy reclaimed four Nodes in the underutilized scenario and three Nodes in
-the fragmented scenario. In the heterogeneous-drain scenario, it reduced Mean
-Absolute RII from the low-20\% range to around 2\% using two evictions. In the
-controlled single-replica workload, the actual-usage filter protected the busy
-API Pod by redirecting eviction to an idle candidate, preventing the failures
-observed when the API Pod was evicted. In the network-aware evaluation, the
-baseline ResourceDefragmentation behavior balanced compute resources but evicted
-sensitive workloads, causing latency spikes of up to $\sim$167ms. In contrast,
-the latency-aware filter intercepted these network-degrading actions, maintained
-baseline latency at $\sim$8ms, and still reduced Mean Absolute RII from the 50\%
-range to around 17\% by steering eviction toward non-critical Pods. Overall, the
-proposed architecture improves resource utilization while protecting active and
-network-sensitive workloads.%
+that strands capacity: CPU and memory remain available in aggregate but scatter
+into shapes that no single Node can offer to a new Pod. This study presents
+\textit{ResourceDefragmentation}, a Kubernetes Descheduler \textit{Balance}
+policy that operates purely on declared resource requests, without runtime
+(actual) usage. The policy evaluates CPU-memory shape using the Resource
+Imbalance Index (RII), Free-Space Index (FSI), and a density-and-balance bin
+score, orders source Nodes, and evicts the Pod whose predicted scheduler target
+has the highest projected bin score. A predicted-target check guarantees every
+eviction has a feasible destination, while a utilization ceiling and a
+pack-upward guard prevent overfilling a Node or relocating a workload to an
+emptier one. Across five request-based resource scenarios, the policy reclaimed
+four Nodes in the underutilized scenario and three Nodes in the fragmented
+scenario, whereas \textit{HighNodeUtilization} performed no eviction at all. In
+the heterogeneous-drain scenario, it reduced the cluster stranding score from
+1.338 to 0.123 (about 91\%) with only two evictions, while preserving or
+increasing balanced schedulability headroom. Every run converged to a
+zero-eviction pass without leaving any Pod Pending. Overall, selecting eviction
+candidates by the balance of their predicted landing Nodes is sufficient to
+drive effective Node reclamation and dimensional defragmentation.%
 }
 
 \newcommand{\makeArticleAbstract}{%
@@ -381,7 +376,7 @@ network-sensitive workloads.%
     \pagestyle{uiarticle}
     \singlespacing
     \begin{center}
-        {\bfseries\MakeUppercase{\judul}\par}
+        {\bfseries \judul\par}
         \vspace{0.6\baselineskip}
         {\journalAuthors\par}
         \vspace{0.25\baselineskip}
@@ -393,25 +388,25 @@ network-sensitive workloads.%
     \noindent\abstractIndonesian
 
     \vspace{0.5\baselineskip}
-    \noindent\textit{Kata kunci: Kubernetes, Descheduler, Resource Defragmentation, Penggunaan Sumber Daya Aktual, Latensi Jaringan, Microservices}
+    \noindent\textit{Kata kunci: Kubernetes, Descheduler, Resource Defragmentation, Bin Packing Multidimensi, Reklamasi Node, Resource Imbalance Index}
 
     \vspace{0.9\baselineskip}
     \frontHeading{Abstract}
     \noindent\abstractEnglish
 
     \vspace{0.5\baselineskip}
-    \noindent\textit{Keywords: Kubernetes, Descheduler, Resource Defragmentation, Runtime Resource Usage, Network Latency, Microservices}
+    \noindent\textit{Keywords: Kubernetes, Descheduler, Resource Defragmentation, Multi-Dimensional Bin Packing, Node Reclamation, Resource Imbalance Index}
 }
 
 \begin{document}
 
-\makeOuterCover
-\pagenumbering{roman}
-\setcounter{page}{1}
-\makeInnerTitlePage
-\makeOriginalityPage
-\makeApprovalPage
-\makePublicationApprovalPage
+% \makeOuterCover
+% \pagenumbering{roman}
+% \setcounter{page}{1}
+% \makeInnerTitlePage
+% \makeOriginalityPage
+% \makeApprovalPage
+% \makePublicationApprovalPage
 \makeArticleAbstract
 
 \clearpage
@@ -423,14 +418,14 @@ network-sensitive workloads.%
     columnsep=1.27cm
 }
 \twocolumn
-\onehalfspacing
+\singlespacing
 \pagestyle{uiarticle}
 
-\input{src/paper-body/bab1}
-\input{src/paper-body/bab2}
-\input{src/paper-body/bab3}
-\input{src/paper-body/bab4}
-\input{src/paper-body/bab5}
+\input{src/paper-resourcedefrag/bab1}
+\input{src/paper-resourcedefrag/bab2}
+\input{src/paper-resourcedefrag/bab3}
+\input{src/paper-resourcedefrag/bab4}
+\input{src/paper-resourcedefrag/bab5}
 
 \bibliographystyle{apalike}
 \bibliography{config/references}
@@ -441,19 +436,8 @@ network-sensitive workloads.%
 \section{Resource Defragmentation Balance Filter Algorithm}
 \label{appendix:resource_defrag}
 \lstinputlisting[
+    caption={ResourceDefragmentation predicted-target eviction workflow.},
     label={lst:resource_defrag},
 ]{assets/codes/pseudos/resource-defrag.psu}
-
-\section{Actual Usage Pre-Eviction Filter Algorithm}
-\label{appendix:actualusage_algorithm}
-\lstinputlisting[
-    label={lst:actualusage_algorithm},
-]{assets/codes/pseudos/actualusage/unifiedalgo.psu}
-
-\section{Network-Aware Pre-Eviction Filter Algorithm}
-\label{appendix:netaware_unified_algorithm}
-\lstinputlisting[
-    label={lst:netaware_unified_algorithm},
-]{assets/codes/pseudos/netaware/unifiedalgo.psu}
 
 \end{document}
