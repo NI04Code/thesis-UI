@@ -75,23 +75,43 @@ pemilik Hak Cipta. \\
 	\vspace*{0.2cm}
 	Yang menyatakan \\
 	\ifx\blank\npmDua
-		\vspace*{2cm}
+		\ifx\blank\signSatu
+			\vspace*{2cm}
+		\else
+			\vspace*{0.2cm}
+			\includegraphics[width=3cm]{\signSatu}\\[-0.3cm]
+		\fi
 		(\penulisSatu)
 	\else
 		\begin{multicols}{2}
 			Penulis 1:\\
-			\vspace*{2cm}
+			\ifx\blank\signSatu
+				\vspace*{2cm}
+			\else
+				\vspace*{0.2cm}
+				\includegraphics[width=3cm]{\signSatu}\\[-0.3cm]
+			\fi
 			(\penulisSatu)\\
 
 			Penulis 2:\\
-			\vspace*{2cm}
+			\ifx\blank\signDua
+				\vspace*{2cm}
+			\else
+				\vspace*{0.2cm}
+				\includegraphics[width=3cm]{\signDua}\\[-0.3cm]
+			\fi
 			(\penulisDua)\\
 		\end{multicols}
 	\fi
 	\ifx\blank\npmTiga\else
 		\vspace*{0.2cm}
 		Penulis 3:\\
-		\vspace*{2cm}
+		\ifx\blank\signTiga
+			\vspace*{2cm}
+		\else
+			\vspace*{0.2cm}
+			\includegraphics[width=3cm]{\signTiga}\\[-0.3cm]
+		\fi
 		(\penulisTiga)
 	\fi
 \end{center}

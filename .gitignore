@@ -21,3 +21,4 @@
 **/*.fdb_latexmk
 **/*.fls
 thesis.pdf
+**/*.DS_Store
