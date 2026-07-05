@@ -53,6 +53,25 @@
 \raggedbottom
 \emergencystretch=2em
 
+% Pack floats to the top of float-only pages instead of spreading them apart,
+% which removes the large vertical gaps between full-width table*/figure* floats.
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{12pt plus 1fil}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+% Allow more floats per page / reduce premature float pages.
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.9}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.75}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\dblfloatpagefraction}{0.75}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+\setcounter{dbltopnumber}{3}
+
 \titleformat{\section}
     {\normalfont\bfseries}
     {}
@@ -333,16 +352,19 @@ memiliki tujuan yang layak, sementara batas utilisasi dan \textit{guard}
 \textit{pack-upward} mencegah pengisian berlebih maupun perpindahan ke
 \textit{Node} yang lebih kosong. Pada lima skenario sumber daya berbasis
 \textit{request}, kebijakan ini mereklamasi empat \textit{Node} pada skenario
-utilisasi rendah dan tiga \textit{Node} pada skenario terfragmentasi, sementara
-\textit{HighNodeUtilization} tidak melakukan penggusuran sama sekali. Pada
-skenario pengosongan heterogen, kebijakan menurunkan skor \textit{stranding}
-dari 1,338 menjadi 0,123 (sekitar 91\%) hanya dengan dua penggusuran, sekaligus
-mempertahankan atau meningkatkan \textit{headroom} penjadwalan yang seimbang.
-Setiap eksekusi konvergen menuju \textit{pass} tanpa penggusuran tanpa
-menyisakan \textit{Pod} berstatus \textit{Pending}. Secara keseluruhan, memilih
-kandidat penggusuran berdasarkan keseimbangan \textit{Node} tujuan prediksinya
-sudah cukup untuk mendorong reklamasi \textit{Node} dan defragmentasi
-dimensional yang efektif.%
+utilisasi rendah, dua pada skenario terfragmentasi, dan satu pada skenario
+penggabungan \textit{hog}, sementara \textit{HighNodeUtilization} tidak melakukan
+penggusuran sama sekali pada ketiga skenario tersebut. Pada layout yang
+\textit{stranding}-nya dapat dikurangi, kebijakan menurunkan skor
+\textit{stranding} sebesar 73\% dan 79\%; pada layout yang sudah tak-terkurangi,
+kebijakan dengan tepat menahan diri dari penggusuran yang tidak produktif. Studi
+ablasi menunjukkan setiap mekanisme berperan berbeda: pengurutan RII/FSI menjaga
+kualitas \textit{stranding}, \textit{guard} \textit{pack-upward} membatasi
+\textit{churn}, dan pemilih berbasis \textit{bin score} menekan jumlah
+penggusuran. Setiap eksekusi aman tanpa menyisakan \textit{Pod} berstatus
+\textit{Pending}. Secara keseluruhan, memilih kandidat penggusuran berdasarkan
+keseimbangan \textit{Node} tujuan prediksinya sudah cukup untuk mendorong
+reklamasi \textit{Node} dan defragmentasi dimensional yang efektif.%
 }
 
 \newcommand{\abstractEnglish}{%
@@ -359,13 +381,16 @@ eviction has a feasible destination, while a utilization ceiling and a
 pack-upward guard prevent overfilling a Node or relocating a workload to an
 emptier one. Across five request-based resource scenarios, the policy reclaimed
 four Nodes in the underutilized scenario and three Nodes in the fragmented
-scenario, whereas \textit{HighNodeUtilization} performed no eviction at all. In
-the heterogeneous-drain scenario, it reduced the cluster stranding score from
-1.338 to 0.123 (about 91\%) with only two evictions, while preserving or
-increasing balanced schedulability headroom. Every run converged to a
-zero-eviction pass without leaving any Pod Pending. Overall, selecting eviction
-candidates by the balance of their predicted landing Nodes is sufficient to
-drive effective Node reclamation and dimensional defragmentation.%
+scenario, and one in the hog-merge scenario, whereas
+\textit{HighNodeUtilization} performed no eviction at all in these three. Where
+stranding was reducible it cut the cluster stranding score by 73\% and 79\%, and
+where stranding was already irreducible it correctly declined unproductive
+evictions. An ablation shows that each mechanism plays a distinct role: RII/FSI
+ordering preserves stranding quality, the pack-upward guard bounds eviction
+churn, and the projected-bin-score selector lowers the eviction count. Every run
+was safe, leaving no Pod Pending. Overall, selecting eviction candidates by the
+balance of their predicted landing Nodes is sufficient to drive effective Node
+reclamation and dimensional defragmentation.%
 }
 
 \newcommand{\makeArticleAbstract}{%

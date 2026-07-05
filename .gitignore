@@ -22,3 +22,5 @@
 **/*.fls
 thesis.pdf
 paper-resourcedefrag.pdf
+
+experiment/
