@@ -1,0 +1,90 @@
+%
+% Halaman Pernyataan Penggunaan Kecerdasan Artifisial
+%
+
+\chapter*{\uppercase{Halaman Pernyataan Penggunaan\\Kecerdasan Artifisial}}
+\vspace*{1.5cm}
+\pagestyle{onlypage}
+
+\begin{bfseries}
+\noindent
+\ifx\blank\npmDua
+Saya menyatakan
+\else
+Kami menyatakan
+\fi
+bahwa dalam penyusunan Tugas Akhir ini,
+\ifx\blank\npmDua
+saya menggunakan
+\else
+kami menggunakan
+\fi
+teknologi Kecerdasan Buatan dengan platform \platformAI{} untuk tujuan
+\tujuanPenggunaanAI{} dan
+\ifx\blank\npmDua
+saya
+\else
+kami
+\fi
+bertanggung jawab penuh atas keakuratan, orisinalitas, dan integritas seluruh
+isi Tugas Akhir ini.
+\end{bfseries}
+
+\vspace*{1.5cm}
+
+\begin{center}
+	\setstretch{1.4}
+	\begin{tabular}{l c l}
+	\ifx\blank\npmDua
+		\bo{Nama} & : & \bo{\penulisSatu} \\
+		\bo{NPM} & : & \bo{\npmSatu} \\
+		\bo{Tanda Tangan} & : &
+			\ifx\blank\signSatu\else
+				\raisebox{-0.5\height}{\includegraphics[width=3cm]{\signSatu}}
+			\fi \\
+		\ifx\blank\signSatu
+			& & \\
+			& & \\
+		\fi
+	\else
+		\bo{Nama Penulis 1} & : & \bo{\penulisSatu} \\
+		\bo{NPM Penulis 1} & : & \bo{\npmSatu} \\
+		\bo{Tanda Tangan Penulis 1} & : &
+			\ifx\blank\signSatu\else
+				\raisebox{-0.5\height}{\includegraphics[width=3cm]{\signSatu}}
+			\fi \\
+		\ifx\blank\signSatu
+			& & \\
+			& & \\
+		\fi
+
+		\bo{Nama Penulis 2} & : & \bo{\penulisDua} \\
+		\bo{NPM Penulis 2} & : & \bo{\npmDua} \\
+		\bo{Tanda Tangan Penulis 2} & : &
+			\ifx\blank\signDua\else
+				\raisebox{-0.5\height}{\includegraphics[width=3cm]{\signDua}}
+			\fi \\
+		\ifx\blank\signDua
+			& & \\
+			& & \\
+		\fi
+	\fi
+
+	\ifx\blank\npmTiga\else
+		\bo{Nama Penulis 3} & : & \bo{\penulisTiga} \\
+		\bo{NPM Penulis 3} & : & \bo{\npmTiga} \\
+		\bo{Tanda Tangan Penulis 3} & : &
+			\ifx\blank\signTiga\else
+				\raisebox{-0.5\height}{\includegraphics[width=3cm]{\signTiga}}
+			\fi \\
+		\ifx\blank\signTiga
+			& & \\
+			& & \\
+		\fi
+	\fi
+
+	\bo{Tanggal} & : & \bo{\tanggalPernyataanAI} \\
+	\end{tabular}
+\end{center}
+
+\newpage
