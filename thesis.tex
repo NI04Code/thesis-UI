@@ -115,6 +115,13 @@
 \strcompare{Laporan Kerja Praktik}{\type}{} {
 \strcompare{Kampus Merdeka}{\type}{} {
 	%
+	% Surat Pernyataan
+	%
+	\addChapter{Statement Letter}
+	\include{src/00-frontMatter/suratPernyataan}
+	\ifodd\thechapterpagecount\forceclearchapter\thispagestyle{onlypage}\fi
+
+	%
 	% Kata Pengantar
 	%
 	\addChapter{\kataPengantar}
