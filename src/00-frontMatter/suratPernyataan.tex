@@ -3,11 +3,11 @@
 
 \pagestyle{onlypage}
 
-Yang bertanda tangan dibawah ini, kami:
+\noindent Yang bertanda tangan dibawah ini, kami:
 
 \vspace*{0.5cm}
 
-\begin{tabular}{l c l}
+\noindent \begin{tabular}{l c l}
 Nama & : & \penulisSatu{} / \penulisDua{} / \penulisTiga \\
 NPM & : & \npmSatu{} / \npmDua{} / \npmTiga \\
 Program Studi & : & \programSatu \\
@@ -16,7 +16,7 @@ Tahun Akademik & : & 2026 \\
 
 \vspace*{0.8cm}
 
-Menyatakan bahwa kami tidak melakukan kegiatan plagiat dalam penulisan \MakeLowercase{\type} kami yang berjudul:
+\noindent Menyatakan bahwa kami tidak melakukan kegiatan plagiat dalam penulisan \MakeLowercase{\type} kami yang berjudul:
 
 \vspace*{0.5cm}
 \begin{center}
@@ -24,11 +24,11 @@ Menyatakan bahwa kami tidak melakukan kegiatan plagiat dalam penulisan \MakeLowe
 \end{center}
 \vspace*{0.5cm}
 
-Apabila suatu saat nanti terbukti kami melakukan plagiat, maka kami akan menerima sanksi yang telah ditetapkan.
+\noindent Apabila suatu saat nanti terbukti kami melakukan plagiat, maka kami akan menerima sanksi yang telah ditetapkan.
 
 \vspace*{0.5cm}
 
-Demikian pernyataan ini kami buat dengan sebenarnya.
+\noindent Demikian pernyataan ini kami buat dengan sebenarnya.
 
 \vspace*{1.5cm}
 
@@ -41,10 +41,12 @@ Depok, \tanggalSiapSidang
 \begin{center}
 \begin{tabular}{ccc}
 \ifx\blank\signSatu\vspace*{2cm}\else\raisebox{-0.5\height}{\includegraphics[width=3cm]{\signSatu}}\fi & 
-\ifx\blank\signDua\else\raisebox{-0.5\height}{\includegraphics[width=3cm]{\signDua}}\fi & 
+\ifx\blank\signDua\else\raisebox{-0.5\height}{\includegraphics[width=3cm]{\signDua}}\fi &
 \ifx\blank\signTiga\else\raisebox{-0.5\height}{\includegraphics[width=3cm]{\signTiga}}\fi \\
 & & \\
-(\penulisSatu) & (\penulisDua) & (\penulisTiga) \\
+\parbox[t]{4.8cm}{\centering (\penulisSatu)} & 
+\parbox[t]{4.8cm}{\centering (\penulisDua)} & 
+\parbox[t]{4.8cm}{\centering (\penulisTiga)} \\
 \end{tabular}
 \end{center}
 
